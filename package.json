@@ -12,6 +12,7 @@
     "@types/deno": "^2.7.0",
     "postgres": "^3.4.9",
     "resend": "^6.17.2"
+  
   },
   "dependencies": {
     "recharts": "^2.15.4"
