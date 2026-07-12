@@ -10,7 +10,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-.cursor
+.cursor/rules
 
 # testing
 /coverage
