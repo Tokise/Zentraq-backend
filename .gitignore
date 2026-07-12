@@ -10,7 +10,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-.cursor/rules/agents.mdc
+*.cursor/rules/agents.mdc
 
 # testing
 /coverage
