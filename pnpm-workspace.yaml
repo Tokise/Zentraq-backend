@@ -1,5 +1,4 @@
-packages:
-  - frontend
+
 
 allowBuilds:
   sharp: false
