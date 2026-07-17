@@ -44,7 +44,9 @@ export function AppSidebar({ onNavigate, collapsed = false }: AppSidebarProps) {
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      onClick={onNavigate}
+                      target={item.target}
+                      rel={item.target === "_blank" ? "noopener noreferrer" : undefined}
+                      onClick={item.target === "_blank" ? undefined : onNavigate}
                       className={cn(
                         "flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors duration-150",
                         isActive

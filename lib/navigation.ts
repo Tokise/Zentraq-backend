@@ -5,6 +5,7 @@ import {
   Calendar,
   CalendarDays,
   ClipboardList,
+  CreditCard,
   FileCheck,
   FileText,
   HeartPulse,
@@ -25,6 +26,7 @@ export type NavItem = {
   title: string
   href: string
   icon: LucideIcon
+  target?: "_self" | "_blank"
 }
 
 export type NavGroup = {
@@ -43,6 +45,12 @@ export const navigation: NavGroup[] = [
       { title: "Patients", href: "/patients", icon: Users },
       { title: "Medical Records", href: "/patients/medical-records", icon: FileText },
       { title: "RFID Registration", href: "/patients/rfid-registration", icon: UserPlus },
+      {
+        title: "RFID Kiosk Mode",
+        href: "/rfid-kiosk",
+        icon: CreditCard,
+        target: "_blank",
+      },
     ],
   },
   {

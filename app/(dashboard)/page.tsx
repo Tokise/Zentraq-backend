@@ -37,6 +37,9 @@ import {
   todaysAppointments,
 } from "@/lib/data/mock-dashboard"
 
+import { useState, useEffect } from "react"
+import { createClient } from "@/utils/supabase/client"
+
 function appointmentStatus(status: string) {
   switch (status) {
     case "completed":
@@ -64,6 +67,57 @@ function consultationStatus(status: string) {
 }
 
 export default function DashboardPage() {
+  const [dbConsultations, setDbConsultations] = useState<any[]>([])
+  const [dbAppointments, setDbAppointments] = useState<any[]>([])
+  const supabase = createClient()
+
+  const fetchLiveQueue = async () => {
+    try {
+      const { data: consults } = await supabase
+        .from("consultations")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(6)
+        
+      const { data: appts } = await supabase
+        .from("appointments")
+        .select("*")
+        .order("appointment_time", { ascending: true })
+        .limit(6)
+
+      if (consults) setDbConsultations(consults)
+      if (appts) setDbAppointments(appts)
+    } catch (err) {
+      console.error("Error fetching live dashboard queue:", err)
+    }
+  }
+
+  useEffect(() => {
+    fetchLiveQueue()
+    const interval = setInterval(fetchLiveQueue, 3000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const displayConsultations = dbConsultations.length > 0
+    ? dbConsultations.map(c => ({
+        id: c.id,
+        patient_name: c.patient_name,
+        chief_complaint: c.chief_complaint || "None",
+        time: new Date(c.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+        status: c.status
+      }))
+    : recentConsultations
+
+  const displayAppointments = dbAppointments.length > 0
+    ? dbAppointments.map(a => ({
+        id: a.id,
+        patient_name: a.patient_name,
+        time: new Date(a.appointment_time).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+        type: a.appointment_type,
+        status: a.status
+      }))
+    : todaysAppointments
+
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
@@ -122,7 +176,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {todaysAppointments.map((appt) => (
+                {displayAppointments.map((appt) => (
                   <TableRow key={appt.id}>
                     <TableCell className="font-medium">{appt.patient_name}</TableCell>
                     <TableCell>{appt.time}</TableCell>
@@ -154,7 +208,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recentConsultations.map((consult) => (
+                {displayConsultations.map((consult) => (
                   <TableRow key={consult.id}>
                     <TableCell className="font-medium">{consult.patient_name}</TableCell>
                     <TableCell className="max-w-[180px] truncate">{consult.chief_complaint}</TableCell>
