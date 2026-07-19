@@ -19,10 +19,11 @@ import {
   UserCheck,
   ArrowRight,
   ArrowLeft,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Pencil
 } from "lucide-react"
 
-type PageMode = "WIZARD" | "VERIFIED" | "SUCCESS"
+type PageMode = "WIZARD" | "VERIFIED" | "EDIT" | "SUCCESS"
 
 interface PatientProfile {
   id: string
@@ -41,6 +42,7 @@ interface PatientProfile {
 }
 
 const STEPS = ["Scan Card", "Student Info", "Profile Photo", "Review"]
+const STUDENT_ID_PREFIX = "23011"
 
 export default function RfidRegistrationPage() {
   const [mode, setMode] = useState<PageMode>("WIZARD")
@@ -53,6 +55,8 @@ export default function RfidRegistrationPage() {
   const [firstName, setFirstName] = useState("")
   const [lastName, setLastName] = useState("")
   const [idNumber, setIdNumber] = useState("")
+  const [studentIdSuffix, setStudentIdSuffix] = useState("")
+  const [generatingId, setGeneratingId] = useState(false)
   const [email, setEmail] = useState("")
   const [department, setDepartment] = useState("")
   const [course, setCourse] = useState("")
@@ -80,9 +84,10 @@ export default function RfidRegistrationPage() {
     }
   }, [mode, step])
 
-  // Cleanup camera when leaving step 3
+  // Cleanup camera when leaving step 3 or the Edit screen
   useEffect(() => {
-    if (!(mode === "WIZARD" && step === 3)) {
+    const cameraAllowed = (mode === "WIZARD" && step === 3) || mode === "EDIT"
+    if (!cameraAllowed) {
       stopCamera()
     }
   }, [mode, step])
@@ -104,6 +109,26 @@ export default function RfidRegistrationPage() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
+  // Keep idNumber in sync with the formatted student ID whenever the suffix changes
+  useEffect(() => {
+    if (role === "student") {
+      setIdNumber(`${STUDENT_ID_PREFIX}${studentIdSuffix}`)
+    }
+  }, [studentIdSuffix, role])
+
+  // Auto-suggest (auto-generate) a student ID only for brand-new registrations —
+  // i.e. Step 2 of the wizard, never in Edit mode, and never overwrite an
+  // existing value the user already has in the field.
+  useEffect(() => {
+    const shouldSuggest =
+      mode === "WIZARD" && step === 2 && role === "student" && !studentIdSuffix
+
+    if (shouldSuggest) {
+      generateStudentId()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, step, role])
+
   function resetScanner() {
     setMode("WIZARD")
     setStep(1)
@@ -114,6 +139,78 @@ export default function RfidRegistrationPage() {
     setDepartment(""); setCourse(""); setYearLevel(""); setPosition("")
     setPhoto(null)
     setRole("student")
+    setStudentIdSuffix("")
+  }
+
+  function handleRoleChange(newRole: "student" | "faculty" | "staff") {
+    setRole(newRole)
+    setCourse(""); setYearLevel(""); setPosition("")
+    if (newRole !== "student") {
+      setIdNumber("")
+      setStudentIdSuffix("")
+    } else {
+      setIdNumber(`${STUDENT_ID_PREFIX}${studentIdSuffix}`)
+    }
+  }
+
+  // Generate the NEXT sequential, guaranteed-unique 4-digit student ID suffix.
+  // Looks up the highest existing "23011-XXXX" number in the database and
+  // increments from there (rather than picking randomly), so IDs are
+  // predictable and collisions are effectively impossible. As a safety net
+  // it still re-checks the candidate against the database and keeps
+  // incrementing if that exact number was somehow already taken (e.g. a
+  // legacy record, or another registration completed in the same instant).
+  // Used for new registrations only — never called automatically in Edit mode.
+  async function generateStudentId() {
+    setGeneratingId(true)
+    try {
+      // Find the current highest student number on record
+      const { data: lastRecords, error: lastError } = await supabase
+        .from("clinic_profiles")
+        .select("student_number")
+        .not("student_number", "is", null)
+        .like("student_number", `${STUDENT_ID_PREFIX}%`)
+        .order("student_number", { ascending: false })
+        .limit(1)
+
+      if (lastError) throw lastError
+
+      let nextNumber = 1
+      if (lastRecords && lastRecords.length > 0) {
+        const lastSuffix = parseStudentIdSuffix(lastRecords[0].student_number)
+        const lastNum = parseInt(lastSuffix, 10)
+        if (!isNaN(lastNum)) nextNumber = lastNum + 1
+      }
+
+      // Confirm the candidate is actually free; if not, keep incrementing.
+      // This guards against gaps in the padding/format of older records.
+      let suffix = String(nextNumber).padStart(4, "0")
+      let attempts = 0
+      while (attempts < 50) {
+        const candidate = `${STUDENT_ID_PREFIX}${suffix}`
+        const { data: existing, error: checkError } = await supabase
+          .from("clinic_profiles")
+          .select("id")
+          .eq("student_number", candidate)
+          .maybeSingle()
+        if (checkError) throw checkError
+        if (!existing) break
+        nextNumber++
+        suffix = String(nextNumber).padStart(4, "0")
+        attempts++
+      }
+
+      if (nextNumber > 9999) {
+        toast.error("All student IDs in the 23011-0001 to 23011-9999 range are taken.")
+        return
+      }
+
+      setStudentIdSuffix(suffix)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to generate student ID")
+    } finally {
+      setGeneratingId(false)
+    }
   }
 
   // Step 1: Scan/lookup
@@ -148,11 +245,56 @@ export default function RfidRegistrationPage() {
     }
   }
 
+  // Splits a stored student number into just the 4-digit suffix.
+  // Prefers an exact prefix match, but falls back to grabbing the last 4
+  // digits of the string so existing records saved in a slightly different
+  // format (e.g. before this prefix scheme existed) still display correctly.
+  function parseStudentIdSuffix(value: string | null): string {
+    if (!value) return ""
+    if (value.startsWith(STUDENT_ID_PREFIX)) return value.slice(STUDENT_ID_PREFIX.length)
+    const match = value.match(/(\d{4})$/)
+    return match ? match[1] : ""
+  }
+
+  // Pre-fill the form with an existing profile and open the Edit screen.
+  // Existing ID numbers are displayed as-is and are NOT auto-generated/overwritten.
+  function openEditMode(data: PatientProfile) {
+    setSearchedProfile(data)
+    setRfidUid(data.rfid_uid)
+
+    const initialRole: "student" | "faculty" | "staff" = data.student_number ? "student" : "staff"
+    setRole(initialRole)
+    setFirstName(data.first_name || "")
+    setLastName(data.last_name || "")
+    setEmail(data.email || "")
+    setDepartment(data.department || "")
+    setCourse(data.course || "")
+    setYearLevel(data.year_level || "")
+    setPosition(data.position || "")
+    setPhoto(data.clinic_photo_url || null)
+
+    if (initialRole === "student") {
+      const suffix = parseStudentIdSuffix(data.student_number)
+      setStudentIdSuffix(suffix)
+      setIdNumber(suffix ? `${STUDENT_ID_PREFIX}${suffix}` : (data.student_number || ""))
+    } else {
+      setStudentIdSuffix("")
+      setIdNumber(data.employee_number || "")
+    }
+
+    setResetTimer(null)
+    setMode("EDIT")
+  }
+
   // Step 2: Validate form and go to step 3
   function handleInfoNext(e: React.FormEvent) {
     e.preventDefault()
     if (!firstName || !lastName || !idNumber) {
       toast.error("Please fill in all required fields.")
+      return
+    }
+    if (role === "student" && studentIdSuffix.length !== 4) {
+      toast.error("Student ID must have 4 digits.")
       return
     }
     if (role === "student" && !course) {
@@ -226,7 +368,7 @@ export default function RfidRegistrationPage() {
     reader.readAsDataURL(file)
   }
 
-  // Step 4: Submit
+  // Step 4: Submit (new registration)
   async function handleRegister() {
     if (!rfidUid) return
     setLoading(true)
@@ -257,6 +399,59 @@ export default function RfidRegistrationPage() {
       setResetTimer(8)
     } catch (err: any) {
       toast.error(err.message || "Registration failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Edit: Update an existing profile
+  async function handleUpdateProfile(e: React.FormEvent) {
+    e.preventDefault()
+    if (!searchedProfile) return
+    if (!firstName || !lastName || !idNumber) {
+      toast.error("Please fill in all required fields.")
+      return
+    }
+    if (role === "student" && studentIdSuffix.length !== 4) {
+      toast.error("Student ID must have 4 digits.")
+      return
+    }
+    if (role === "student" && !course) {
+      toast.error("Course is required for students.")
+      return
+    }
+    if (role !== "student" && !position) {
+      toast.error("Position is required for faculty/staff.")
+      return
+    }
+
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from("clinic_profiles")
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          email: email || null,
+          department: department || null,
+          course: role === "student" ? course : null,
+          year_level: role === "student" ? yearLevel : null,
+          position: role !== "student" ? position : null,
+          student_number: role === "student" ? idNumber : null,
+          employee_number: role !== "student" ? idNumber : null,
+          clinic_photo_url: photo || null,
+        })
+        .eq("id", searchedProfile.id)
+        .select()
+        .single()
+
+      if (error) throw error
+      toast.success("Profile updated!")
+      setSearchedProfile(data as PatientProfile)
+      setMode("SUCCESS")
+      setResetTimer(8)
+    } catch (err: any) {
+      toast.error(err.message || "Update failed")
     } finally {
       setLoading(false)
     }
@@ -334,7 +529,7 @@ export default function RfidRegistrationPage() {
         </Card>
       )}
 
-      {/* ─── STEP 2: Info Form ─── */}
+      {/* ─── STEP 2: Info Form (New Registration) ─── */}
       {mode === "WIZARD" && step === 2 && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
           <CardHeader className="pb-3">
@@ -349,7 +544,7 @@ export default function RfidRegistrationPage() {
                 <Label className="text-xs">Role</Label>
                 <select
                   value={role}
-                  onChange={(e) => { setRole(e.target.value as any); setCourse(""); setYearLevel(""); setPosition("") }}
+                  onChange={(e) => handleRoleChange(e.target.value as any)}
                   className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                 >
                   <option value="student">Student</option>
@@ -370,10 +565,43 @@ export default function RfidRegistrationPage() {
               </div>
 
               <div className="grid gap-3 grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">{role === "student" ? "Student No." : "Employee No."} <span className="text-red-500">*</span></Label>
-                  <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="2023-01049" required className="h-9" />
-                </div>
+                {role === "student" ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Student No. <span className="text-red-500">*</span></Label>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-9 px-2.5 flex items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-mono text-zinc-500 select-none shrink-0">
+                        {STUDENT_ID_PREFIX}
+                      </div>
+                      <Input
+                        value={studentIdSuffix}
+                        onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                        placeholder="0000"
+                        inputMode="numeric"
+                        maxLength={4}
+                        required
+                        disabled={generatingId}
+                        className="h-9 font-mono tracking-widest"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={generateStudentId}
+                        disabled={generatingId}
+                        className="h-9 px-2 shrink-0"
+                        title="Generate a new ID"
+                      >
+                        <RefreshCw className={`size-3.5 ${generatingId ? "animate-spin" : ""}`} />
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-zinc-400">Next available ID — edit manually if needed</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Employee No. <span className="text-red-500">*</span></Label>
+                    <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="EMP-0231" required className="h-9" />
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label className="text-xs">Email</Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9" />
@@ -382,14 +610,37 @@ export default function RfidRegistrationPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs">Department</Label>
-                <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="College of Engineering" className="h-9" />
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                >
+                  <option value="">Select Department</option>
+                  <option value="College of Engineering">College of Engineering</option>
+                  <option value="College of Computer Studies">College of Computer Studies</option>
+                  <option value="College of Nursing">College of Nursing</option>
+                  <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+                  <option value="College of Business">College of Business</option>
+                </select>
               </div>
 
               {role === "student" && (
                 <div className="grid gap-3 grid-cols-3">
                   <div className="col-span-2 space-y-1.5">
                     <Label className="text-xs">Course <span className="text-red-500">*</span></Label>
-                    <Input value={course} onChange={(e) => setCourse(e.target.value)} placeholder="BS Info Tech" required className="h-9" />
+                    <select
+                      value={course}
+                      onChange={(e) => setCourse(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                      required
+                    >
+                      <option value="">Select Course</option>
+                      <option value="BS Information Technology">BS Information Technology</option>
+                      <option value="BS Computer Science">BS Computer Science</option>
+                      <option value="BS Nursing">BS Nursing</option>
+                      <option value="BS Psychology">BS Psychology</option>
+                      <option value="BS Business Administration">BS Business Administration</option>
+                    </select>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Year</Label>
@@ -572,7 +823,7 @@ export default function RfidRegistrationPage() {
       {/* ─── VERIFIED (card already linked) ─── */}
       {mode === "VERIFIED" && searchedProfile && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto overflow-hidden">
-          <div className="h-1.5 bg-emerald-600 w-full" />
+     
           <CardContent className="py-8 px-6 space-y-5 text-center">
             <div className="mx-auto size-10 rounded-full bg-emerald-50 flex items-center justify-center">
               <UserCheck className="size-5 text-emerald-600" />
@@ -596,9 +847,14 @@ export default function RfidRegistrationPage() {
               </div>
             </div>
 
-            <Button variant="outline" className="w-full h-9 text-xs" onClick={resetScanner}>
-              Done (Esc)
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 h-9 text-xs flex items-center justify-center gap-1.5" onClick={() => openEditMode(searchedProfile)}>
+                <Pencil className="size-3.5" /> Edit Info
+              </Button>
+              <Button variant="outline" className="flex-1 h-9 text-xs" onClick={resetScanner}>
+                Done (Esc)
+              </Button>
+            </div>
             {resetTimer !== null && (
               <p className="text-[10px] text-zinc-400 animate-pulse">Auto-resetting in {resetTimer}s</p>
             )}
@@ -606,10 +862,182 @@ export default function RfidRegistrationPage() {
         </Card>
       )}
 
+      {/* ─── EDIT (update an existing profile) ─── */}
+      {mode === "EDIT" && searchedProfile && (
+        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Edit Profile</CardTitle>
+            <CardDescription className="text-xs">
+              Card: <code className="bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700 font-semibold">{rfidUid}</code>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Photo */}
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative size-28 rounded-full overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
+                {photo ? (
+                  <img src={photo} alt="Preview" className="size-full object-cover" />
+                ) : cameraActive ? (
+                  <video ref={videoRef} autoPlay playsInline className="size-full object-cover scale-x-[-1]" />
+                ) : (
+                  <CameraOff className="size-8 text-zinc-300" />
+                )}
+              </div>
+              <canvas ref={canvasRef} className="hidden" width="200" height="200" />
+
+              <div className="flex flex-wrap justify-center gap-2">
+                {!cameraActive && (
+                  <Button type="button" variant="outline" size="sm" onClick={startCamera}>
+                    <Camera className="size-3.5 mr-1" /> {photo ? "Retake Photo" : "Take Photo"}
+                  </Button>
+                )}
+                {cameraActive && (
+                  <>
+                    <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 text-white hover:bg-zinc-800">
+                      <Check className="size-3.5 mr-1" /> Capture
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={stopCamera} className="text-red-500 hover:bg-red-50">
+                      Cancel
+                    </Button>
+                  </>
+                )}
+                <input type="file" accept="image/*" id="edit-photo-upload" onChange={handlePhotoUpload} className="hidden" />
+                <label htmlFor="edit-photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-zinc-200 cursor-pointer hover:bg-zinc-50 text-xs font-medium text-zinc-600">
+                  <ImageIcon className="size-3.5" /> Upload
+                </label>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateProfile} className="space-y-3.5">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Role</Label>
+                <select
+                  value={role}
+                  onChange={(e) => handleRoleChange(e.target.value as any)}
+                  className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                >
+                  <option value="student">Student</option>
+                  <option value="faculty">Faculty</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </div>
+
+              <div className="grid gap-3 grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
+                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="h-9" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
+                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="h-9" />
+                </div>
+              </div>
+
+              <div className="grid gap-3 grid-cols-2">
+                {role === "student" ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Student No. <span className="text-red-500">*</span></Label>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-9 px-2.5 flex items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-mono text-zinc-500 select-none shrink-0">
+                        {STUDENT_ID_PREFIX}
+                      </div>
+                      {/*
+                        Displays the existing student's stored ID suffix
+                        (populated by openEditMode) and allows manual
+                        correction. Does NOT auto-generate in Edit mode.
+                      */}
+                      <Input
+                        value={studentIdSuffix}
+                        onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                        placeholder="0000"
+                        inputMode="numeric"
+                        maxLength={4}
+                        required
+                        className="h-9 font-mono tracking-widest"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Employee No. <span className="text-red-500">*</span></Label>
+                    <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="EMP-0231" required className="h-9" />
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Email</Label>
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Department</Label>
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                >
+                  <option value="">Select Department</option>
+                  <option value="College of Engineering">College of Engineering</option>
+                  <option value="College of Computer Studies">College of Computer Studies</option>
+                  <option value="College of Nursing">College of Nursing</option>
+                  <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+                  <option value="College of Business">College of Business</option>
+                </select>
+              </div>
+
+              {role === "student" && (
+                <div className="grid gap-3 grid-cols-3">
+                  <div className="col-span-2 space-y-1.5">
+                    <Label className="text-xs">Course <span className="text-red-500">*</span></Label>
+                    <select
+                      value={course}
+                      onChange={(e) => setCourse(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                      required
+                    >
+                      <option value="">Select Course</option>
+                      <option value="BS Information Technology">BS Information Technology</option>
+                      <option value="BS Computer Science">BS Computer Science</option>
+                      <option value="BS Nursing">BS Nursing</option>
+                      <option value="BS Psychology">BS Psychology</option>
+                      <option value="BS Business Administration">BS Business Administration</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Year</Label>
+                    <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none">
+                      <option value="">—</option>
+                      <option value="1">1st</option>
+                      <option value="2">2nd</option>
+                      <option value="3">3rd</option>
+                      <option value="4">4th</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {role !== "student" && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Position <span className="text-red-500">*</span></Label>
+                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9" />
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end pt-3 border-t border-zinc-100">
+                <Button type="button" variant="outline" size="sm" onClick={resetScanner}>Cancel</Button>
+                <Button type="submit" size="sm" disabled={loading} className="bg-zinc-900 text-white hover:bg-zinc-800 min-w-[120px] flex items-center gap-1">
+                  {loading ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Saving...</> : "Save Changes"}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ─── SUCCESS ─── */}
       {mode === "SUCCESS" && searchedProfile && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto overflow-hidden">
-          <div className="h-1.5 bg-emerald-600 w-full" />
+
           <CardContent className="py-8 px-6 space-y-5 text-center">
             <div className="size-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto border border-emerald-200/60">
               <Check className="size-7 text-emerald-600" />

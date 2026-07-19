@@ -1,13 +1,15 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import Image from "next/image"
+import { TypeAnimation } from "react-type-animation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
 
-type KioskMode = "SCAN" | "DISPLAY" | "UNREGISTERED"
+type KioskMode = "IDLE" | "DISPLAY" | "UNREGISTERED"
 
 interface PatientProfile {
   id: string
@@ -21,48 +23,28 @@ interface PatientProfile {
 }
 
 export default function RfidKioskPage() {
-  const [kioskState, setKioskState] = useState<KioskMode>("SCAN")
+  const [kioskState, setKioskState] = useState<KioskMode>("IDLE")
   const [profile, setProfile] = useState<PatientProfile | null>(null)
   const [rfidUid, setRfidUid] = useState("")
   const [rfidInput, setRfidInput] = useState("")
   const [loading, setLoading] = useState(false)
-  const [displayTimer, setDisplayTimer] = useState<number | null>(null)
-  const [erasing, setErasing] = useState(false)
+  const clearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const supabase = createClient()
 
-  // Auto-focus input when in SCAN mode
+  // Always keep the scan input focused so the kiosk is ready for the next tap
   useEffect(() => {
-    if (kioskState === "SCAN" && inputRef.current) {
-      inputRef.current.focus()
-    }
+    inputRef.current?.focus()
   }, [kioskState])
 
-  // Display timer: 5s display then 3s erase animation then reset
   useEffect(() => {
-    if (displayTimer === null) return
-
-    if (displayTimer <= 0) {
-      if (!erasing) {
-        // Start 3s erase phase
-        setErasing(true)
-        setDisplayTimer(0.5)
-      } else {
-        // Done erasing, reset
-        resetScanner()
-      }
-      return
+    return () => {
+      if (clearTimeoutRef.current) clearTimeout(clearTimeoutRef.current)
     }
+  }, [])
 
-    const interval = setInterval(() => {
-      setDisplayTimer((prev) => (prev !== null ? prev - 1 : null))
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [displayTimer, erasing])
-
-  // Global keyboard: Escape resets
+  // Global keyboard: Escape resets back to idle
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -74,14 +56,22 @@ export default function RfidKioskPage() {
   }, [])
 
   function resetScanner() {
-    setKioskState("SCAN")
+    if (clearTimeoutRef.current) clearTimeout(clearTimeoutRef.current)
+    setKioskState("IDLE")
     setProfile(null)
     setRfidUid("")
     setRfidInput("")
-    setDisplayTimer(null)
-    setErasing(false)
-    // Re-focus input after reset
-    setTimeout(() => inputRef.current?.focus(), 100)
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
+  // Snaps the kiosk back to idle after a few seconds — instant, no animation.
+  function scheduleAutoClear() {
+    if (clearTimeoutRef.current) clearTimeout(clearTimeoutRef.current)
+    clearTimeoutRef.current = setTimeout(() => {
+      setKioskState("IDLE")
+      setProfile(null)
+      setRfidUid("")
+    }, 5000)
   }
 
   async function handleScan(e: React.FormEvent) {
@@ -89,8 +79,10 @@ export default function RfidKioskPage() {
     const uid = rfidInput.trim()
     if (!uid || loading) return
 
+    if (clearTimeoutRef.current) clearTimeout(clearTimeoutRef.current)
     setLoading(true)
     setRfidUid(uid)
+    setRfidInput("")
 
     try {
       const { data, error } = await supabase
@@ -102,7 +94,6 @@ export default function RfidKioskPage() {
       if (error) throw error
 
       if (data) {
-        // Insert check-in consultation
         const fullName = `${data.first_name} ${data.last_name}`
         await supabase.from("consultations").insert({
           profile_id: data.id,
@@ -113,12 +104,11 @@ export default function RfidKioskPage() {
 
         setProfile(data as PatientProfile)
         setKioskState("DISPLAY")
-        setDisplayTimer(0.5) // 5s display, then 3s erase
-        setErasing(false)
+        scheduleAutoClear()
       } else {
+        setProfile(null)
         setKioskState("UNREGISTERED")
-        setDisplayTimer(5)
-        setErasing(false)
+        scheduleAutoClear()
       }
     } catch (err: any) {
       console.error(err)
@@ -126,99 +116,117 @@ export default function RfidKioskPage() {
       resetScanner()
     } finally {
       setLoading(false)
+      inputRef.current?.focus()
     }
   }
 
   return (
     <div className="min-h-screen w-full bg-zinc-50 flex items-center justify-center p-6 select-none">
-      <Card className="w-full max-w-md border border-zinc-200/80 shadow-md bg-white overflow-hidden">
+      <Card className="w-full max-w-2xl border border-zinc-200/80 shadow-md bg-white overflow-hidden">
         <CardContent className="flex flex-col items-center justify-center py-10 px-8 text-center space-y-6">
-          {/* Header — always visible */}
-          <div className="space-y-1">
-            <h1 className="text-xl font-bold tracking-tight text-zinc-900">Zentraq Clinic</h1>
-            <p className="text-xs text-zinc-400">Student & Staff Check-in Terminal</p>
+          {/* Top Header Logos inside container */}
+          <div className="w-full flex justify-between items-center mb-5 mt-[-30px]">
+            <Image
+              src="/4.png"
+              alt="Zentraq Logo"
+              width={180}
+              height={96}
+              className="h-15 w-auto object-contain"
+            />
+            <Image
+              src="/logo.png"
+              alt="School Logo"
+              width={80}
+              height={80}
+              className="h-16 w-auto object-contain"
+            />
           </div>
 
-          {/* SCAN STATE: Input field */}
-          {kioskState === "SCAN" && (
-            <div className="w-full space-y-5 animate-in fade-in duration-200">
-              <form onSubmit={handleScan} className="w-full space-y-3">
-                <div className="space-y-1.5 text-left">
-                  <label className="text-xs font-medium text-zinc-500">Scan or enter your RFID Card ID</label>
-                  <Input
-                    ref={inputRef}
-                    value={rfidInput}
-                    onChange={(e) => setRfidInput(e.target.value)}
-                    placeholder="Tap card or type ID here..."
-                    className="h-12 text-center text-base font-mono tracking-wider"
-                    autoFocus
-                    autoComplete="off"
-                  />
-                </div>
-                <p className="text-[10px] text-zinc-400 leading-relaxed">
-                  Place your card on the reader. The ID will auto-fill and submit. If your card is not linked, please approach the registration desk.
-                </p>
-              </form>
-
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-                <span className="size-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                Ready
-              </div>
+          {/* Header — subtitle types/deletes/cycles via react-type-animation */}
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900">Clinic Management System</h1>
+            <div className="text-xs text-zinc-400 h-4">
+              <TypeAnimation
+                sequence={[
+                  "Tap Your ID to Check In",
+                  1500,
+                  "Fast & Contactless",
+                  1500,
+                  "Student & Staff Check-in Terminal",
+                  1500,
+                  "Scan Now to Begin",
+                  1500,
+                ]}
+                wrapper="span"
+                speed={60}
+                deletionSpeed={70}
+                repeat={Infinity}
+                cursor={true}
+              />
             </div>
-          )}
+          </div>
 
-          {/* DISPLAY STATE: Student info */}
-          {kioskState === "DISPLAY" && profile && (
-            <div
-              className={`w-full space-y-5 transition-opacity duration-[2500ms] ${erasing ? "opacity-0" : "opacity-100"
-                }`}
-            >
-              <div className="flex flex-col items-center space-y-4">
-                <Avatar className="size-24 rounded-full border-2 border-zinc-200 bg-white shadow-sm">
-                  <AvatarImage
-                    src={profile.clinic_photo_url || ""}
-                    alt={`${profile.first_name} ${profile.last_name}`}
-                    className="object-cover"
-                  />
-                  <AvatarFallback className="text-2xl font-bold bg-zinc-100 text-zinc-600">
-                    {profile.first_name[0]}{profile.last_name[0]}
-                  </AvatarFallback>
-                </Avatar>
+          {/* Avatar — always the same size, regardless of state */}
+          <div className="relative">
+            <Avatar className="size-32 rounded-full border-4 border-white shadow-lg bg-zinc-100">
+              <AvatarImage
+                src={profile?.clinic_photo_url || "/student.png"}
+                alt="Student Profile"
+                className="object-cover"
+              />
+              <AvatarFallback className="text-3xl font-bold bg-zinc-200 text-zinc-400">
+                {profile ? `${profile.first_name[0]}${profile.last_name[0]}` : "ID"}
+              </AvatarFallback>
+            </Avatar>
+          </div>
 
-                <div className="space-y-1">
-                  <h2 className="text-lg font-bold text-zinc-900">
-                    {profile.first_name} {profile.last_name}
-                  </h2>
-                  <p className="text-sm font-mono text-zinc-500">
-                    {profile.student_number || profile.employee_number || "—"}
-                  </p>
-                </div>
-              </div>
+          {/* ID — directly under the picture */}
+          <div className="min-h-[24px] flex items-center justify-center">
+            {kioskState === "DISPLAY" && profile && (
+              <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-xs text-zinc-600 font-semibold tracking-wide">
+                {profile.student_number || profile.employee_number || "—"}
+              </code>
+            )}
+            {kioskState === "UNREGISTERED" && (
+              <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-xs text-zinc-700 font-semibold tracking-wide">
+                {rfidUid}
+              </code>
+            )}
+        
+          </div>
 
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
-                <span className="size-1.5 rounded-full bg-emerald-600" />
-                Check-in logged
-              </div>
-            </div>
-          )}
+        {/* Name field — actual Input component (read-only) so it matches the scan input exactly */}
+<Input
+  readOnly
+  tabIndex={-1}
+  value={
+    kioskState === "DISPLAY" && profile
+      ? `${profile.first_name} ${profile.last_name}`
+      : kioskState === "UNREGISTERED"
+      ? "Card not linked"
+      : ""
+  }
+  placeholder="Student Name"
+  className="h-12 text-center text-base font-semibold tracking-wide pointer-events-none cursor-default"
+/>
 
-          {/* UNREGISTERED STATE */}
-          {kioskState === "UNREGISTERED" && (
-            <div
-              className={`w-full space-y-4 transition-opacity duration-[2500ms] ${erasing ? "opacity-0" : "opacity-100"
-                }`}
-            >
-              <div className="space-y-1.5">
-                <p className="text-sm font-semibold text-zinc-800">Card not linked</p>
-                <p className="text-xs text-zinc-400">
-                  <code className="bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700 font-semibold">{rfidUid}</code>
-                </p>
-              </div>
-              <p className="text-xs text-zinc-400 leading-relaxed max-w-[300px] mx-auto">
-                Please approach the clinic registration desk so the operator can link your card.
-              </p>
-            </div>
-          )}
+          {/* Scan input — same field, always present, so the next tap works instantly */}
+          <form onSubmit={handleScan} className="w-full space-y-1.5">
+            <Input
+              ref={inputRef}
+              value={rfidInput}
+              onChange={(e) => setRfidInput(e.target.value)}
+              placeholder="Tap card or type ID here..."
+              className="h-12 text-center text-base font-mono tracking-wider"
+              autoFocus
+              autoComplete="off"
+            />
+          </form>
+
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+            <span className="size-1.5 rounded-full bg-emerald-600 animate-pulse" />
+            {kioskState === "DISPLAY" ? "Check-in logged" : "Ready"}
+          </div>
         </CardContent>
       </Card>
     </div>
