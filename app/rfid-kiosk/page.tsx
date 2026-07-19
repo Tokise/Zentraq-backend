@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { TypeAnimation } from "react-type-animation"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/utils/supabase/client"
@@ -121,11 +120,11 @@ export default function RfidKioskPage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-zinc-50 flex items-center justify-center p-6 select-none">
+    <div className="min-h-screen w-full bg-zinc-50 flex items-center justify-center p-5 select-none">
       <Card className="w-full max-w-2xl border border-zinc-200/80 shadow-md bg-white overflow-hidden">
         <CardContent className="flex flex-col items-center justify-center py-10 px-8 text-center space-y-6">
           {/* Top Header Logos inside container */}
-          <div className="w-full flex justify-between items-center mb-5 mt-[-30px]">
+          <div className="w-full flex justify-between items-center mb-5 mt-[-40px]">
             <Image
               src="/4.png"
               alt="Zentraq Logo"
@@ -166,24 +165,33 @@ export default function RfidKioskPage() {
             </div>
           </div>
 
-          {/* Avatar — always the same size, regardless of state */}
+          {/* Photo — always the same size, regardless of state — now a large box instead of a circle */}
           <div className="relative">
-            <Avatar className="size-32 rounded-full border-4 border-white shadow-lg bg-zinc-100">
-              <AvatarImage
-                src={profile?.clinic_photo_url || "/student.png"}
-                alt="Student Profile"
-                className="object-cover"
-              />
-              <AvatarFallback className="text-3xl font-bold bg-zinc-200 text-zinc-400">
-                {profile ? `${profile.first_name[0]}${profile.last_name[0]}` : "ID"}
-              </AvatarFallback>
-            </Avatar>
+            <div className="size-50 rounded-2xl overflow-hidden border-4 border-white shadow-lg bg-zinc-100 flex items-center justify-center">
+              {profile?.clinic_photo_url ? (
+                <img
+                  src={profile.clinic_photo_url}
+                  alt="Student Profile"
+                  className="size-full object-cover"
+                />
+              ) : profile ? (
+                <span className="text-3xl font-bold bg-zinc-200 text-zinc-400 size-full flex items-center justify-center">
+                  {profile.first_name[0]}{profile.last_name[0]}
+                </span>
+              ) : (
+                <img
+                  src="/student.png"
+                  alt="Student Profile"
+                  className="size-full object-cover"
+                />
+              )}
+            </div>
           </div>
 
           {/* ID — directly under the picture */}
-          <div className="min-h-[24px] flex items-center justify-center">
+          <div className="min-h-[20px] flex items-center justify-center">
             {kioskState === "DISPLAY" && profile && (
-              <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-xs text-zinc-600 font-semibold tracking-wide">
+              <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-2xl text-zinc-600 font-semibold tracking-wide">
                 {profile.student_number || profile.employee_number || "—"}
               </code>
             )}
@@ -196,34 +204,29 @@ export default function RfidKioskPage() {
           </div>
 
         {/* Name field — actual Input component (read-only) so it matches the scan input exactly */}
-<Input
-  readOnly
-  tabIndex={-1}
-  value={
-    kioskState === "DISPLAY" && profile
-      ? `${profile.first_name} ${profile.last_name}`
-      : kioskState === "UNREGISTERED"
-      ? "Card not linked"
-      : ""
-  }
-  placeholder="Student Name"
-  className="h-12 text-center text-base font-semibold tracking-wide pointer-events-none cursor-default"
-/>
+{/* ID — directly under the picture */}
+          <div className="min-h-[20px] flex items-center justify-center">
+            {kioskState === "DISPLAY" && profile && (
+              <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-2xl text-zinc-600 font-semibold tracking-wide">
+                {profile.first_name} {profile.last_name}
+              </code>
+            )}
+          </div>
 
           {/* Scan input — same field, always present, so the next tap works instantly */}
-          <form onSubmit={handleScan} className="w-full space-y-1.5">
+          <form onSubmit={handleScan} className="w-80 space-y-1">
             <Input
               ref={inputRef}
               value={rfidInput}
               onChange={(e) => setRfidInput(e.target.value)}
               placeholder="Tap card or type ID here..."
-              className="h-12 text-center text-base font-mono tracking-wider"
+              className="h-12 text-center text-2xl font-mono tracking-wider"
               autoFocus
               autoComplete="off"
             />
           </form>
 
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] mb-[-50px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
             <span className="size-1.5 rounded-full bg-emerald-600 animate-pulse" />
             {kioskState === "DISPLAY" ? "Check-in logged" : "Ready"}
           </div>

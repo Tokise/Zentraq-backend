@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
@@ -154,17 +153,9 @@ export default function RfidRegistrationPage() {
   }
 
   // Generate the NEXT sequential, guaranteed-unique 4-digit student ID suffix.
-  // Looks up the highest existing "23011-XXXX" number in the database and
-  // increments from there (rather than picking randomly), so IDs are
-  // predictable and collisions are effectively impossible. As a safety net
-  // it still re-checks the candidate against the database and keeps
-  // incrementing if that exact number was somehow already taken (e.g. a
-  // legacy record, or another registration completed in the same instant).
-  // Used for new registrations only — never called automatically in Edit mode.
   async function generateStudentId() {
     setGeneratingId(true)
     try {
-      // Find the current highest student number on record
       const { data: lastRecords, error: lastError } = await supabase
         .from("clinic_profiles")
         .select("student_number")
@@ -182,8 +173,6 @@ export default function RfidRegistrationPage() {
         if (!isNaN(lastNum)) nextNumber = lastNum + 1
       }
 
-      // Confirm the candidate is actually free; if not, keep incrementing.
-      // This guards against gaps in the padding/format of older records.
       let suffix = String(nextNumber).padStart(4, "0")
       let attempts = 0
       while (attempts < 50) {
@@ -213,7 +202,6 @@ export default function RfidRegistrationPage() {
     }
   }
 
-  // Step 1: Scan/lookup
   async function handleScanSubmit(e: React.FormEvent) {
     e.preventDefault()
     const uid = rfidUid.trim()
@@ -245,10 +233,6 @@ export default function RfidRegistrationPage() {
     }
   }
 
-  // Splits a stored student number into just the 4-digit suffix.
-  // Prefers an exact prefix match, but falls back to grabbing the last 4
-  // digits of the string so existing records saved in a slightly different
-  // format (e.g. before this prefix scheme existed) still display correctly.
   function parseStudentIdSuffix(value: string | null): string {
     if (!value) return ""
     if (value.startsWith(STUDENT_ID_PREFIX)) return value.slice(STUDENT_ID_PREFIX.length)
@@ -256,8 +240,6 @@ export default function RfidRegistrationPage() {
     return match ? match[1] : ""
   }
 
-  // Pre-fill the form with an existing profile and open the Edit screen.
-  // Existing ID numbers are displayed as-is and are NOT auto-generated/overwritten.
   function openEditMode(data: PatientProfile) {
     setSearchedProfile(data)
     setRfidUid(data.rfid_uid)
@@ -286,7 +268,6 @@ export default function RfidRegistrationPage() {
     setMode("EDIT")
   }
 
-  // Step 2: Validate form and go to step 3
   function handleInfoNext(e: React.FormEvent) {
     e.preventDefault()
     if (!firstName || !lastName || !idNumber) {
@@ -309,7 +290,6 @@ export default function RfidRegistrationPage() {
     startCamera()
   }
 
-  // Webcam
   async function startCamera() {
     try {
       setCameraActive(true)
@@ -368,7 +348,6 @@ export default function RfidRegistrationPage() {
     reader.readAsDataURL(file)
   }
 
-  // Step 4: Submit (new registration)
   async function handleRegister() {
     if (!rfidUid) return
     setLoading(true)
@@ -404,7 +383,6 @@ export default function RfidRegistrationPage() {
     }
   }
 
-  // Edit: Update an existing profile
   async function handleUpdateProfile(e: React.FormEvent) {
     e.preventDefault()
     if (!searchedProfile) return
@@ -464,7 +442,6 @@ export default function RfidRegistrationPage() {
         description="Link physical RFID cards to student and employee clinic profiles."
       />
 
-      {/* Subtle step indicator — only during wizard */}
       {mode === "WIZARD" && (
         <div className="flex items-center justify-center gap-0">
           {STEPS.map((label, i) => {
@@ -498,7 +475,6 @@ export default function RfidRegistrationPage() {
         </div>
       )}
 
-      {/* ─── STEP 1: RFID Input ─── */}
       {mode === "WIZARD" && step === 1 && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
           <CardContent className="py-8 px-6 space-y-5">
@@ -529,7 +505,6 @@ export default function RfidRegistrationPage() {
         </Card>
       )}
 
-      {/* ─── STEP 2: Info Form (New Registration) ─── */}
       {mode === "WIZARD" && step === 2 && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
           <CardHeader className="pb-3">
@@ -673,7 +648,6 @@ export default function RfidRegistrationPage() {
         </Card>
       )}
 
-      {/* ─── STEP 3: Photo Capture ─── */}
       {mode === "WIZARD" && step === 3 && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
           <CardHeader className="pb-3">
@@ -682,22 +656,20 @@ export default function RfidRegistrationPage() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="flex flex-col items-center space-y-4">
-              {/* Circular frame */}
-              <div className="relative size-48 rounded-full overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
-                {photo ? (
-                  <img src={photo} alt="Preview" className="size-full object-cover" />
-                ) : cameraActive ? (
+              <div className="relative size-48 rounded-2xl overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
+                {cameraActive ? (
                   <video ref={videoRef} autoPlay playsInline className="size-full object-cover scale-x-[-1]" />
+                ) : photo ? (
+                  <img src={photo} alt="Preview" className="size-full object-cover" />
                 ) : (
                   <CameraOff className="size-10 text-zinc-300" />
                 )}
                 {cameraActive && !photo && (
-                  <div className="absolute inset-5 rounded-full border border-dashed border-white/60 pointer-events-none" />
+                  <div className="absolute inset-5 rounded-xl border border-dashed border-white/60 pointer-events-none" />
                 )}
               </div>
               <canvas ref={canvasRef} className="hidden" width="200" height="200" />
 
-              {/* Controls */}
               <div className="flex flex-wrap justify-center gap-2">
                 {!photo && !cameraActive && (
                   <Button type="button" variant="outline" size="sm" onClick={startCamera}>
@@ -709,7 +681,7 @@ export default function RfidRegistrationPage() {
                     <Check className="size-3.5 mr-1" /> Capture
                   </Button>
                 )}
-                {photo && (
+                {photo && !cameraActive && (
                   <Button type="button" variant="outline" size="sm" onClick={() => { setPhoto(null); startCamera() }}>
                     <RotateCcw className="size-3.5 mr-1" /> Retake
                   </Button>
@@ -721,7 +693,6 @@ export default function RfidRegistrationPage() {
                 )}
               </div>
 
-              {/* File upload fallback */}
               <div className="text-center">
                 <input type="file" accept="image/*" id="photo-upload" onChange={handlePhotoUpload} className="hidden" />
                 <label htmlFor="photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-zinc-200 cursor-pointer hover:bg-zinc-50 text-xs font-medium text-zinc-600">
@@ -742,7 +713,6 @@ export default function RfidRegistrationPage() {
         </Card>
       )}
 
-      {/* ─── STEP 4: Review & Confirm ─── */}
       {mode === "WIZARD" && step === 4 && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
           <CardHeader className="pb-3">
@@ -750,14 +720,16 @@ export default function RfidRegistrationPage() {
             <CardDescription className="text-xs">Confirm all details are correct before submitting</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Summary Card */}
             <div className="border border-zinc-200/80 rounded-lg p-5 bg-zinc-50/50 flex flex-col items-center gap-4">
-              <Avatar className="size-20 rounded-full border-2 border-zinc-200 bg-white shadow-sm">
-                <AvatarImage src={photo || ""} className="object-cover" />
-                <AvatarFallback className="text-xl font-bold bg-zinc-100 text-zinc-600">
-                  {firstName?.[0]}{lastName?.[0]}
-                </AvatarFallback>
-              </Avatar>
+              <div className="size-20 rounded-2xl overflow-hidden border-2 border-zinc-200 bg-white shadow-sm flex items-center justify-center shrink-0">
+                {photo ? (
+                  <img src={photo} alt="Preview" className="size-full object-cover" />
+                ) : (
+                  <span className="text-xl font-bold bg-zinc-100 text-zinc-600 size-full flex items-center justify-center">
+                    {firstName?.[0]}{lastName?.[0]}
+                  </span>
+                )}
+              </div>
 
               <div className="text-center space-y-0.5">
                 <h3 className="font-bold text-base text-zinc-900">{firstName} {lastName}</h3>
@@ -766,7 +738,6 @@ export default function RfidRegistrationPage() {
               </div>
             </div>
 
-            {/* Detail rows */}
             <div className="text-xs space-y-2 divide-y divide-zinc-100">
               <div className="flex justify-between py-1.5">
                 <span className="text-zinc-400">RFID UID</span>
@@ -820,10 +791,8 @@ export default function RfidRegistrationPage() {
         </Card>
       )}
 
-      {/* ─── VERIFIED (card already linked) ─── */}
       {mode === "VERIFIED" && searchedProfile && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto overflow-hidden">
-     
           <CardContent className="py-8 px-6 space-y-5 text-center">
             <div className="mx-auto size-10 rounded-full bg-emerald-50 flex items-center justify-center">
               <UserCheck className="size-5 text-emerald-600" />
@@ -834,12 +803,15 @@ export default function RfidRegistrationPage() {
             </div>
 
             <div className="flex items-center gap-4 border border-zinc-200/80 rounded-lg p-4 bg-zinc-50/50 text-left">
-              <Avatar className="size-16 rounded-full border border-zinc-200 bg-white shrink-0">
-                <AvatarImage src={searchedProfile.clinic_photo_url || ""} className="object-cover" />
-                <AvatarFallback className="text-lg font-bold bg-zinc-100 text-zinc-600">
-                  {searchedProfile.first_name[0]}{searchedProfile.last_name[0]}
-                </AvatarFallback>
-              </Avatar>
+              <div className="size-16 rounded-2xl overflow-hidden border border-zinc-200 bg-white shrink-0 flex items-center justify-center">
+                {searchedProfile.clinic_photo_url ? (
+                  <img src={searchedProfile.clinic_photo_url} alt="Profile" className="size-full object-cover" />
+                ) : (
+                  <span className="text-lg font-bold bg-zinc-100 text-zinc-600 size-full flex items-center justify-center">
+                    {searchedProfile.first_name[0]}{searchedProfile.last_name[0]}
+                  </span>
+                )}
+              </div>
               <div className="min-w-0 space-y-0.5">
                 <h3 className="font-semibold text-sm text-zinc-900 truncate">{searchedProfile.first_name} {searchedProfile.last_name}</h3>
                 <p className="text-xs font-mono text-zinc-500">{searchedProfile.student_number || searchedProfile.employee_number || "N/A"}</p>
@@ -862,7 +834,6 @@ export default function RfidRegistrationPage() {
         </Card>
       )}
 
-      {/* ─── EDIT (update an existing profile) ─── */}
       {mode === "EDIT" && searchedProfile && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
           <CardHeader className="pb-3">
@@ -872,13 +843,12 @@ export default function RfidRegistrationPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Photo */}
             <div className="flex flex-col items-center gap-3">
-              <div className="relative size-28 rounded-full overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
-                {photo ? (
-                  <img src={photo} alt="Preview" className="size-full object-cover" />
-                ) : cameraActive ? (
+              <div className="relative size-28 rounded-2xl overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
+                {cameraActive ? (
                   <video ref={videoRef} autoPlay playsInline className="size-full object-cover scale-x-[-1]" />
+                ) : photo ? (
+                  <img src={photo} alt="Preview" className="size-full object-cover" />
                 ) : (
                   <CameraOff className="size-8 text-zinc-300" />
                 )}
@@ -941,11 +911,6 @@ export default function RfidRegistrationPage() {
                       <div className="h-9 px-2.5 flex items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-mono text-zinc-500 select-none shrink-0">
                         {STUDENT_ID_PREFIX}
                       </div>
-                      {/*
-                        Displays the existing student's stored ID suffix
-                        (populated by openEditMode) and allows manual
-                        correction. Does NOT auto-generate in Edit mode.
-                      */}
                       <Input
                         value={studentIdSuffix}
                         onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
@@ -1034,10 +999,8 @@ export default function RfidRegistrationPage() {
         </Card>
       )}
 
-      {/* ─── SUCCESS ─── */}
       {mode === "SUCCESS" && searchedProfile && (
         <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto overflow-hidden">
-
           <CardContent className="py-8 px-6 space-y-5 text-center">
             <div className="size-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto border border-emerald-200/60">
               <Check className="size-7 text-emerald-600" />
@@ -1049,12 +1012,15 @@ export default function RfidRegistrationPage() {
             </div>
 
             <div className="flex items-center gap-4 border border-zinc-200/80 rounded-lg p-4 bg-zinc-50/50 text-left">
-              <Avatar className="size-14 rounded-full border border-zinc-200 bg-white shrink-0">
-                <AvatarImage src={searchedProfile.clinic_photo_url || ""} className="object-cover" />
-                <AvatarFallback className="font-bold bg-zinc-100 text-zinc-600">
-                  {searchedProfile.first_name[0]}{searchedProfile.last_name[0]}
-                </AvatarFallback>
-              </Avatar>
+              <div className="size-14 rounded-2xl overflow-hidden border border-zinc-200 bg-white shrink-0 flex items-center justify-center">
+                {searchedProfile.clinic_photo_url ? (
+                  <img src={searchedProfile.clinic_photo_url} alt="Profile" className="size-full object-cover" />
+                ) : (
+                  <span className="font-bold bg-zinc-100 text-zinc-600 size-full flex items-center justify-center">
+                    {searchedProfile.first_name[0]}{searchedProfile.last_name[0]}
+                  </span>
+                )}
+              </div>
               <div className="min-w-0 text-xs space-y-0.5">
                 <div className="font-semibold text-sm text-zinc-900">{searchedProfile.first_name} {searchedProfile.last_name}</div>
                 <div className="font-mono text-zinc-500">{searchedProfile.student_number || searchedProfile.employee_number}</div>
