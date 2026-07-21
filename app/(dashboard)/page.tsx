@@ -88,7 +88,7 @@ export default function DashboardPage() {
       if (consults) setDbConsultations(consults)
       if (appts) setDbAppointments(appts)
     } catch (err) {
-      console.error("Error fetching live dashboard queue:", err)
+      // error fetching live dashboard queue
     }
   }
 

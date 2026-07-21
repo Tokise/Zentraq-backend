@@ -35,3 +35,18 @@ values
   ('Paracetamol 500mg', 12, 50, 'critical'),
   ('Amoxicillin 250mg', 28, 40, 'warning'),
   ('Ibuprofen 400mg', 35, 50, 'warning');
+
+-- Admin Profile Setup
+-- Note: The actual Auth User must be created via the Supabase Dashboard or CLI for this to work.
+DO $$
+DECLARE
+    admin_user_id UUID;
+BEGIN
+    SELECT id INTO admin_user_id FROM auth.users WHERE email = 'admin@zentraq.com' LIMIT 1;
+    
+    IF admin_user_id IS NOT NULL THEN
+        INSERT INTO public.profiles (id, email, role)
+        VALUES (admin_user_id, 'admin@zentraq.com', 'admin')
+        ON CONFLICT (id) DO UPDATE SET role = 'admin';
+    END IF;
+END $$;

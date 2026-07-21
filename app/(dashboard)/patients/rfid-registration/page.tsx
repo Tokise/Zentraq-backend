@@ -495,7 +495,7 @@ export default function RfidRegistrationPage() {
               <Button
                 type="submit"
                 disabled={loading || !rfidUid.trim()}
-                className="w-full h-10 bg-zinc-900 text-white hover:bg-zinc-800"
+                className="w-full h-10 bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800"
               >
                 {loading ? <RefreshCw className="size-4 animate-spin mr-1.5" /> : null}
                 {loading ? "Searching..." : "Continue"}
@@ -563,7 +563,7 @@ export default function RfidRegistrationPage() {
                         size="sm"
                         onClick={generateStudentId}
                         disabled={generatingId}
-                        className="h-9 px-2 shrink-0"
+                        className="h-9 cursor-pointer px-2 shrink-0"
                         title="Generate a new ID"
                       >
                         <RefreshCw className={`size-3.5 ${generatingId ? "animate-spin" : ""}`} />
@@ -638,8 +638,10 @@ export default function RfidRegistrationPage() {
               )}
 
               <div className="flex gap-2 justify-end pt-3 border-t border-zinc-100">
-                <Button type="button" variant="outline" size="sm" onClick={resetScanner}>Cancel</Button>
-                <Button type="submit" size="sm" className="bg-zinc-900 text-white hover:bg-zinc-800 flex items-center gap-1">
+                <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="cursor-pointer">
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-zinc-900 text-white cursor-pointer hover:bg-zinc-800 flex items-center gap-1">
                   Next <ArrowRight className="size-3.5" />
                 </Button>
               </div>
@@ -677,7 +679,7 @@ export default function RfidRegistrationPage() {
                   </Button>
                 )}
                 {cameraActive && !photo && (
-                  <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 text-white hover:bg-zinc-800">
+                  <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 text-white cursor-pointer hover:bg-zinc-800">
                     <Check className="size-3.5 mr-1" /> Capture
                   </Button>
                 )}
@@ -687,7 +689,7 @@ export default function RfidRegistrationPage() {
                   </Button>
                 )}
                 {cameraActive && (
-                  <Button type="button" variant="ghost" size="sm" onClick={stopCamera} className="text-red-500 hover:bg-red-50">
+                  <Button type="button" variant="ghost" size="sm" onClick={stopCamera} className="text-red-500 cursor-pointer hover:bg-red-50">
                     Cancel
                   </Button>
                 )}
@@ -702,10 +704,10 @@ export default function RfidRegistrationPage() {
             </div>
 
             <div className="flex gap-2 justify-between pt-3 border-t border-zinc-100">
-              <Button type="button" variant="outline" size="sm" onClick={() => { stopCamera(); setStep(2) }} className="flex items-center gap-1">
+              <Button type="button" variant="outline" size="sm" onClick={() => { stopCamera(); setStep(2) }} className="flex items-center cursor-pointer gap-1">
                 <ArrowLeft className="size-3.5" /> Back
               </Button>
-              <Button type="button" size="sm" onClick={() => setStep(4)} className="bg-zinc-900 text-white hover:bg-zinc-800 flex items-center gap-1">
+              <Button type="button" size="sm" onClick={() => setStep(4)} className="bg-zinc-900 text-white cursor-pointer hover:bg-zinc-800 flex items-center gap-1">
                 Review <ArrowRight className="size-3.5" />
               </Button>
             </div>
@@ -775,14 +777,14 @@ export default function RfidRegistrationPage() {
 
             <div className="flex gap-2 justify-between pt-3 border-t border-zinc-100">
               <Button type="button" variant="outline" size="sm" onClick={() => setStep(3)} className="flex items-center gap-1">
-                <ArrowLeft className="size-3.5" /> Back
+                <ArrowLeft className="size-3.5 cursor-pointer" /> Back
               </Button>
               <Button
                 type="button"
                 size="sm"
                 onClick={handleRegister}
                 disabled={loading}
-                className="bg-zinc-900 text-white hover:bg-zinc-800 min-w-[130px]"
+                className="bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800 min-w-[130px]"
               >
                 {loading ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Saving...</> : "Complete Registration"}
               </Button>
@@ -820,10 +822,10 @@ export default function RfidRegistrationPage() {
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 h-9 text-xs flex items-center justify-center gap-1.5" onClick={() => openEditMode(searchedProfile)}>
+              <Button variant="outline" className="flex-1 cursor-pointer h-9 text-xs flex items-center justify-center gap-1.5" onClick={() => openEditMode(searchedProfile)}>
                 <Pencil className="size-3.5" /> Edit Info
               </Button>
-              <Button variant="outline" className="flex-1 h-9 text-xs" onClick={resetScanner}>
+              <Button variant="outline" className="flex-1 cursor-pointer h-9 text-xs" onClick={resetScanner}>
                 Done (Esc)
               </Button>
             </div>
@@ -858,15 +860,15 @@ export default function RfidRegistrationPage() {
               <div className="flex flex-wrap justify-center gap-2">
                 {!cameraActive && (
                   <Button type="button" variant="outline" size="sm" onClick={startCamera}>
-                    <Camera className="size-3.5 mr-1" /> {photo ? "Retake Photo" : "Take Photo"}
+                    <Camera className="size-3.5 cursor-pointer mr-1" /> {photo ? "Retake Photo" : "Take Photo"}
                   </Button>
                 )}
                 {cameraActive && (
                   <>
-                    <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 text-white hover:bg-zinc-800">
+                    <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800">
                       <Check className="size-3.5 mr-1" /> Capture
                     </Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={stopCamera} className="text-red-500 hover:bg-red-50">
+                    <Button type="button" variant="ghost" size="sm" onClick={stopCamera} className="text-red-500 cursor-pointer hover:bg-red-50">
                       Cancel
                     </Button>
                   </>
@@ -989,8 +991,10 @@ export default function RfidRegistrationPage() {
               )}
 
               <div className="flex gap-2 justify-end pt-3 border-t border-zinc-100">
-                <Button type="button" variant="outline" size="sm" onClick={resetScanner}>Cancel</Button>
-                <Button type="submit" size="sm" disabled={loading} className="bg-zinc-900 text-white hover:bg-zinc-800 min-w-[120px] flex items-center gap-1">
+                <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="cursor-pointer">
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={loading} className="bg-zinc-900 text-white hover:bg-zinc-800 min-w-[120px] cursor-pointer flex items-center gap-1">
                   {loading ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Saving...</> : "Save Changes"}
                 </Button>
               </div>
@@ -1028,7 +1032,7 @@ export default function RfidRegistrationPage() {
               </div>
             </div>
 
-            <Button className="w-full h-9 text-xs bg-zinc-900 text-white hover:bg-zinc-800" onClick={resetScanner}>
+            <Button className="w-full h-9 text-xs bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800" onClick={resetScanner}>
               Register Another (Esc)
             </Button>
             {resetTimer !== null && (

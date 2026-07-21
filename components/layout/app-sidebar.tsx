@@ -1,9 +1,11 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { navigation } from "@/lib/navigation"
+
 
 type AppSidebarProps = {
   onNavigate?: () => void
@@ -22,9 +24,11 @@ export function AppSidebar({ onNavigate, collapsed = false }: AppSidebarProps) {
     >
       <div className={cn("flex h-14 items-center border-b border-sidebar-border px-4", collapsed && "justify-center px-2")}>
         {collapsed ? (
-          <span className="text-lg font-semibold">Z</span>
+          <Image src="/4.png" alt="Logo" width={120} height={32} />
         ) : (
-          <span className="text-lg font-semibold tracking-tight">Zentraq</span>
+          <div className="flex items-center gap-2">
+            <Image src="/4.png" alt="Logo" width={120} height={32} />
+          </div>
         )}
       </div>
 
@@ -66,6 +70,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: AppSidebarProps) {
           </div>
         ))}
       </nav>
+
     </aside>
   )
 }
