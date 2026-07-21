@@ -110,7 +110,6 @@ export default function RfidKioskPage() {
         scheduleAutoClear()
       }
     } catch (err: any) {
-      console.error(err)
       toast.error(err.message || "Check-in failed")
       resetScanner()
     } finally {
