@@ -6,43 +6,65 @@ import { login } from "@/app/login/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { toast } from "sonner"
 import { CheckCircle2, Loader2 } from "lucide-react"
 import Image from "next/image"
+import NProgress from "nprogress"
 
 export default function LoginPage() {
   const router = useRouter()
+
   const [isLoading, setIsLoading] = React.useState(false)
   const [isSuccess, setIsSuccess] = React.useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
     setIsLoading(true)
+    NProgress.start()
 
     const formData = new FormData(event.currentTarget)
-    const result = await login(formData)
 
-    if (result?.error) {
-      toast.error(result.error)
+    try {
+      const result = await login(formData)
+
+      if (result?.error) {
+        NProgress.done()
+        toast.error(result.error)
+        setIsLoading(false)
+        return
+      }
+
+      if (result?.success) {
+        setIsSuccess(true)
+
+        router.push("/")
+
+        return
+      }
+
+      NProgress.done()
       setIsLoading(false)
-      return
-    }
+    } catch (error) {
+      NProgress.done()
+      setIsLoading(false)
 
-    if (result?.success) {
-      router.push("/")
+      toast.error("Something went wrong.")
+      console.error(error)
     }
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div
-        className={`w-full max-w-md space-y-6 transition-all duration-300 ${isSuccess ? "scale-[0.99] opacity-90" : "scale-100 opacity-100"
-          }`}
+        className={`w-full max-w-md space-y-6 transition-all duration-300 ${
+          isSuccess
+            ? "scale-[0.99] opacity-90"
+            : "scale-100 opacity-100"
+        }`}
       >
-
-
-        <Card className="border-slate-200 bg-white shadow-lg rounded-xl">
+        <Card className="rounded-xl border-slate-200 bg-white shadow-lg">
           <div className="flex flex-col items-center space-y-3 text-center">
             <Image
               src="/4.png"
@@ -53,46 +75,61 @@ export default function LoginPage() {
               className="h-12 w-auto object-contain"
             />
           </div>
+
           <form onSubmit={handleSubmit}>
             <CardContent className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="email" className="text-xs font-semibold text-slate-700">Email Address</Label>
+                <Label
+                  htmlFor="email"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Email Address
+                </Label>
+
                 <Input
                   id="email"
                   name="email"
                   type="email"
                   placeholder="name@example.com"
-                  className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400"
-                  disabled={isLoading || isSuccess}
                   required
+                  disabled={isLoading || isSuccess}
+                  className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400"
                 />
               </div>
+
               <div className="grid gap-2">
-                <Label htmlFor="password" className="text-xs font-semibold text-slate-700">Password</Label>
+                <Label
+                  htmlFor="password"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Password
+                </Label>
+
                 <Input
                   id="password"
                   name="password"
                   type="password"
-                  className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400"
-                  disabled={isLoading || isSuccess}
                   required
+                  disabled={isLoading || isSuccess}
+                  className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400"
                 />
               </div>
             </CardContent>
+
             <CardFooter className="flex flex-col gap-4 pb-6 pt-3">
               <Button
                 type="submit"
-                className="h-10 w-full  text-white text-sm cursor-pointer font-medium transition-colors shadow-sm"
                 disabled={isLoading || isSuccess}
+                className="h-10 w-full cursor-pointer text-sm font-medium text-white shadow-sm"
               >
                 {isSuccess ? (
                   <>
-                    <CheckCircle2 className="mr-2 size-4 text-white" />
+                    <CheckCircle2 className="mr-2 size-4" />
                     Success
                   </>
                 ) : isLoading ? (
                   <>
-                    <Loader2 className="mr-2 size-4 animate-spin text-white" />
+                    <Loader2 className="mr-2 size-4 animate-spin" />
                     Signing in...
                   </>
                 ) : (

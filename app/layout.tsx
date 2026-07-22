@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, Inter } from "next/font/google"
+import NextTopLoader from "nextjs-toploader"
 import "./globals.css"
 import { cn } from "@/lib/utils"
 import { Toaster } from "@/components/ui/sonner"
@@ -39,7 +40,18 @@ export default function RootLayout({
       )}
     >
       <body className="min-h-full flex flex-col">
+        <NextTopLoader
+          color="#1f6feb"
+          height={2}
+          showSpinner={false}
+          crawl
+          easing="ease"
+          speed={250}
+          shadow="0 0 10px #1f6feb, 0 0 5px #1f6feb"
+        />
+
         {children}
+
         <Toaster />
       </body>
     </html>
