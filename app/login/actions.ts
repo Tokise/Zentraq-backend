@@ -2,7 +2,6 @@
 
 import { createClient } from "@/utils/supabase/server"
 import { cookies } from "next/headers"
-import { redirect } from "next/navigation"
 import { revalidatePath } from "next/cache"
 
 export async function login(formData: FormData) {
@@ -26,7 +25,7 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath("/", "layout")
-  redirect("/")
+  return { success: true }
 }
 
 export async function logout() {
@@ -34,7 +33,6 @@ export async function logout() {
   const supabase = createClient(cookieStore)
 
   await supabase.auth.signOut()
-  
   revalidatePath("/", "layout")
-  redirect("/login")
+  return { success: true }
 }

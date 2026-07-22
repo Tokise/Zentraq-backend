@@ -1,9 +1,10 @@
-import { DashboardShell } from "@/components/layout/dashboard-shell"
+import { redirect } from "next/navigation"
 import { createClient } from "@/utils/supabase/server"
 import { getUserRole } from "@/lib/auth/get-user-role"
+import { isAdmin } from "@/lib/auth/roles"
 import { cookies } from "next/headers"
 
-export default async function DashboardLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode
@@ -11,11 +12,16 @@ export default async function DashboardLayout({
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
   const { data: { user } } = await supabase.auth.getUser()
-  const userRole = user ? await getUserRole(user.id) : "operator"
 
-  return (
-    <DashboardShell userEmail={user?.email} userRole={userRole}>
-      {children}
-    </DashboardShell>
-  )
+  if (!user) {
+    redirect("/login")
+  }
+
+  const role = await getUserRole(user.id)
+
+  if (!isAdmin(role)) {
+    redirect("/")
+  }
+
+  return children
 }

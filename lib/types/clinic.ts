@@ -32,6 +32,17 @@ export type Consultation = {
   status: "active" | "completed" | "emergency"
 }
 
+export type CheckIn = {
+  id: string
+  profile_id: string | null
+  patient_name: string
+  rfid_uid: string | null
+  status: "waiting" | "in_progress" | "completed" | "dismissed"
+  created_at: string
+  handled_at: string | null
+  notes: string | null
+}
+
 export type InventoryAlert = {
   id: string
   medicine_name: string
