@@ -18,7 +18,7 @@ Note: Its up to you what name to use but for the sake of formality use this form
 
 2. **Always Pull**
 
--- keep track on the project by using the git pull command, everytime you start coding so kahit kakabukas mo palang ng code editor mo mag pull ka kaagad bago ka gumawa ng changes para hindi masira yung codes natin ok!
+-- keep track on the project by using the git pull origin main command, everytime you start coding so kahit kakabukas mo palang ng code editor mo mag pull ka kaagad bago ka gumawa ng changes para hindi masira yung codes natin ok!
 
 -- mahihirapan tayo nyan pag nag merge na tayo!
 
