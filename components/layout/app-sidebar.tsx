@@ -5,15 +5,17 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { navigation } from "@/lib/navigation"
-
+import { filterNavigationForRole, type StaffRole } from "@/lib/auth/roles"
 
 type AppSidebarProps = {
   onNavigate?: () => void
   collapsed?: boolean
+  userRole?: StaffRole
 }
 
-export function AppSidebar({ onNavigate, collapsed = false }: AppSidebarProps) {
+export function AppSidebar({ onNavigate, collapsed = false, userRole = "operator" }: AppSidebarProps) {
   const pathname = usePathname()
+  const visibleNavigation = filterNavigationForRole(navigation, userRole)
 
   return (
     <aside
@@ -26,14 +28,14 @@ export function AppSidebar({ onNavigate, collapsed = false }: AppSidebarProps) {
         {collapsed ? (
           <Image src="/4.png" alt="Logo" width={120} height={32} />
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center mx-10 gap-2">
             <Image src="/4.png" alt="Logo" width={120} height={32} />
           </div>
         )}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {navigation.map((group) => (
+        {visibleNavigation.map((group) => (
           <div key={group.label || "dashboard"} className="mb-4">
             {group.label && !collapsed && (
               <p className="mb-2 px-2 text-xs font-medium tracking-wider text-muted-foreground">
@@ -70,7 +72,6 @@ export function AppSidebar({ onNavigate, collapsed = false }: AppSidebarProps) {
           </div>
         ))}
       </nav>
-
     </aside>
   )
 }

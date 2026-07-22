@@ -94,7 +94,8 @@ export const navigation: NavGroup[] = [
   {
     label: "ADMINISTRATION",
     items: [
-      { title: "Users", href: "/admin/users", icon: Users },
+      { title: "Clinic Accounts", href: "/admin/operators", icon: UserCog },
+      { title: "Student Accounts", href: "/admin/users", icon: Users },
       { title: "Roles", href: "/admin/roles", icon: Shield },
       { title: "Audit Logs", href: "/admin/audit-logs", icon: ClipboardList },
       { title: "Settings", href: "/admin/settings", icon: Settings },

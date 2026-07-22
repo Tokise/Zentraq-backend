@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Menu, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Menu, X, Loader2, LogOut } from "lucide-react"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -15,29 +16,39 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { logout } from "@/app/login/actions"
+import { createClient } from "@/utils/supabase/client"
+import type { StaffRole } from "@/lib/auth/roles"
 
 type DashboardShellProps = {
   children: React.ReactNode
   userEmail?: string
+  userRole?: StaffRole
 }
 
-export function DashboardShell({ children, userEmail }: DashboardShellProps) {
+export function DashboardShell({ children, userEmail, userRole = "operator" }: DashboardShellProps) {
+  const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  async function handleLogout() {
+    if (loggingOut) return
+    setLoggingOut(true)
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push("/login")
+    router.refresh()
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop sidebar */}
       <div className="hidden lg:block">
-        <AppSidebar />
+        <AppSidebar userRole={userRole} />
       </div>
 
-      {/* Tablet collapsed sidebar */}
       <div className="hidden md:block lg:hidden">
-        <AppSidebar collapsed />
+        <AppSidebar collapsed userRole={userRole} />
       </div>
 
-      {/* Mobile overlay sidebar */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div
@@ -45,7 +56,7 @@ export function DashboardShell({ children, userEmail }: DashboardShellProps) {
             onClick={() => setMobileOpen(false)}
           />
           <div className="absolute inset-y-0 left-0 w-64">
-            <AppSidebar onNavigate={() => setMobileOpen(false)} />
+            <AppSidebar onNavigate={() => setMobileOpen(false)} userRole={userRole} />
           </div>
         </div>
       )}
@@ -64,7 +75,7 @@ export function DashboardShell({ children, userEmail }: DashboardShellProps) {
           <div className="flex-1" />
 
           <DropdownMenu>
-            <DropdownMenuTrigger className="relative  flex h-8 w-8 cursor-pointer items-center justify-center rounded-full hover:bg-accent hover:text-accent-foreground focus:outline-none">
+            <DropdownMenuTrigger className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full hover:bg-accent hover:text-accent-foreground focus:outline-none">
               <Avatar className="h-8 w-8">
                 <AvatarImage alt={userEmail || "User"} />
                 <AvatarFallback>{userEmail?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
@@ -75,15 +86,23 @@ export function DashboardShell({ children, userEmail }: DashboardShellProps) {
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">Account</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {userEmail}
-                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">{userEmail}</p>
+                    <p className="text-[10px] capitalize leading-none text-muted-foreground">{userRole}</p>
                   </div>
                 </DropdownMenuLabel>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="cursor-pointer" onClick={async () => { await logout(); }}>
-                Log out
+              <DropdownMenuItem
+                className="cursor-pointer"
+                disabled={loggingOut}
+                onClick={handleLogout}
+              >
+                {loggingOut ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <LogOut className="mr-2 size-4" />
+                )}
+                {loggingOut ? "Signing out..." : "Log out"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
