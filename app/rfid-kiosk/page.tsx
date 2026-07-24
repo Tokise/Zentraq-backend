@@ -98,7 +98,7 @@ export default function RfidKioskPage() {
           profile_id: data.id,
           patient_name: fullName,
           chief_complaint: "Routine Check-in (RFID Kiosk)",
-          status: "active"
+          status: "waiting"
         })
 
         setProfile(data as PatientProfile)
@@ -199,11 +199,11 @@ export default function RfidKioskPage() {
                 {rfidUid}
               </code>
             )}
-        
+
           </div>
 
-        {/* Name field — actual Input component (read-only) so it matches the scan input exactly */}
-{/* ID — directly under the picture */}
+          {/* Name field — actual Input component (read-only) so it matches the scan input exactly */}
+          {/* ID — directly under the picture */}
           <div className="min-h-[20px] flex items-center justify-center">
             {kioskState === "DISPLAY" && profile && (
               <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-2xl text-zinc-600 font-semibold tracking-wide">
