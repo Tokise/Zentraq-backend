@@ -42,7 +42,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <NextTopLoader
           color="#1f6feb"
-          height={2}
+          height={4}
           showSpinner={false}
           crawl
           easing="ease"
