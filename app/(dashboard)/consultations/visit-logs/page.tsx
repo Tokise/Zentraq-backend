@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Loader2, Search } from "lucide-react"
+import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Search } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { PageHeader } from "@/components/page-header"
 import { StatusBadge } from "@/components/status-badge"
@@ -10,77 +10,121 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { EmptyState } from "@/components/empty-state"
-import { Pagination } from "@/components/pagination"
 import { toast } from "sonner"
 
-type CompletionReport = {
+type VisitLogRecord = {
+  id: string
+  consultation_id: string | null
+  patient_name: string
+  student_complaint: string
+  origin: "consultation" | "emergency"
   diagnosis: string
   treatment: string
   recommendations: string
-}
-
-type ConsultationRecord = {
-  id: string
-  profile_id: string | null
-  patient_name: string
-  chief_complaint: string
-  status: "waiting" | "in_progress" | "completed" | "dismissed" | "emergency"
+  handled_at: string
   created_at: string
-  handled_at: string | null
-  notes: string | null
+  status: string
 }
 
-const PAGE_SIZE = 10
+function originVariant(origin: string) {
+  return origin === "emergency" ? "danger" as const : "info" as const
+}
 
 function statusVariant(status: string) {
   switch (status) {
-    case "completed":
+    case "return_to_class":
       return "success" as const
-    case "dismissed":
-      return "default" as const
-    case "emergency":
-      return "danger" as const
+    case "return_to_activity":
+      return "info" as const
+    case "sent_home":
+      return "warning" as const
     default:
       return "default" as const
   }
+}
+
+function formatStatusAbbr(status: string): string {
+  switch (status) {
+    case "return_to_class":
+      return "RTC"
+    case "return_to_activity":
+      return "RTA"
+    case "sent_home":
+      return "SH"
+    default:
+      return status.replace(/_/g, " ")
+  }
+}
+
+function formatStatusLabel(status: string): string {
+  switch (status) {
+    case "return_to_class":
+      return "Return to Class"
+    case "return_to_activity":
+      return "Return to Activity"
+    case "sent_home":
+      return "Sent Home"
+    default:
+      return status.replace(/_/g, " ")
+  }
+}
+
+function formatOriginAbbr(origin: string): string {
+  return origin === "emergency" ? "EC" : "NC"
+}
+
+function formatOriginFull(origin: string): string {
+  return origin === "emergency" ? "Emergency Consultation" : "Normal Consultation"
+}
+
+function formatDateShort(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+}
+
+function formatTimeOnly(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 export default function VisitLogsPage() {
   const router = useRouter()
   const supabase = createClient()
 
-  const [records, setRecords] = useState<ConsultationRecord[]>([])
+  const [records, setRecords] = useState<VisitLogRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedRecord, setSelectedRecord] =
-    useState<ConsultationRecord | null>(null)
-  const [page, setPage] = useState(1)
+  const [selectedRecord, setSelectedRecord] = useState<VisitLogRecord | null>(null)
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set())
 
   const fetchRecords = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from("consultations")
+        .from("visit_logs")
         .select("*")
-        .in("status", ["completed", "dismissed", "emergency"])
         .order("created_at", { ascending: false })
         .limit(100)
 
       if (error) throw error
-      if (data) setRecords(data as ConsultationRecord[])
+      if (data) setRecords(data as VisitLogRecord[])
     } catch (err) {
       console.error("Error fetching visit logs:", err)
     } finally {
@@ -90,23 +134,62 @@ export default function VisitLogsPage() {
 
   useEffect(() => {
     fetchRecords()
-  }, [fetchRecords])
+
+    const channel = supabase
+      .channel("visit-logs-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "visit_logs" },
+        () => {
+          fetchRecords()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchRecords, supabase])
 
   const filteredRecords = records.filter(
     (r) =>
       r.patient_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.chief_complaint.toLowerCase().includes(searchQuery.toLowerCase())
+      r.student_complaint.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredRecords.length / PAGE_SIZE)
-  )
-  const safePage = Math.min(page, totalPages)
-  const paginatedRecords = filteredRecords.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE
-  )
+  // Group filtered records by date
+  const groupedRecords: Record<string, VisitLogRecord[]> = {}
+  for (const record of filteredRecords) {
+    const dateKey = formatDateShort(record.created_at)
+    if (!groupedRecords[dateKey]) {
+      groupedRecords[dateKey] = []
+    }
+    groupedRecords[dateKey].push(record)
+  }
+
+  // Sort date groups in descending order (newest first)
+  const sortedDateKeys = Object.keys(groupedRecords).sort((a, b) => {
+    return new Date(b).getTime() - new Date(a).getTime()
+  })
+
+  function toggleDate(dateKey: string) {
+    setExpandedDates((prev) => {
+      const next = new Set(prev)
+      if (next.has(dateKey)) {
+        next.delete(dateKey)
+      } else {
+        next.add(dateKey)
+      }
+      return next
+    })
+  }
+
+  // Auto-expand the most recent date group on load
+  useEffect(() => {
+    if (sortedDateKeys.length > 0 && expandedDates.size === 0) {
+      setExpandedDates(new Set([sortedDateKeys[0]]))
+    }
+  }, [sortedDateKeys.length])
 
   if (loading) {
     return (
@@ -134,69 +217,94 @@ export default function VisitLogsPage() {
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value)
-                setPage(1)
               }}
               className="pl-9"
             />
           </div>
 
-          {paginatedRecords.length === 0 ? (
+          {/* Legend for abbreviations */}
+          {filteredRecords.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+              <span className="font-medium">Legend:</span>
+              <span className="flex items-center gap-1">
+                <StatusBadge status="info">NC</StatusBadge> Normal Consultation
+              </span>
+              <span className="flex items-center gap-1">
+                <StatusBadge status="danger">EC</StatusBadge> Emergency Consultation
+              </span>
+              <span className="flex items-center gap-1">
+                <StatusBadge status="success">RTC</StatusBadge> Return to Class
+              </span>
+              <span className="flex items-center gap-1">
+                <StatusBadge status="info">RTA</StatusBadge> Return to Activity
+              </span>
+              <span className="flex items-center gap-1">
+                <StatusBadge status="warning">SH</StatusBadge> Sent Home
+              </span>
+            </div>
+          )}
+
+          {filteredRecords.length === 0 ? (
             <EmptyState
               title="No visit records found"
-              description="Completed and dismissed consultations will appear here."
+              description="Completed consultations will appear here once they are finished."
             />
           ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Complaint</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedRecords.map((record) => (
-                    <TableRow
-                      key={record.id}
-                      className="cursor-pointer"
-                      onClick={() => setSelectedRecord(record)}
+            <div className="space-y-2">
+              {sortedDateKeys.map((dateKey) => {
+                const isExpanded = expandedDates.has(dateKey)
+                const dayRecords = groupedRecords[dateKey]
+                return (
+                  <div key={dateKey} className="border border-border rounded-lg overflow-hidden">
+                    {/* Date Header - Clickable to toggle */}
+                    <button
+                      type="button"
+                      onClick={() => toggleDate(dateKey)}
+                      className="flex items-center justify-between w-full px-4 py-3 bg-muted/50 hover:bg-muted transition-colors text-sm font-medium cursor-pointer"
                     >
-                      <TableCell className="font-medium">
-                        {record.patient_name}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] truncate">
-                        {record.chief_complaint}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(record.created_at).toLocaleDateString(
-                          "en-US",
-                          {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }
+                      <span>{dateKey}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {dayRecords.length} record{dayRecords.length !== 1 ? "s" : ""}
+                        </span>
+                        {isExpanded ? (
+                          <ChevronDown className="size-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="size-4 text-muted-foreground" />
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={statusVariant(record.status)}>
-                          {record.status.replace("_", " ")}
-                        </StatusBadge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      </div>
+                    </button>
 
-              <Pagination
-                currentPage={safePage}
-                totalPages={totalPages}
-                totalItems={filteredRecords.length}
-                pageSize={PAGE_SIZE}
-                onPageChange={setPage}
-              />
-            </>
+                    {/* Records for this date */}
+                    {isExpanded && (
+                      <div className="divide-y divide-border">
+                        {dayRecords.map((record) => (
+                          <div
+                            key={record.id}
+                            className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                            onClick={() => setSelectedRecord(record)}
+                          >
+                            <StatusBadge status={originVariant(record.origin)}>
+                              {formatOriginAbbr(record.origin)}
+                            </StatusBadge>
+                            <StatusBadge status={statusVariant(record.status)}>
+                              {formatStatusAbbr(record.status)}
+                            </StatusBadge>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{record.patient_name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{record.student_complaint}</p>
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {formatTimeOnly(record.handled_at)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -218,91 +326,56 @@ export default function VisitLogsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Patient</p>
-                  <p className="text-sm font-medium">
-                    {selectedRecord.patient_name}
-                  </p>
+                  <p className="text-sm font-medium">{selectedRecord.patient_name}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <StatusBadge
-                    status={statusVariant(selectedRecord.status)}
-                    className="mt-0.5"
-                  >
-                    {selectedRecord.status.replace("_", " ")}
+                  <p className="text-xs text-muted-foreground">Origin</p>
+                  <StatusBadge status={originVariant(selectedRecord.origin)} className="mt-1">
+                    {formatOriginAbbr(selectedRecord.origin)} — {formatOriginFull(selectedRecord.origin)}
+                  </StatusBadge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Disposition</p>
+                  <StatusBadge status={statusVariant(selectedRecord.status)} className="mt-1">
+                    {formatStatusLabel(selectedRecord.status)}
                   </StatusBadge>
                 </div>
               </div>
 
               <div>
-                <p className="text-xs text-muted-foreground">
-                  Student Complaint
-                </p>
-                <p className="text-sm">{selectedRecord.chief_complaint}</p>
+                <p className="text-xs text-muted-foreground">Student Complaint</p>
+                <p className="text-sm">{selectedRecord.student_complaint}</p>
+              </div>
+
+              <div className="rounded-md border border-border p-3 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Consultation Report</p>
+                <div>
+                  <p className="text-xs text-muted-foreground">Diagnosis / Findings</p>
+                  <p className="text-sm">{selectedRecord.diagnosis}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Treatment Given</p>
+                  <p className="text-sm">{selectedRecord.treatment}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Recommendations</p>
+                  <p className="text-sm">{selectedRecord.recommendations}</p>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Date</p>
-                  <p className="text-sm">
-                    {new Date(
-                      selectedRecord.created_at
-                    ).toLocaleString("en-US", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </p>
+                  <p className="text-sm">{formatDateTime(selectedRecord.created_at)}</p>
                 </div>
-                {selectedRecord.handled_at && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Handled At
-                    </p>
-                    <p className="text-sm">
-                      {new Date(
-                        selectedRecord.handled_at
-                      ).toLocaleString("en-US", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                    </p>
-                  </div>
-                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Handled At</p>
+                  <p className="text-sm">{formatDateTime(selectedRecord.handled_at)}</p>
+                </div>
               </div>
-
-              {selectedRecord.notes && (() => {
-                try {
-                  const r = JSON.parse(selectedRecord.notes) as CompletionReport
-                  if (r.diagnosis || r.treatment || r.recommendations) {
-                    return (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Consultation Report</p>
-                        <div className="mt-1 space-y-2 rounded-md border border-border p-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Diagnosis / Findings</p>
-                            <p className="text-sm">{r.diagnosis}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Treatment Given</p>
-                            <p className="text-sm">{r.treatment}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Recommendations</p>
-                            <p className="text-sm">{r.recommendations}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  }
-                  throw new Error("not structured")
-                } catch {
-                  return (
-                    <div>
-                      <p className="text-xs text-muted-foreground">Notes</p>
-                      <p className="text-sm mt-1">{selectedRecord.notes}</p>
-                    </div>
-                  )
-                }
-              })()}
             </div>
           )}
         </DialogContent>

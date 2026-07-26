@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeft, HeartPulse, Loader2, Save, Search } from "lucide-react"
+import { ArrowLeft, HeartPulse, Loader2, Search } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { PageHeader } from "@/components/page-header"
 import { StatusBadge } from "@/components/status-badge"
@@ -26,15 +26,15 @@ import {
 } from "@/components/ui/dialog"
 import { EmptyState } from "@/components/empty-state"
 import { Pagination } from "@/components/pagination"
-import { ConsultationWizard, type CompletionReport } from "@/components/consultation-wizard"
+import { ConsultationWizard, type CompletionReport, type DispositionStatus } from "@/components/consultation-wizard"
 import { toast } from "sonner"
 
 type ConsultationRecord = {
   id: string
   profile_id: string | null
   patient_name: string
-  chief_complaint: string
-  status: "waiting" | "in_progress" | "completed" | "dismissed" | "emergency"
+  student_complaint: string
+  status: "waiting" | "in_consultation" | "completed" | "dismissed" | "in_emergency"
   created_at: string
   handled_at: string | null
   notes: string | null
@@ -44,9 +44,9 @@ const PAGE_SIZE = 10
 
 function statusVariant(status: string) {
   switch (status) {
-    case "emergency":
+    case "in_emergency":
       return "danger" as const
-    case "in_progress":
+    case "in_consultation":
       return "info" as const
     case "completed":
       return "success" as const
@@ -66,22 +66,21 @@ export default function EmergencyCasesPage() {
   const [selectedRecord, setSelectedRecord] = useState<ConsultationRecord | null>(null)
   const [page, setPage] = useState(1)
 
-  // Handling dialog (auto-opens from URL param)
   const [handlingDialogOpen, setHandlingDialogOpen] = useState(false)
   const [handlingRecord, setHandlingRecord] = useState<ConsultationRecord | null>(null)
   const [editingEmergencyComplaint, setEditingEmergencyComplaint] = useState(false)
   const [editedEmergencyComplaint, setEditedEmergencyComplaint] = useState("")
 
-  // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false)
   const [wizardRecord, setWizardRecord] = useState<ConsultationRecord | null>(null)
+  const [complaintTypes, setComplaintTypes] = useState<string[]>([])
 
   const fetchRecords = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("consultations")
         .select("*")
-        .eq("status", "emergency")
+        .eq("status", "in_emergency")
         .order("created_at", { ascending: false })
         .limit(100)
 
@@ -91,6 +90,23 @@ export default function EmergencyCasesPage() {
       console.error("Error fetching emergency cases:", err)
     } finally {
       setLoading(false)
+    }
+  }, [supabase])
+
+  const fetchComplaints = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("complaints")
+        .select("name")
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+
+      if (data) {
+        setComplaintTypes(data.map((c: { name: string }) => c.name))
+      }
+    } catch (err) {
+      console.error("Error fetching complaints:", err)
     }
   }, [supabase])
 
@@ -105,7 +121,7 @@ export default function EmergencyCasesPage() {
           event: "*",
           schema: "public",
           table: "consultations",
-          filter: "status=eq.emergency",
+          filter: "status=eq.in_emergency",
         },
         () => {
           fetchRecords()
@@ -118,21 +134,37 @@ export default function EmergencyCasesPage() {
     }
   }, [fetchRecords, supabase])
 
-  // Auto-open handling dialog if URL has ?id= param
+  useEffect(() => {
+    fetchComplaints()
+
+    const channel = supabase
+      .channel("emergency-complaints-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "complaints" },
+        () => {
+          fetchComplaints()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchComplaints, supabase])
+
   useEffect(() => {
     const id = searchParams.get("id")
     if (!id) return
 
-    // Try to find in already loaded records first
     const found = records.find(r => r.id === id)
-    if (found && found.status === "emergency") {
+    if (found && found.status === "in_emergency") {
       setHandlingRecord(found)
-      setEditedEmergencyComplaint(found.chief_complaint)
+      setEditedEmergencyComplaint(found.student_complaint)
       setHandlingDialogOpen(true)
       return
     }
 
-    // If not found in records, fetch directly
     ; (async () => {
       const { data } = await supabase
         .from("consultations")
@@ -140,26 +172,33 @@ export default function EmergencyCasesPage() {
         .eq("id", id)
         .single()
 
-      if (data && (data.status === "emergency" || data.status === "waiting" || data.status === "in_progress")) {
+      if (data && (data.status === "in_emergency" || data.status === "waiting" || data.status === "in_consultation")) {
         setHandlingRecord(data as ConsultationRecord)
-        setEditedEmergencyComplaint(data.chief_complaint)
+        setEditedEmergencyComplaint(data.student_complaint)
         setHandlingDialogOpen(true)
-        // Clear URL param
         router.replace("/consultations/emergency")
       }
     })()
   }, [searchParams, records, supabase, router])
+
+  async function handleAddComplaint(complaint: string) {
+    const { error } = await supabase
+      .from("complaints")
+      .insert({ name: complaint })
+    if (error) throw error
+    fetchComplaints()
+  }
 
   async function handleSaveEmergencyComplaint() {
     if (!handlingRecord || !editedEmergencyComplaint.trim()) return
     try {
       await supabase
         .from("consultations")
-        .update({ chief_complaint: editedEmergencyComplaint.trim() })
+        .update({ student_complaint: editedEmergencyComplaint.trim() })
         .eq("id", handlingRecord.id)
       toast.success("Complaint updated")
       setEditingEmergencyComplaint(false)
-      setHandlingRecord({ ...handlingRecord, chief_complaint: editedEmergencyComplaint.trim() })
+      setHandlingRecord({ ...handlingRecord, student_complaint: editedEmergencyComplaint.trim() })
       fetchRecords()
     } catch (err: any) {
       toast.error(err.message || "Failed to update complaint")
@@ -179,26 +218,44 @@ export default function EmergencyCasesPage() {
     }
   }
 
-  // Open wizard for resolving
   function openWizard(record: ConsultationRecord) {
     setWizardRecord(record)
     setWizardOpen(true)
   }
 
-  async function handleWizardComplete(complaint: string, report: CompletionReport) {
+  async function handleWizardComplete(complaint: string, report: CompletionReport, disposition: DispositionStatus) {
     if (!wizardRecord) return
 
     const notesJson = JSON.stringify(report)
+    const now = new Date().toISOString()
 
-    await supabase
+    const { error } = await supabase
       .from("consultations")
       .update({
         status: "completed",
-        chief_complaint: complaint,
-        handled_at: new Date().toISOString(),
+        student_complaint: complaint,
+        handled_at: now,
         notes: notesJson,
       })
       .eq("id", wizardRecord.id)
+
+    if (error) throw error
+
+    const { error: visitError } = await supabase
+      .from("visit_logs")
+      .insert({
+        consultation_id: wizardRecord.id,
+        patient_name: wizardRecord.patient_name,
+        student_complaint: complaint,
+        origin: "emergency",
+        diagnosis: report.diagnosis,
+        treatment: report.treatment,
+        recommendations: report.recommendations,
+        handled_at: now,
+        status: disposition,
+      })
+
+    if (visitError) throw visitError
 
     toast.success("Emergency case resolved and logged to visit records")
     setWizardOpen(false)
@@ -212,7 +269,7 @@ export default function EmergencyCasesPage() {
   const filteredRecords = records.filter(
     (r) =>
       r.patient_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.chief_complaint.toLowerCase().includes(searchQuery.toLowerCase())
+      r.student_complaint.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE))
@@ -280,7 +337,6 @@ export default function EmergencyCasesPage() {
                     <TableHead>Complaint</TableHead>
                     <TableHead>Time</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="w-[160px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -294,7 +350,7 @@ export default function EmergencyCasesPage() {
                         {record.patient_name}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate">
-                        {record.chief_complaint}
+                        {record.student_complaint}
                       </TableCell>
                       <TableCell>
                         {new Date(record.created_at).toLocaleTimeString("en-US", {
@@ -306,29 +362,6 @@ export default function EmergencyCasesPage() {
                         <StatusBadge status={statusVariant(record.status)}>
                           {record.status.replace("_", " ")}
                         </StatusBadge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          {record.status === "emergency" && (
-                            <>
-                              <Button variant="outline" size="xs" onClick={() => {
-                                setHandlingRecord(record)
-                                setEditedEmergencyComplaint(record.chief_complaint)
-                                setHandlingDialogOpen(true)
-                              }}>
-                                Handle
-                              </Button>
-                              <Button variant="default" size="xs" onClick={() => openWizard(record)}>
-                                Resolve
-                              </Button>
-                            </>
-                          )}
-                          {record.status === "in_progress" && (
-                            <Button variant="default" size="xs" onClick={() => openWizard(record)}>
-                              Complete with Report
-                            </Button>
-                          )}
-                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -347,7 +380,6 @@ export default function EmergencyCasesPage() {
         </CardContent>
       </Card>
 
-      {/* Handling Dialog — auto-opens when redirected from consultations page */}
       <Dialog
         open={handlingDialogOpen}
         onOpenChange={(open) => {
@@ -376,37 +408,19 @@ export default function EmergencyCasesPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Status</p>
-                  <StatusBadge status="danger" className="mt-0.5">emergency</StatusBadge>
+                  <StatusBadge status="danger" className="mt-0.5">in emergency</StatusBadge>
                 </div>
               </div>
 
               <div>
-                <p className="text-xs text-muted-foreground">Chief Complaint</p>
-                {editingEmergencyComplaint ? (
-                  <div className="flex items-center gap-2 mt-1">
-                    <Input value={editedEmergencyComplaint} onChange={(e) => setEditedEmergencyComplaint(e.target.value)} className="flex-1" />
-                    <Button size="xs" variant="outline" onClick={handleSaveEmergencyComplaint}>
-                      <Save className="size-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-sm mt-1">{handlingRecord.chief_complaint}</p>
-                )}
-                {!editingEmergencyComplaint && (
-                  <Button variant="ghost" size="xs" className="mt-1 h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => { setEditedEmergencyComplaint(handlingRecord.chief_complaint); setEditingEmergencyComplaint(true) }}>
-                    Edit complaint
-                  </Button>
-                )}
+                <p className="text-xs text-muted-foreground">Student Complaint</p>
+                <p className="text-sm mt-1">{handlingRecord.student_complaint}</p>
               </div>
 
               <DialogFooter className="border-t border-border pt-4">
                 <div className="flex w-full flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                  <Button variant="outline" className="flex-1" onClick={() => { setHandlingDialogOpen(false); openWizard(handlingRecord) }}>
-                    Review & Resolve
-                  </Button>
-                  <Button className="flex-1" onClick={() => { handleStatusChange(handlingRecord.id, "in_progress"); setHandlingDialogOpen(false) }}>
-                    Start Handling
+                  <Button className="flex-1" onClick={() => { setHandlingDialogOpen(false); openWizard(handlingRecord) }}>
+                    Emergency Report
                   </Button>
                 </div>
               </DialogFooter>
@@ -415,7 +429,6 @@ export default function EmergencyCasesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Detail Modal */}
       <Dialog
         open={selectedRecord !== null}
         onOpenChange={(open) => { if (!open) setSelectedRecord(null) }}
@@ -444,8 +457,8 @@ export default function EmergencyCasesPage() {
               </div>
 
               <div>
-                <p className="text-xs text-muted-foreground">Chief Complaint</p>
-                <p className="text-sm">{selectedRecord.chief_complaint}</p>
+                <p className="text-xs text-muted-foreground">Student Complaint</p>
+                <p className="text-sm">{selectedRecord.student_complaint}</p>
               </div>
 
               {selectedRecord.status === "completed" && selectedRecord.notes && (
@@ -480,14 +493,11 @@ export default function EmergencyCasesPage() {
 
               <DialogFooter className="border-t border-border pt-4">
                 <div className="flex w-full flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-                  {selectedRecord.status === "emergency" && (
-                    <>
-                      <Button variant="outline" className="flex-1" onClick={() => openWizard(selectedRecord)}>Review & Resolve</Button>
-                      <Button className="flex-1" onClick={() => handleStatusChange(selectedRecord.id, "in_progress")}>Start Handling</Button>
-                    </>
+                  {selectedRecord.status === "in_emergency" && (
+                    <Button className="flex-1" onClick={() => openWizard(selectedRecord)}>Emergency Report</Button>
                   )}
-                  {selectedRecord.status === "in_progress" && (
-                    <Button className="flex-1" onClick={() => openWizard(selectedRecord)}>Complete with Report</Button>
+                  {selectedRecord.status === "in_consultation" && (
+                    <Button className="flex-1" onClick={() => openWizard(selectedRecord)}>Emergency Report</Button>
                   )}
                 </div>
               </DialogFooter>
@@ -496,15 +506,16 @@ export default function EmergencyCasesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Consultation Wizard (3-step: Complaint → Report → Review) */}
       {wizardRecord && (
         <ConsultationWizard
           open={wizardOpen}
           onOpenChange={setWizardOpen}
           patientName={wizardRecord.patient_name}
-          initialComplaint={wizardRecord.chief_complaint}
+          initialComplaint={wizardRecord.student_complaint}
           onComplete={handleWizardComplete}
           mode="emergency"
+          complaintTypes={complaintTypes}
+          onAddComplaint={handleAddComplaint}
         />
       )}
     </div>

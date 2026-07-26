@@ -97,8 +97,9 @@ export default function RfidKioskPage() {
         await supabase.from("consultations").insert({
           profile_id: data.id,
           patient_name: fullName,
-          chief_complaint: "Routine Check-in (RFID Kiosk)",
-          status: "waiting"
+          student_complaint: "Routine Check-in (RFID Kiosk)",
+          status: "waiting",
+          origin: "consultation"
         })
 
         setProfile(data as PatientProfile)
