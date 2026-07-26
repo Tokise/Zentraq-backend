@@ -43,13 +43,14 @@ import {
   todaysAppointments,
 } from "@/lib/data/mock-dashboard"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { HeartPulse, Loader2, Stethoscope } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 
 const CONSULT_PAGE_SIZE = 5
 const APPT_PAGE_SIZE = 5
+const POLL_INTERVAL = 1 // 1 second fallback polling for faster sync
 
 function appointmentStatusVariant(status: string) {
   switch (status) {
@@ -66,9 +67,9 @@ function appointmentStatusVariant(status: string) {
 
 function consultationStatusVariant(status: string) {
   switch (status) {
-    case "emergency":
+    case "in_emergency":
       return "danger" as const
-    case "in_progress":
+    case "in_consultation":
       return "info" as const
     case "waiting":
       return "warning" as const
@@ -84,7 +85,7 @@ function consultationStatusVariant(status: string) {
 type ConsultRow = {
   id: string
   patient_name: string
-  chief_complaint: string
+  student_complaint: string
   time: string
   status: string
   created_at: string
@@ -109,6 +110,7 @@ type LiveStats = {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [dbConsultations, setDbConsultations] = useState<any[]>([])
   const [dbAppointments, setDbAppointments] = useState<any[]>([])
   const [selectedConsult, setSelectedConsult] = useState<ConsultRow | null>(null)
@@ -122,6 +124,7 @@ export default function DashboardPage() {
     lowStockAlerts: 0,
   })
   const supabase = createClient()
+  const pollRef = useRef<NodeJS.Timeout | null>(null)
 
   const fetchLiveQueue = useCallback(async () => {
     try {
@@ -148,14 +151,27 @@ export default function DashboardPage() {
         .from("consultations")
         .select("id, status, created_at")
 
+      // Fetch visit_logs count for accurate total completed visits
+      const { count: visitLogsCount } = await supabase
+        .from("visit_logs")
+        .select("*", { count: "exact", head: true })
+
       if (allConsults) {
         const todayRecords = allConsults.filter(
           (c: any) => new Date(c.created_at) >= today
         )
+        // Count only in_consultation consultations for "In Consultation Today"
+        const inConsultationToday = todayRecords.filter(
+          (c: any) => c.status === "in_consultation"
+        )
+        // Count only in_emergency for "In Emergency Today"
+        const inEmergencyToday = allConsults.filter(
+          (c: any) => c.status === "in_emergency"
+        )
         setLiveStats({
-          patientsToday: todayRecords.length,
-          consultations: allConsults.length,
-          emergencyCases: allConsults.filter((c: any) => c.status === "emergency").length,
+          patientsToday: inConsultationToday.length,
+          consultations: visitLogsCount ?? allConsults.length,
+          emergencyCases: inEmergencyToday.length,
           lowStockAlerts: inventoryAlerts.length,
         })
       }
@@ -166,6 +182,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchLiveQueue()
+
+    // Start polling as fallback to ensure data stays in sync
+    pollRef.current = setInterval(fetchLiveQueue, POLL_INTERVAL)
 
     const channel = supabase
       .channel("dashboard-realtime")
@@ -179,25 +198,41 @@ export default function DashboardPage() {
         { event: "*", schema: "public", table: "appointments" },
         () => fetchLiveQueue()
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "visit_logs" },
+        () => fetchLiveQueue()
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
     }
   }, [fetchLiveQueue, supabase])
 
-  // Build display data for consultations
+  // Build display data for consultations — deduplicate by id using a Map
   const rawConsultations = dbConsultations.length > 0
-    ? dbConsultations.map(c => ({
-      id: c.id,
-      patient_name: c.patient_name,
-      chief_complaint: c.chief_complaint || "None",
-      time: new Date(c.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
-      status: c.status,
-      created_at: c.created_at,
-      handled_at: c.handled_at,
-      notes: c.notes,
-    }))
+    ? Array.from(
+      new Map(
+        dbConsultations.map((c: any) => [
+          c.id,
+          {
+            id: c.id,
+            patient_name: c.patient_name,
+            student_complaint: c.student_complaint || "None",
+            time: new Date(c.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+            status: c.status,
+            created_at: c.created_at,
+            handled_at: c.handled_at,
+            notes: c.notes,
+          },
+        ])
+      ).values()
+    )
     : recentConsultations.map(c => ({
       ...c,
       created_at: "",
@@ -205,24 +240,36 @@ export default function DashboardPage() {
       notes: null,
     }))
 
+  // Filter to only show "waiting" consultations for the recent consultations table
+  const waitingConsultations = rawConsultations.filter(
+    (c) => c.status === "waiting"
+  )
+
   const rawAppointments = dbAppointments.length > 0
-    ? dbAppointments.map(a => ({
-      id: a.id,
-      patient_name: a.patient_name,
-      time: new Date(a.appointment_time).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
-      type: a.appointment_type,
-      status: a.status,
-      appointment_time: a.appointment_time,
-    }))
+    ? Array.from(
+      new Map(
+        dbAppointments.map((a: any) => [
+          a.id,
+          {
+            id: a.id,
+            patient_name: a.patient_name,
+            time: new Date(a.appointment_time).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+            type: a.appointment_type,
+            status: a.status,
+            appointment_time: a.appointment_time,
+          },
+        ])
+      ).values()
+    )
     : todaysAppointments.map(a => ({
       ...a,
       appointment_time: "",
     }))
 
-  // Pagination for consultations
-  const consultTotalPages = Math.max(1, Math.ceil(rawConsultations.length / CONSULT_PAGE_SIZE))
+  // Pagination for consultations (only waiting)
+  const consultTotalPages = Math.max(1, Math.ceil(waitingConsultations.length / CONSULT_PAGE_SIZE))
   const consultSafePage = Math.min(consultPage, consultTotalPages)
-  const paginatedConsultations = rawConsultations.slice(
+  const paginatedConsultations = waitingConsultations.slice(
     (consultSafePage - 1) * CONSULT_PAGE_SIZE,
     consultSafePage * CONSULT_PAGE_SIZE
   )
@@ -253,7 +300,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Patients Today"
+          label="In Consultation Today"
           value={liveStats.patientsToday}
         />
         <StatCard
@@ -261,7 +308,7 @@ export default function DashboardPage() {
           value={liveStats.consultations}
         />
         <StatCard
-          label="Emergency Cases"
+          label="In Emergency Today"
           value={liveStats.emergencyCases}
         />
         <StatCard
@@ -325,12 +372,12 @@ export default function DashboardPage() {
 
         <Card className="shadow-sm">
           <CardHeader>
-            <SectionHeader title="Recent Consultations" />
+            <SectionHeader title="Waiting Patients" />
           </CardHeader>
           <CardContent>
             {paginatedConsultations.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                No consultations yet.
+                No patients waiting.
               </p>
             ) : (
               <>
@@ -348,10 +395,10 @@ export default function DashboardPage() {
                       <TableRow
                         key={consult.id}
                         className="cursor-pointer"
-                        onClick={() => setSelectedConsult(consult)}
+                        onClick={() => router.push("/consultations")}
                       >
                         <TableCell className="font-medium">{consult.patient_name}</TableCell>
-                        <TableCell className="max-w-[180px] truncate">{consult.chief_complaint}</TableCell>
+                        <TableCell className="max-w-[180px] truncate">{consult.student_complaint}</TableCell>
                         <TableCell>{consult.time}</TableCell>
                         <TableCell>
                           <StatusBadge status={consultationStatusVariant(consult.status)}>
@@ -366,7 +413,7 @@ export default function DashboardPage() {
                 <Pagination
                   currentPage={consultSafePage}
                   totalPages={consultTotalPages}
-                  totalItems={rawConsultations.length}
+                  totalItems={waitingConsultations.length}
                   pageSize={CONSULT_PAGE_SIZE}
                   onPageChange={setConsultPage}
                 />
@@ -528,65 +575,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Consultation Detail Modal */}
-      <Dialog
-        open={selectedConsult !== null}
-        onOpenChange={(open) => { if (!open) setSelectedConsult(null) }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Consultation Details</DialogTitle>
-          </DialogHeader>
-          {selectedConsult && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Patient</p>
-                  <p className="text-sm font-medium">{selectedConsult.patient_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <StatusBadge status={consultationStatusVariant(selectedConsult.status)} className="mt-0.5">
-                    {selectedConsult.status.replace("_", " ")}
-                  </StatusBadge>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Chief Complaint</p>
-                <p className="text-sm">{selectedConsult.chief_complaint}</p>
-              </div>
-              {selectedConsult.created_at && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Created</p>
-                  <p className="text-sm">
-                    {new Date(selectedConsult.created_at).toLocaleString("en-US", {
-                      dateStyle: "medium", timeStyle: "short",
-                    })}
-                  </p>
-                </div>
-              )}
-              {selectedConsult.handled_at && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Handled At</p>
-                  <p className="text-sm">
-                    {new Date(selectedConsult.handled_at).toLocaleString("en-US", {
-                      dateStyle: "medium", timeStyle: "short",
-                    })}
-                  </p>
-                </div>
-              )}
-              {selectedConsult.notes && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Notes</p>
-                  <p className="text-sm">{selectedConsult.notes}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Appointment Detail Modal */}
+      {/* Consultation Detail Modal — only for appointments now */}
       <Dialog
         open={selectedAppt !== null}
         onOpenChange={(open) => { if (!open) setSelectedAppt(null) }}

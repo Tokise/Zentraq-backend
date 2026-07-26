@@ -29,10 +29,10 @@ export const todaysAppointments: Appointment[] = [
 ]
 
 export const recentConsultations: Consultation[] = [
-  { id: "1", patient_name: "Maria Santos", chief_complaint: "Headache, mild fever", time: "08:45 AM", status: "completed" },
-  { id: "2", patient_name: "Juan Dela Cruz", chief_complaint: "Sprained ankle", time: "09:15 AM", status: "active" },
-  { id: "3", patient_name: "Pedro Lim", chief_complaint: "Allergic reaction", time: "08:00 AM", status: "emergency" },
-  { id: "4", patient_name: "Lisa Tan", chief_complaint: "Sore throat", time: "07:30 AM", status: "completed" },
+  { id: "1", patient_name: "Maria Santos", student_complaint: "Headache, mild fever", time: "08:45 AM", status: "completed" },
+  { id: "2", patient_name: "Juan Dela Cruz", student_complaint: "Sprained ankle", time: "09:15 AM", status: "active" },
+  { id: "3", patient_name: "Pedro Lim", student_complaint: "Allergic reaction", time: "08:00 AM", status: "emergency" },
+  { id: "4", patient_name: "Lisa Tan", student_complaint: "Sore throat", time: "07:30 AM", status: "completed" },
 ]
 
 export const inventoryAlerts: InventoryAlert[] = [
