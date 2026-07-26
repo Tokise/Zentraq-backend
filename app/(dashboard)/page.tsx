@@ -50,7 +50,8 @@ import { createClient } from "@/utils/supabase/client"
 
 const CONSULT_PAGE_SIZE = 5
 const APPT_PAGE_SIZE = 5
-const POLL_INTERVAL = 1 // 1 second fallback polling for faster sync
+const POLL_INTERVAL = 30000 // 30s fallback polling — realtime subscriptions handle instant sync
+const REALTIME_DEBOUNCE = 500 // coalesce bursts of realtime events into a single fetch
 
 function appointmentStatusVariant(status: string) {
   switch (status) {
@@ -125,8 +126,15 @@ export default function DashboardPage() {
   })
   const supabase = createClient()
   const pollRef = useRef<NodeJS.Timeout | null>(null)
+  const debounceRef = useRef<NodeJS.Timeout | null>(null)
+  const isFetchingRef = useRef(false)
 
   const fetchLiveQueue = useCallback(async () => {
+    // Prevent overlapping requests — if a fetch is already in flight
+    // (e.g. a poll tick lands while a realtime-triggered fetch is still
+    // running), skip this one instead of stacking another 4 REST calls.
+    if (isFetchingRef.current) return
+    isFetchingRef.current = true
     try {
       const { data: consults } = await supabase
         .from("consultations")
@@ -177,8 +185,19 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error("fetchLiveQueue error:", err)
+    } finally {
+      isFetchingRef.current = false
     }
   }, [supabase])
+
+  // Debounce realtime-triggered fetches so a burst of DB changes
+  // (e.g. several rows updated at once) results in one fetch, not one per event.
+  const scheduleFetch = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      fetchLiveQueue()
+    }, REALTIME_DEBOUNCE)
+  }, [fetchLiveQueue])
 
   useEffect(() => {
     fetchLiveQueue()
@@ -191,17 +210,17 @@ export default function DashboardPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "consultations" },
-        () => fetchLiveQueue()
+        () => scheduleFetch()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "appointments" },
-        () => fetchLiveQueue()
+        () => scheduleFetch()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "visit_logs" },
-        () => fetchLiveQueue()
+        () => scheduleFetch()
       )
       .subscribe()
 
@@ -211,8 +230,12 @@ export default function DashboardPage() {
         clearInterval(pollRef.current)
         pollRef.current = null
       }
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+        debounceRef.current = null
+      }
     }
-  }, [fetchLiveQueue, supabase])
+  }, [fetchLiveQueue, scheduleFetch, supabase])
 
   // Build display data for consultations — deduplicate by id using a Map
   const rawConsultations = dbConsultations.length > 0
