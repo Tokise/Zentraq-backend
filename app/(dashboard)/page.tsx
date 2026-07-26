@@ -126,78 +126,122 @@ export default function DashboardPage() {
   })
   const supabase = createClient()
   const pollRef = useRef<NodeJS.Timeout | null>(null)
-  const debounceRef = useRef<NodeJS.Timeout | null>(null)
-  const isFetchingRef = useRef(false)
 
-  const fetchLiveQueue = useCallback(async () => {
-    // Prevent overlapping requests — if a fetch is already in flight
-    // (e.g. a poll tick lands while a realtime-triggered fetch is still
-    // running), skip this one instead of stacking another 4 REST calls.
-    if (isFetchingRef.current) return
-    isFetchingRef.current = true
+  // Separate in-flight guards + debounce timers per concern, so a burst of
+  // events on one table can't block or pile onto fetches for another table.
+  const consultInFlight = useRef(false)
+  const apptInFlight = useRef(false)
+  const statsInFlight = useRef(false)
+  const consultDebounce = useRef<NodeJS.Timeout | null>(null)
+  const apptDebounce = useRef<NodeJS.Timeout | null>(null)
+  const statsDebounce = useRef<NodeJS.Timeout | null>(null)
+
+  const fetchConsultations = useCallback(async () => {
+    if (consultInFlight.current) return
+    consultInFlight.current = true
     try {
-      const { data: consults } = await supabase
+      const { data } = await supabase
         .from("consultations")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(50)
+      if (data) setDbConsultations(data)
+    } catch (err) {
+      console.error("fetchConsultations error:", err)
+    } finally {
+      consultInFlight.current = false
+    }
+  }, [supabase])
 
-      const { data: appts } = await supabase
+  const fetchAppointments = useCallback(async () => {
+    if (apptInFlight.current) return
+    apptInFlight.current = true
+    try {
+      const { data } = await supabase
         .from("appointments")
         .select("*")
         .order("appointment_time", { ascending: true })
         .limit(50)
-
-      if (consults) setDbConsultations(consults)
-      if (appts) setDbAppointments(appts)
-
-      // Fetch live stats
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      const { data: allConsults } = await supabase
-        .from("consultations")
-        .select("id, status, created_at")
-
-      // Fetch visit_logs count for accurate total completed visits
-      const { count: visitLogsCount } = await supabase
-        .from("visit_logs")
-        .select("*", { count: "exact", head: true })
-
-      if (allConsults) {
-        const todayRecords = allConsults.filter(
-          (c: any) => new Date(c.created_at) >= today
-        )
-        // Count only in_consultation consultations for "In Consultation Today"
-        const inConsultationToday = todayRecords.filter(
-          (c: any) => c.status === "in_consultation"
-        )
-        // Count only in_emergency for "In Emergency Today"
-        const inEmergencyToday = allConsults.filter(
-          (c: any) => c.status === "in_emergency"
-        )
-        setLiveStats({
-          patientsToday: inConsultationToday.length,
-          consultations: visitLogsCount ?? allConsults.length,
-          emergencyCases: inEmergencyToday.length,
-          lowStockAlerts: inventoryAlerts.length,
-        })
-      }
+      if (data) setDbAppointments(data)
     } catch (err) {
-      console.error("fetchLiveQueue error:", err)
+      console.error("fetchAppointments error:", err)
     } finally {
-      isFetchingRef.current = false
+      apptInFlight.current = false
     }
   }, [supabase])
 
-  // Debounce realtime-triggered fetches so a burst of DB changes
-  // (e.g. several rows updated at once) results in one fetch, not one per event.
-  const scheduleFetch = useCallback(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      fetchLiveQueue()
-    }, REALTIME_DEBOUNCE)
-  }, [fetchLiveQueue])
+  // Stats now use filtered, head-only count queries — Postgres does the
+  // counting, so we transfer almost no data instead of pulling every
+  // consultation row just to filter it client-side.
+  const fetchStats = useCallback(async () => {
+    if (statsInFlight.current) return
+    statsInFlight.current = true
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const [patientsToday, emergencyCases, visitLogsCount] = await Promise.all([
+        supabase
+          .from("consultations")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "in_consultation")
+          .gte("created_at", today.toISOString()),
+        supabase
+          .from("consultations")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "in_emergency"),
+        supabase
+          .from("visit_logs")
+          .select("*", { count: "exact", head: true }),
+      ])
+
+      setLiveStats({
+        patientsToday: patientsToday.count ?? 0,
+        consultations: visitLogsCount.count ?? 0,
+        emergencyCases: emergencyCases.count ?? 0,
+        lowStockAlerts: inventoryAlerts.length,
+      })
+    } catch (err) {
+      console.error("fetchStats error:", err)
+    } finally {
+      statsInFlight.current = false
+    }
+  }, [supabase])
+
+  // Fetch everything once, e.g. on initial mount or realtime reconnect.
+  const fetchLiveQueue = useCallback(() => {
+    fetchConsultations()
+    fetchAppointments()
+    fetchStats()
+  }, [fetchConsultations, fetchAppointments, fetchStats])
+
+  // Debounce helper — coalesces a burst of realtime events on the same
+  // table into a single fetch instead of one per event.
+  function makeScheduler(
+    ref: { current: NodeJS.Timeout | null },
+    fn: () => void
+  ) {
+    return () => {
+      if (ref.current) clearTimeout(ref.current)
+      ref.current = setTimeout(fn, REALTIME_DEBOUNCE)
+    }
+  }
+
+  const scheduleConsultations = useCallback(
+    makeScheduler(consultDebounce, () => {
+      fetchConsultations()
+      fetchStats() // consultation changes affect stats too
+    }),
+    [fetchConsultations, fetchStats]
+  )
+  const scheduleAppointments = useCallback(
+    makeScheduler(apptDebounce, fetchAppointments),
+    [fetchAppointments]
+  )
+  const scheduleStats = useCallback(
+    makeScheduler(statsDebounce, fetchStats),
+    [fetchStats]
+  )
 
   useEffect(() => {
     fetchLiveQueue()
@@ -210,19 +254,23 @@ export default function DashboardPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "consultations" },
-        () => scheduleFetch()
+        () => scheduleConsultations()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "appointments" },
-        () => scheduleFetch()
+        () => scheduleAppointments()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "visit_logs" },
-        () => scheduleFetch()
+        () => scheduleStats()
       )
-      .subscribe()
+      .subscribe((status) => {
+        // If the realtime channel drops and reconnects, catch up on
+        // anything missed while it was down.
+        if (status === "SUBSCRIBED") fetchLiveQueue()
+      })
 
     return () => {
       supabase.removeChannel(channel)
@@ -230,12 +278,14 @@ export default function DashboardPage() {
         clearInterval(pollRef.current)
         pollRef.current = null
       }
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current)
-        debounceRef.current = null
-      }
+      ;[consultDebounce, apptDebounce, statsDebounce].forEach((ref) => {
+        if (ref.current) {
+          clearTimeout(ref.current)
+          ref.current = null
+        }
+      })
     }
-  }, [fetchLiveQueue, scheduleFetch, supabase])
+  }, [fetchLiveQueue, scheduleConsultations, scheduleAppointments, scheduleStats, supabase])
 
   // Build display data for consultations — deduplicate by id using a Map
   const rawConsultations = dbConsultations.length > 0
