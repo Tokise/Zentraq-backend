@@ -50,11 +50,10 @@ export function DashboardShell({
 
       await supabase.auth.signOut()
 
-      router.push("/login")
-      router.refresh()
+      // Force a full page reload to ensure all state is cleared
+      window.location.href = "/login"
     } catch (error) {
       console.error(error)
-
       NProgress.done()
       setLoggingOut(false)
     }
@@ -104,51 +103,51 @@ export function DashboardShell({
           <div className="flex-1" />
 
           <DropdownMenu>
-            <DropdownMenuTrigger className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full hover:bg-accent hover:text-accent-foreground focus:outline-none">
-              <Avatar className="h-8 w-8">
-                <AvatarImage alt={userEmail || "User"} />
-                <AvatarFallback>
+            <DropdownMenuTrigger className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full hover:bg-accent/50 transition-colors focus:outline-none ring-2 ring-transparent hover:ring-accent">
+              <Avatar className="h-9 w-9 border-2 border-background shadow-sm">
+                <AvatarImage alt={userEmail || "User"} className="object-cover" />
+                <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                   {userEmail?.charAt(0).toUpperCase() || "U"}
                 </AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent className="w-56" align="end">
+            <DropdownMenuContent className="w-64 p-2" align="end" sideOffset={8}>
               <DropdownMenuGroup>
-                <DropdownMenuLabel className="font-normal">
+                <DropdownMenuLabel className="px-3 py-2.5">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">
+                    <p className="text-sm font-semibold text-foreground">
                       Account
                     </p>
-                    <p className="text-xs leading-none text-muted-foreground">
+                    <p className="text-xs text-muted-foreground break-all">
                       {userEmail}
                     </p>
-                    <p className="text-[10px] capitalize leading-none text-muted-foreground">
+                    <p className="text-[10px] capitalize text-muted-foreground font-medium">
                       {userRole}
                     </p>
                   </div>
                 </DropdownMenuLabel>
+
+                <DropdownMenuSeparator className="my-1.5" />
+
+                <DropdownMenuItem
+                  className="cursor-pointer px-3 py-2.5 text-sm text-destructive focus:bg-destructive/10 focus:text-destructive"
+                  disabled={loggingOut}
+                  onClick={handleLogout}
+                >
+                  {loggingOut ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      <span>Signing out...</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="mr-2 size-4" />
+                      <span className="font-medium">Log out</span>
+                    </>
+                  )}
+                </DropdownMenuItem>
               </DropdownMenuGroup>
-
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem
-                className="cursor-pointer"
-                disabled={loggingOut}
-                onClick={handleLogout}
-              >
-                {loggingOut ? (
-                  <>
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                    Signing out...
-                  </>
-                ) : (
-                  <>
-                    <LogOut className="mr-2 size-4" />
-                    Log out
-                  </>
-                )}
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </header>

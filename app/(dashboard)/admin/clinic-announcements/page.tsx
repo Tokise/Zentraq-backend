@@ -11,7 +11,7 @@ import { toast } from "sonner"
 import { Loader2, Plus, Pencil, Trash2, X, Check } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
-export default function AdminAnnouncementsPage() {
+export default function AdminClinicAnnouncementsPage() {
     const supabase = createClient()
     const [announcements, setAnnouncements] = useState<any[]>([])
     const [loading, setLoading] = useState(true)

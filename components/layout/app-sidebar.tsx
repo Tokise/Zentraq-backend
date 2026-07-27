@@ -4,7 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { navigation, studentNavigation } from "@/lib/navigation"
+import { getNavigationForRole, studentNavigation } from "@/lib/navigation"
 import { filterNavigationForRole, isStudent, type UserRole } from "@/lib/auth/roles"
 
 type AppSidebarProps = {
@@ -17,7 +17,7 @@ export function AppSidebar({ onNavigate, collapsed = false, userRole = "nurse" }
   const pathname = usePathname()
 
   // Students use a different navigation
-  const navGroups = isStudent(userRole) ? studentNavigation : navigation
+  const navGroups = isStudent(userRole) ? studentNavigation : getNavigationForRole(userRole)
   const visibleNavigation = filterNavigationForRole(navGroups, userRole)
 
   return (
@@ -55,7 +55,10 @@ export function AppSidebar({ onNavigate, collapsed = false, userRole = "nurse" }
                       href={item.href}
                       target={item.target}
                       rel={item.target === "_blank" ? "noopener noreferrer" : undefined}
-                      onClick={item.target === "_blank" ? undefined : onNavigate}
+                      onClick={(e) => {
+                        if (item.target === "_blank") return
+                        if (onNavigate) onNavigate()
+                      }}
                       className={cn(
                         "flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors duration-150",
                         isActive

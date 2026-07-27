@@ -28,11 +28,9 @@ export function filterNavigationForRole<T extends { label: string; items?: any[]
   if (isStudent(role)) {
     return groups.filter((group) => group.label === "STUDENT")
   }
-  // nurse/doctor: hide admin-only sections and admin-only items
-  return groups
-    .filter((group) => group.label !== "ADMINISTRATION")
-    .map((group) => ({
-      ...group,
-      items: group.items?.filter((item: any) => !item.roles || item.roles.includes(role as string)),
-    }))
+  // nurse/doctor: show all groups but filter out items restricted to admin
+  return groups.map((group) => ({
+    ...group,
+    items: group.items?.filter((item: any) => !item.roles || item.roles.includes(role as string)),
+  }))
 }

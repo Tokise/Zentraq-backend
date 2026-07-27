@@ -4,11 +4,11 @@ import { cookies } from "next/headers"
 import type { UserRole } from "@/lib/auth/roles"
 
 export async function getUserRole(userId: string): Promise<UserRole> {
-  // 1. Try querying profiles via Admin client (bypasses RLS permission errors)
+  // 1. Try querying clinic_accounts via Admin client (bypasses RLS permission errors)
   try {
     const adminClient = createAdminClient()
     const { data: adminData } = await adminClient
-      .from("profiles")
+      .from("clinic_accounts")
       .select("role")
       .eq("id", userId)
       .maybeSingle()
@@ -24,12 +24,12 @@ export async function getUserRole(userId: string): Promise<UserRole> {
     // Admin client error, continue to standard client
   }
 
-  // 2. Query profiles table with standard client
+  // 2. Query clinic_accounts table with standard client
   try {
     const cookieStore = await cookies()
     const supabase = createClient(cookieStore)
     const { data } = await supabase
-      .from("profiles")
+      .from("clinic_accounts")
       .select("role")
       .eq("id", userId)
       .maybeSingle()

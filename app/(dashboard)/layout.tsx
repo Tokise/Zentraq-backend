@@ -20,6 +20,11 @@ export default async function DashboardLayout({
     redirect("/student")
   }
 
+  // If admin, redirect to /admin (must be authenticated)
+  if (userRole !== "admin" && userRole !== "nurse" && userRole !== "doctor") {
+    redirect("/login")
+  }
+
   return (
     <DashboardShell userEmail={user?.email} userRole={userRole}>
       {children}

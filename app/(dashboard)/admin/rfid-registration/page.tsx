@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { createStudentAccount } from "./actions"
+import { createStudentAccount, resetStudentPassword } from "./actions"
 import {
   Camera,
   CameraOff,
@@ -77,6 +77,12 @@ export default function RfidRegistrationPage() {
   const [creatingAccount, setCreatingAccount] = useState(false)
   const [skippedAccount, setSkippedAccount] = useState(false)
   const [editAccountCreated, setEditAccountCreated] = useState(false)
+
+  // Reset password (for profiles that already have a linked account)
+  const [showResetForm, setShowResetForm] = useState(false)
+  const [resetPassword, setResetPassword] = useState("")
+  const [showResetPassword, setShowResetPassword] = useState(false)
+  const [resettingPassword, setResettingPassword] = useState(false)
 
   // UI
   const [loading, setLoading] = useState(false)
@@ -425,7 +431,7 @@ export default function RfidRegistrationPage() {
       toast.error("Please enter an email and password.")
       return
     }
-    if (accountPassword.length < 8) {
+    if (accountPassword.length < 12) {
       toast.error("Password must be at least 8 characters.")
       return
     }
@@ -517,7 +523,7 @@ export default function RfidRegistrationPage() {
       toast.error("Please enter an email and password.")
       return
     }
-    if (accountPassword.length < 8) {
+    if (accountPassword.length < 12) {
       toast.error("Password must be at least 8 characters.")
       return
     }
@@ -543,6 +549,47 @@ export default function RfidRegistrationPage() {
       toast.error(err.message || "Failed to create account")
     } finally {
       setCreatingAccount(false)
+    }
+  }
+
+  // Reset password for a profile that already has a linked portal account
+  async function handleResetPassword() {
+    if (!resetPassword) {
+      toast.error("Please enter a new password.")
+      return
+    }
+    if (resetPassword.length < 12) {
+      toast.error("Password must be at least 12 characters.")
+      return
+    }
+    if (!searchedProfile?.id) return
+
+    setResettingPassword(true)
+    try {
+      const formData = new FormData()
+      formData.set("studentAccountId", searchedProfile.id)
+      formData.set("newPassword", resetPassword)
+
+      const result = await resetStudentPassword(formData)
+
+      if (result.error) {
+        toast.error(result.error)
+        // TEMP DEBUG — remove once the "Student account not found" issue is resolved
+        if ((result as any).debug) {
+          console.log("[resetStudentPassword debug]", (result as any).debug)
+          toast.error(`Debug: ${JSON.stringify((result as any).debug)}`, { duration: 15000 })
+        }
+      } else {
+        toast.success("Password reset successfully!")
+        setAccountPassword(resetPassword)
+        setShowPassword(true)
+        setShowResetForm(false)
+        setResetPassword("")
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset password")
+    } finally {
+      setResettingPassword(false)
     }
   }
 
@@ -968,7 +1015,7 @@ export default function RfidRegistrationPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Temporary Password</Label>
-                    <Input type={showPassword ? "text" : "password"} value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Minimum 8 characters" minLength={8} className="h-9" required />
+                    <Input type={showPassword ? "text" : "password"} value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Minimum 12 characters" minLength={12} className="h-9" required />
                   </div>
                 </div>
 
@@ -1246,9 +1293,64 @@ export default function RfidRegistrationPage() {
                           <span className="font-mono text-zinc-700">{accountEmail}</span>
                         </div>
                       </div>
-                      <Button size="sm" onClick={finishWizard} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
-                        Done (Esc)
-                      </Button>
+
+                      {showResetForm ? (
+                        <div className="space-y-3 text-left pt-1">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">New Password</Label>
+                            <div className="relative">
+                              <Input
+                                type={showResetPassword ? "text" : "password"}
+                                value={resetPassword}
+                                onChange={(e) => setResetPassword(e.target.value)}
+                                placeholder="Minimum 12 characters"
+                                minLength={12}
+                                className="h-9 pr-9"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowResetPassword(!showResetPassword)}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+                              >
+                                {showResetPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleResetPassword}
+                              disabled={resettingPassword}
+                              className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer"
+                            >
+                              {resettingPassword ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Resetting...</> : "Confirm Reset"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setShowResetForm(false); setResetPassword("") }}
+                              className="text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowResetForm(true)}
+                            className="flex-1 cursor-pointer"
+                          >
+                            <RotateCcw className="size-3.5 mr-1" /> Reset Password
+                          </Button>
+                          <Button size="sm" onClick={finishWizard} className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                            Done (Esc)
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <>
@@ -1264,7 +1366,7 @@ export default function RfidRegistrationPage() {
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs">Temporary Password</Label>
-                          <Input type={showPassword ? "text" : "password"} value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Minimum 8 characters" minLength={8} className="h-9" required />
+                          <Input type={showPassword ? "text" : "password"} value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Minimum 12 characters" minLength={12} className="h-9" required />
                         </div>
                       </div>
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { createClient } from "@/utils/supabase/client"
-import { createOperator, removeOperator } from "@/app/(dashboard)/admin/operators/actions"
+import { createOperator, removeOperator } from "@/app/(dashboard)/admin/clinic-accounts/actions"
 import { toast } from "sonner"
 import {
   Loader2,
@@ -29,6 +29,7 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { format } from "date-fns"
+import { Pagination } from "@/components/pagination"
 
 type StaffRole = "admin" | "nurse" | "doctor"
 
@@ -43,7 +44,7 @@ interface StaffAccount {
 
 const STEPS = ["Role", "Account Details", "Review"]
 
-export default function OperatorsPage() {
+export default function ClinicAccountsPage() {
   const supabase = createClient()
   const [operators, setOperators] = useState<StaffAccount[]>([])
   const [loading, setLoading] = useState(true)
@@ -55,7 +56,7 @@ export default function OperatorsPage() {
   async function fetchOperators() {
     setLoading(true)
     const { data, error } = await supabase
-      .from("profiles")
+      .from("clinic_accounts")
       .select("*")
       .order("created_at", { ascending: false })
 
@@ -129,20 +130,22 @@ export default function OperatorsPage() {
     )
   }
 
+  const PAGE_SIZE = 10
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const paginatedOperators = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return operators.slice(start, start + PAGE_SIZE)
+  }, [operators, currentPage])
+
+  const totalPages = Math.max(1, Math.ceil(operators.length / PAGE_SIZE))
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <PageHeader
         title="Clinic Accounts"
-        description="Create and manage dashboard login accounts for clinic staff."
-      >
-        <Button
-          size="sm"
-          onClick={() => setShowWizard(!showWizard)}
-          className="cursor-pointer"
-        >
-          {showWizard ? "Cancel" : <><UserPlus className="size-3.5 mr-1" /> Add Account</>}
-        </Button>
-      </PageHeader>
+        description="Manage dashboard login accounts for clinic staff."
+      />
 
       {/* Creation Wizard */}
       {showWizard && (
@@ -162,10 +165,10 @@ export default function OperatorsPage() {
                     <div className="flex flex-col items-center gap-0.5">
                       <div
                         className={`size-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-colors ${isDone
-                            ? "bg-zinc-800 text-white"
-                            : isActive
-                              ? "bg-zinc-900 text-white"
-                              : "bg-zinc-100 text-zinc-400 border border-zinc-200"
+                          ? "bg-zinc-800 text-white"
+                          : isActive
+                            ? "bg-zinc-900 text-white"
+                            : "bg-zinc-100 text-zinc-400 border border-zinc-200"
                           }`}
                       >
                         {isDone ? <Check className="size-3" /> : stepNum}
@@ -196,8 +199,8 @@ export default function OperatorsPage() {
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, role: option.value }))}
                       className={`text-left p-3 rounded-lg border transition-colors cursor-pointer ${form.role === option.value
-                          ? "bg-zinc-900 text-white border-zinc-900"
-                          : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+                        ? "bg-zinc-900 text-white border-zinc-900"
+                        : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
                         }`}
                     >
                       <p className="text-sm font-medium capitalize">{option.label}</p>
@@ -338,49 +341,61 @@ export default function OperatorsPage() {
             </div>
           ) : operators.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              No staff accounts yet. Click "Add Account" to create one.
+              No staff accounts yet.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {operators.map((account) => {
-                  const accountId = account.id || account.user_id || ""
-                  return (
-                    <TableRow key={accountId}>
-                      <TableCell className="font-medium">{account.full_name || "—"}</TableCell>
-                      <TableCell className="text-muted-foreground">{account.email}</TableCell>
-                      <TableCell>{roleBadge(account.role as StaffRole)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {account.created_at
-                          ? format(new Date(account.created_at), "MMM d, yyyy")
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {account.role !== "admin" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 text-muted-foreground hover:text-destructive cursor-pointer"
-                            onClick={() => handleRemove(accountId)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedOperators.map((account) => {
+                    const accountId = account.id || account.user_id || ""
+                    return (
+                      <TableRow key={accountId} className="cursor-pointer">
+                        <TableCell className="font-medium">{account.full_name || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">{account.email}</TableCell>
+                        <TableCell>{roleBadge(account.role as StaffRole)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {account.created_at
+                            ? format(new Date(account.created_at), "MMM d, yyyy")
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {account.role !== "admin" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:text-destructive cursor-pointer"
+                              onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleRemove(accountId) }}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+
+              <div className="mt-4">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={operators.length}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={setCurrentPage}
+                />
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

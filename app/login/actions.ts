@@ -19,17 +19,29 @@ export async function login(formData: FormData) {
 
   const admin = createAdminClient()
 
-  // Check current session token for this profile to enforce one-device-only
-  const { data: profile } = await admin
-    .from("profiles")
+  // Check current session token in both clinic_accounts and student_accounts
+  const { data: clinicAccount } = await admin
+    .from("clinic_accounts")
     .select("current_session_token")
     .eq("email", email)
     .maybeSingle()
 
-  if (profile?.current_session_token) {
-    // There's an active session — invalidate it by clearing the token
+  if (clinicAccount?.current_session_token) {
     await admin
-      .from("profiles")
+      .from("clinic_accounts")
+      .update({ current_session_token: null })
+      .eq("email", email)
+  }
+
+  const { data: studentAccount } = await admin
+    .from("student_accounts")
+    .select("current_session_token")
+    .eq("email", email)
+    .maybeSingle()
+
+  if (studentAccount?.current_session_token) {
+    await admin
+      .from("student_accounts")
       .update({ current_session_token: null })
       .eq("email", email)
   }
@@ -43,15 +55,40 @@ export async function login(formData: FormData) {
     return { error: error.message }
   }
 
-  // Set new session token for one-device-only tracking
+  // Determine which table this user belongs to and set session token
   const sessionToken = randomBytes(32).toString("hex")
-  await admin
-    .from("profiles")
-    .update({ current_session_token: sessionToken })
+  const { data: clinicAccountData } = await admin
+    .from("clinic_accounts")
+    .select("id")
     .eq("id", data.user.id)
+    .maybeSingle()
+
+  if (clinicAccountData) {
+    await admin
+      .from("clinic_accounts")
+      .update({ current_session_token: sessionToken })
+      .eq("id", data.user.id)
+  } else {
+    await admin
+      .from("student_accounts")
+      .update({ current_session_token: sessionToken })
+      .eq("user_id", data.user.id)
+  }
+
+  // Determine redirect based on user role
+  const { data: clinicRoleData } = await admin
+    .from("clinic_accounts")
+    .select("role")
+    .eq("id", data.user.id)
+    .maybeSingle()
+
+  let redirectTo = "/"
+  if (clinicRoleData?.role === "admin") {
+    redirectTo = "/admin/rfid-registration"
+  }
 
   revalidatePath("/", "layout")
-  return { success: true, sessionToken }
+  return { success: true, sessionToken, redirectTo }
 }
 
 export async function logout() {
@@ -63,12 +100,17 @@ export async function logout() {
   } = await supabase.auth.getUser()
 
   if (user) {
-    // Clear session token on logout
     const admin = createAdminClient()
+    // Clear session token from both tables
     await admin
-      .from("profiles")
+      .from("clinic_accounts")
       .update({ current_session_token: null })
       .eq("id", user.id)
+
+    await admin
+      .from("student_accounts")
+      .update({ current_session_token: null })
+      .eq("user_id", user.id)
   }
 
   await supabase.auth.signOut()
