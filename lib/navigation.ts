@@ -77,6 +77,7 @@ export const navigation: NavGroup[] = [
     items: [
       { title: "Calendar", href: "/appointments/calendar", icon: CalendarDays },
       { title: "Queue", href: "/appointments/queue", icon: ListOrdered },
+      { title: "Cleared", href: "/appointments/cleared", icon: FileCheck },
     ],
   },
   {
