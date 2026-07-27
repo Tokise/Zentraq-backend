@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
+import { Pagination } from "@/components/pagination"
 import {
   Search,
   RefreshCw,
@@ -51,9 +52,9 @@ interface PatientProfile {
 }
 
 const STUDENT_ID_PREFIX = "23011-"
-const PAGE_SIZE = 15
+const PAGE_SIZE = 5
 
-export default function PatientsPage() {
+export default function StudentAccountsPage() {
   const [patients, setPatients] = useState<PatientProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -287,10 +288,10 @@ export default function PatientsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto px-4 py-4">
+    <div className="space-y-6 max-w-6xl mx-auto mt-[-25px] px-4 py-4">
       <PageHeader
-        title="Users Management"
-        description="Everyone registered through RFID — students, faculty, and staff."
+        title="Student Accounts"
+        description="Manage student accounts registered through RFID."
       />
 
       {/* Toolbar */}
@@ -489,35 +490,14 @@ export default function PatientsPage() {
 
       {/* Pagination */}
       {!loading && filtered.length > 0 && (
-        <div className="flex items-center justify-between px-1">
-          <p className="text-xs text-zinc-400">
-            Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs px-2.5"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="size-3.5 mr-1" />
-              Prev
-            </Button>
-            <span className="text-xs text-zinc-500 tabular-nums">
-              Page {currentPage} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs px-2.5"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-            >
-              Next
-              <ChevronRight className="size-3.5 ml-1" />
-            </Button>
-          </div>
+        <div className="px-1">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         </div>
       )}
 

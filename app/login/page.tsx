@@ -44,7 +44,9 @@ export default function LoginPage() {
           localStorage.setItem("session_token", result.sessionToken)
         }
 
-        router.push("/")
+        // Redirect based on role
+        const redirectTo = result.redirectTo || "/"
+        router.push(redirectTo)
 
         return
       }
@@ -64,8 +66,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div
         className={`w-full max-w-md space-y-6 transition-all duration-300 ${isSuccess
-            ? "scale-[0.99] opacity-90"
-            : "scale-100 opacity-100"
+          ? "scale-[0.99] opacity-90"
+          : "scale-100 opacity-100"
           }`}
       >
         <Card className="rounded-xl border-slate-200 bg-white shadow-lg">

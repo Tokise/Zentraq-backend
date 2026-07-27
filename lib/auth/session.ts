@@ -30,15 +30,26 @@ export function useSessionSecurity() {
             if (!sessionToken) return
 
             const admin = (await import("@/utils/supabase/admin")).createAdminClient()
-            const { data: profile } = await admin
-                .from("profiles")
+
+            // Check clinic_accounts first
+            const { data: clinicAccount } = await admin
+                .from("clinic_accounts")
                 .select("current_session_token")
                 .eq("id", user.id)
                 .maybeSingle()
 
-            if (profile?.current_session_token !== sessionToken) {
-                await supabase.auth.signOut()
-                router.push("/login")
+            if (clinicAccount?.current_session_token !== sessionToken) {
+                // Check student_accounts
+                const { data: studentAccount } = await admin
+                    .from("student_accounts")
+                    .select("current_session_token")
+                    .eq("user_id", user.id)
+                    .maybeSingle()
+
+                if (studentAccount?.current_session_token !== sessionToken) {
+                    await supabase.auth.signOut()
+                    router.push("/login")
+                }
             }
         } catch {
             // network error during check — don't logout

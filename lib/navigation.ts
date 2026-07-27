@@ -22,6 +22,7 @@ import {
   UserCog,
   UserPlus,
   Users,
+  GraduationCap,
 } from "lucide-react"
 
 export type NavItem = {
@@ -37,35 +38,70 @@ export type NavGroup = {
   items: NavItem[]
 }
 
-export const navigation: NavGroup[] = [
+// Admin navigation structure
+export const adminNavigation: NavGroup[] = [
   {
-    label: "",
+    label: "RFID",
     items: [
-      { title: "Dashboard", href: "/", icon: LayoutDashboard },
+      { title: "RFID Registration", href: "/admin/rfid-registration", icon: UserPlus, roles: ["admin"] },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { title: "Student Accounts", href: "/admin/student-accounts", icon: GraduationCap, roles: ["admin"] },
+      { title: "Clinic Accounts", href: "/admin/clinic-accounts", icon: Users, roles: ["admin"] },
+      { title: "Faculty Accounts", href: "/admin/faculty-accounts", icon: Users, roles: ["admin"] },
+    ],
+  },
+  {
+    label: "Account Creations",
+    items: [
+      { title: "Create Clinic Account", href: "/admin/clinic-accounts/create", icon: UserCog, roles: ["admin"] },
+      { title: "Create Faculty Accounts", href: "/admin/faculty-accounts/create", icon: UserCog, roles: ["admin"] },
 
     ],
   },
   {
-    label: "PATIENTS",
+    label: "Portal Management",
     items: [
-      { title: "Patients", href: "/patients", icon: Users },
-      { title: "Medical Records", href: "/patients/medical-records", icon: FileText },
-      {
-        title: "RFID Registration",
-        href: "/patients/rfid-registration",
-        icon: UserPlus,
-        roles: ["admin"],
-      },
-      {
-        title: "RFID Kiosk Mode",
-        href: "/rfid-kiosk",
-        icon: CreditCard,
-        target: "_blank",
-      },
+      { title: "Announcements", href: "/admin/clinic-announcements", icon: Bell, roles: ["admin"] },
     ],
   },
   {
-    label: "CONSULTATIONS",
+    label: "Services",
+    items: [
+      { title: "Health Programs", href: "/admin/services/programs", icon: Activity, roles: ["admin"] },
+      { title: "Health Clearance", href: "/admin/services/clearance", icon: FileCheck, roles: ["admin"] },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
+      { title: "Analytics", href: "/reports/analytics", icon: BarChart3 },
+      { title: "Compliance", href: "/reports/compliance", icon: ShieldCheck },
+    ],
+  },
+]
+
+// Nurse/Doctor navigation structure
+export const staffNavigation: NavGroup[] = [
+  {
+    label: "Dashboard",
+    items: [
+      { title: "Dashboard", href: "/", icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: "Patients",
+    items: [
+      { title: "Patients", href: "/patients", icon: Users },
+      { title: "Medical Records", href: "/patients/medical-records", icon: FileText },
+      { title: "RFID Kiosk Mode", href: "/rfid-kiosk", icon: CreditCard, target: "_blank" },
+    ],
+  },
+  {
+    label: "Consultations",
     items: [
       { title: "Consultations", href: "/consultations", icon: Stethoscope },
       { title: "Visit Logs", href: "/consultations/visit-logs", icon: ClipboardList },
@@ -73,7 +109,7 @@ export const navigation: NavGroup[] = [
     ],
   },
   {
-    label: "APPOINTMENTS",
+    label: "Appointments",
     items: [
       { title: "Calendar", href: "/appointments/calendar", icon: CalendarDays },
       { title: "Queue", href: "/appointments/queue", icon: ListOrdered },
@@ -81,7 +117,7 @@ export const navigation: NavGroup[] = [
     ],
   },
   {
-    label: "PHARMACY",
+    label: "Pharmacy",
     items: [
       { title: "Medicines", href: "/pharmacy/medicines", icon: Pill },
       { title: "Dispensing", href: "/pharmacy/dispensing", icon: Package },
@@ -89,45 +125,15 @@ export const navigation: NavGroup[] = [
     ],
   },
   {
-    label: "HEALTH SERVICES",
-    items: [
-      { title: "Faculty & Staff", href: "/health-services/faculty-staff", icon: Users },
-      { title: "Health Programs", href: "/health-services/programs", icon: Activity },
-      { title: "Health Clearance", href: "/health-services/clearance", icon: FileCheck },
-    ],
-  },
-  {
-    label: "REPORTS",
+    label: "Reports",
     items: [
       { title: "Analytics", href: "/reports/analytics", icon: BarChart3 },
       { title: "Compliance", href: "/reports/compliance", icon: ShieldCheck },
     ],
   },
-  {
-    label: "ADMINISTRATION",
-    items: [
-      {
-        title: "Clinic Accounts",
-        href: "/admin/operators",
-        icon: Users,
-        roles: ["admin"],
-      },
-      {
-        title: "Announcements",
-        href: "/admin/announcements",
-        icon: Bell,
-        roles: ["admin"],
-      },
-      {
-        title: "Users Management",
-        href: "/admin/users",
-        icon: Users,
-        roles: ["admin"],
-      },
-    ],
-  },
 ]
 
+// Student navigation structure
 export const studentNavigation: NavGroup[] = [
   {
     label: "STUDENT",
@@ -139,6 +145,18 @@ export const studentNavigation: NavGroup[] = [
     ],
   },
 ]
+
+// Helper function to get navigation based on role
+export function getNavigationForRole(role: string | null | undefined) {
+  if (role === "admin") {
+    return adminNavigation
+  }
+  // nurse, doctor, and any other staff roles
+  return staffNavigation
+}
+
+// Keep backward compatibility with existing code
+export const navigation = [...adminNavigation, ...staffNavigation]
 
 export const allNavItems = navigation.flatMap((group) => group.items)
 
