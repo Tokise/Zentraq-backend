@@ -7,7 +7,6 @@ import { createClient } from "@/utils/supabase/client"
 import { PageHeader } from "@/components/page-header"
 import { SectionHeader } from "@/components/section-header"
 import { StatusBadge } from "@/components/status-badge"
-
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
@@ -56,7 +55,7 @@ export default function PatientsPage() {
     setLoading(true)
 
     const { data, error } = await supabase
-      .from("clinic_profiles")
+      .from("student_accounts")
       .select("*")
       .order("last_name")
 
@@ -71,13 +70,13 @@ export default function PatientsPage() {
     fetchPatients()
 
     const channel = supabase
-      .channel("clinic_profiles_changes")
+      .channel("student_accounts_changes")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "clinic_profiles",
+          table: "student_accounts",
         },
         () => {
           fetchPatients()
@@ -226,7 +225,7 @@ export default function PatientsPage() {
 
       <Dialog
         open={selectedPatient !== null}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) {
             setSelectedPatient(null)
           }

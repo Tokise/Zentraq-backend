@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
+import { createStudentAccount } from "./actions"
 import {
   Camera,
   CameraOff,
@@ -19,7 +20,10 @@ import {
   ArrowRight,
   ArrowLeft,
   Image as ImageIcon,
-  Pencil
+  Pencil,
+  Copy,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 type PageMode = "WIZARD" | "VERIFIED" | "EDIT" | "SUCCESS"
@@ -38,9 +42,10 @@ interface PatientProfile {
   employee_number: string | null
   clinic_photo_url: string | null
   active_status: boolean
+  user_id?: string | null
 }
 
-const STEPS = ["Scan Card", "Student Info", "Profile Photo", "Review"]
+const STEPS = ["Scan Card", "Student Info", "Profile Photo", "Review", "Account Setup"]
 const STUDENT_ID_PREFIX = "23011"
 
 export default function RfidRegistrationPage() {
@@ -48,6 +53,7 @@ export default function RfidRegistrationPage() {
   const [step, setStep] = useState(1)
   const [rfidUid, setRfidUid] = useState("")
   const [searchedProfile, setSearchedProfile] = useState<PatientProfile | null>(null)
+  const [createdProfileId, setCreatedProfileId] = useState<string | null>(null)
 
   // Form
   const [role, setRole] = useState<"student" | "faculty" | "staff">("student")
@@ -62,6 +68,15 @@ export default function RfidRegistrationPage() {
   const [yearLevel, setYearLevel] = useState("")
   const [position, setPosition] = useState("")
   const [photo, setPhoto] = useState<string | null>(null)
+
+  // Account creation
+  const [accountEmail, setAccountEmail] = useState("")
+  const [accountPassword, setAccountPassword] = useState("")
+  const [accountCreated, setAccountCreated] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [creatingAccount, setCreatingAccount] = useState(false)
+  const [skippedAccount, setSkippedAccount] = useState(false)
+  const [editAccountCreated, setEditAccountCreated] = useState(false)
 
   // UI
   const [loading, setLoading] = useState(false)
@@ -115,9 +130,7 @@ export default function RfidRegistrationPage() {
     }
   }, [studentIdSuffix, role])
 
-  // Auto-suggest (auto-generate) a student ID only for brand-new registrations —
-  // i.e. Step 2 of the wizard, never in Edit mode, and never overwrite an
-  // existing value the user already has in the field.
+  // Auto-suggest (auto-generate) a student ID only for brand-new registrations
   useEffect(() => {
     const shouldSuggest =
       mode === "WIZARD" && step === 2 && role === "student" && !studentIdSuffix
@@ -128,17 +141,28 @@ export default function RfidRegistrationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, step, role])
 
+  // Pre-fill account email from profile email
+  useEffect(() => {
+    if (email && !accountEmail) {
+      setAccountEmail(email)
+    }
+  }, [email, accountEmail])
+
   function resetScanner() {
     setMode("WIZARD")
     setStep(1)
     setRfidUid("")
     setSearchedProfile(null)
+    setCreatedProfileId(null)
     setResetTimer(null)
     setFirstName(""); setLastName(""); setIdNumber(""); setEmail("")
     setDepartment(""); setCourse(""); setYearLevel(""); setPosition("")
     setPhoto(null)
     setRole("student")
     setStudentIdSuffix("")
+    setAccountEmail(""); setAccountPassword(""); setAccountCreated(false)
+    setSkippedAccount(false); setCreatingAccount(false)
+    setEditAccountCreated(false)
   }
 
   function handleRoleChange(newRole: "student" | "faculty" | "staff") {
@@ -157,7 +181,7 @@ export default function RfidRegistrationPage() {
     setGeneratingId(true)
     try {
       const { data: lastRecords, error: lastError } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .select("student_number")
         .not("student_number", "is", null)
         .like("student_number", `${STUDENT_ID_PREFIX}%`)
@@ -178,7 +202,7 @@ export default function RfidRegistrationPage() {
       while (attempts < 50) {
         const candidate = `${STUDENT_ID_PREFIX}${suffix}`
         const { data: existing, error: checkError } = await supabase
-          .from("clinic_profiles")
+          .from("student_accounts")
           .select("id")
           .eq("student_number", candidate)
           .maybeSingle()
@@ -210,7 +234,7 @@ export default function RfidRegistrationPage() {
 
     try {
       const { data, error } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .select("*")
         .eq("rfid_uid", uid)
         .maybeSingle()
@@ -266,6 +290,10 @@ export default function RfidRegistrationPage() {
 
     setResetTimer(null)
     setMode("EDIT")
+    setAccountEmail(data.email || "")
+    setAccountPassword("")
+    setAccountCreated(false)
+    setEditAccountCreated(!!data.user_id)
   }
 
   function handleInfoNext(e: React.FormEvent) {
@@ -348,12 +376,13 @@ export default function RfidRegistrationPage() {
     reader.readAsDataURL(file)
   }
 
+  // Step 4 → Create student_accounts record, then go to Step 5 (Account Setup)
   async function handleRegister() {
     if (!rfidUid) return
     setLoading(true)
     try {
       const { data, error } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .insert({
           rfid_uid: rfidUid,
           first_name: firstName,
@@ -372,15 +401,62 @@ export default function RfidRegistrationPage() {
         .single()
 
       if (error) throw error
-      toast.success("Profile registered and RFID linked!")
+
+      setCreatedProfileId(data.id)
       setSearchedProfile(data as PatientProfile)
-      setMode("SUCCESS")
-      setResetTimer(8)
+
+      // Pre-fill account email
+      if (data.email && !accountEmail) {
+        setAccountEmail(data.email)
+      }
+
+      toast.success("Profile registered! Now set up their portal account.")
+      setStep(5) // Go to Account Setup step
     } catch (err: any) {
       toast.error(err.message || "Registration failed")
     } finally {
       setLoading(false)
     }
+  }
+
+  // Step 5 → Create auth user + link to student_accounts via server action
+  async function handleCreateAccount() {
+    if (!accountEmail || !accountPassword) {
+      toast.error("Please enter an email and password.")
+      return
+    }
+    if (accountPassword.length < 8) {
+      toast.error("Password must be at least 8 characters.")
+      return
+    }
+    if (!createdProfileId) return
+
+    setCreatingAccount(true)
+    try {
+      const formData = new FormData()
+      formData.set("email", accountEmail)
+      formData.set("password", accountPassword)
+      formData.set("studentAccountId", createdProfileId)
+
+      const result = await createStudentAccount(formData)
+
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        setAccountCreated(true)
+        toast.success("Portal account created! The student can now log in.")
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create account")
+    } finally {
+      setCreatingAccount(false)
+    }
+  }
+
+  async function handleSkipAccount() {
+    setSkippedAccount(true)
+    setMode("SUCCESS")
+    setResetTimer(8)
   }
 
   async function handleUpdateProfile(e: React.FormEvent) {
@@ -406,7 +482,7 @@ export default function RfidRegistrationPage() {
     setLoading(true)
     try {
       const { data, error } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .update({
           first_name: firstName,
           last_name: lastName,
@@ -435,6 +511,46 @@ export default function RfidRegistrationPage() {
     }
   }
 
+  // EDIT mode account creation via server action
+  async function handleCreateEditAccount() {
+    if (!accountEmail || !accountPassword) {
+      toast.error("Please enter an email and password.")
+      return
+    }
+    if (accountPassword.length < 8) {
+      toast.error("Password must be at least 8 characters.")
+      return
+    }
+    if (!searchedProfile?.id) return
+
+    setCreatingAccount(true)
+    try {
+      const formData = new FormData()
+      formData.set("email", accountEmail)
+      formData.set("password", accountPassword)
+      formData.set("studentAccountId", searchedProfile.id)
+
+      const result = await createStudentAccount(formData)
+
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        setEditAccountCreated(true)
+        toast.success("Portal account created!")
+        setSearchedProfile({ ...searchedProfile, user_id: result.email })
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create account")
+    } finally {
+      setCreatingAccount(false)
+    }
+  }
+
+  function finishWizard() {
+    setMode("SUCCESS")
+    setResetTimer(8)
+  }
+
   return (
     <div className="space-y-6 max-w-xl mx-auto px-4 py-4">
       <PageHeader
@@ -455,13 +571,12 @@ export default function RfidRegistrationPage() {
                 )}
                 <div className="flex flex-col items-center gap-0.5">
                   <div
-                    className={`size-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-colors ${
-                      isDone
-                        ? "bg-zinc-800 text-white"
-                        : isActive
+                    className={`size-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-colors ${isDone
+                      ? "bg-zinc-800 text-white"
+                      : isActive
                         ? "bg-zinc-900 text-white"
                         : "bg-zinc-100 text-zinc-400 border border-zinc-200"
-                    }`}
+                      }`}
                   >
                     {isDone ? <Check className="size-3" /> : stepNum}
                   </div>
@@ -786,9 +901,87 @@ export default function RfidRegistrationPage() {
                 disabled={loading}
                 className="bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800 min-w-[130px]"
               >
-                {loading ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Saving...</> : "Complete Registration"}
+                {loading ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Saving...</> : "Register & Next"}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {mode === "WIZARD" && step === 5 && (
+        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Account Setup</CardTitle>
+            <CardDescription className="text-xs">
+              Create a portal account so {firstName} {lastName} can log in.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {accountCreated ? (
+              <div className="text-center space-y-4 py-4">
+                <div className="mx-auto size-10 rounded-full bg-emerald-50 flex items-center justify-center">
+                  <Check className="size-5 text-emerald-600" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-emerald-800">Account Created!</h3>
+                  <p className="text-xs text-zinc-400">The student can now log in.</p>
+                </div>
+                <div className="bg-zinc-50 rounded-lg p-3 text-left space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Email</span>
+                    <span className="font-mono text-zinc-700">{accountEmail}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-400">Password</span>
+                    <span className="font-mono text-zinc-700 flex items-center gap-2">
+                      {showPassword ? accountPassword : "••••••••"}
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-zinc-400 hover:text-zinc-600">
+                        {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                      </button>
+                      <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="text-zinc-400 hover:text-zinc-600">
+                        <Copy className="size-3.5" />
+                      </button>
+                    </span>
+                  </div>
+                </div>
+                <Button size="sm" onClick={finishWizard} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                  Complete Registration
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="bg-zinc-50 rounded-lg p-3 text-xs space-y-1 mb-2">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">Name</span>
+                    <span className="font-medium text-zinc-700">{firstName} {lastName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400">ID</span>
+                    <span className="font-mono text-zinc-700">{idNumber}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Login Email</Label>
+                    <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="student@school.edu" className="h-9" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Temporary Password</Label>
+                    <Input type={showPassword ? "text" : "password"} value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Minimum 8 characters" minLength={8} className="h-9" required />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2 border-t border-zinc-100">
+                  <Button size="sm" onClick={handleCreateAccount} disabled={creatingAccount} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                    {creatingAccount ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Creating Account...</> : <><UserCheck className="size-3.5 mr-1" /> Create Portal Account</>}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={handleSkipAccount} className="text-zinc-400 hover:text-zinc-600 cursor-pointer">
+                    Skip — register card only
+                  </Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
@@ -837,170 +1030,259 @@ export default function RfidRegistrationPage() {
       )}
 
       {mode === "EDIT" && searchedProfile && (
-        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Edit Profile</CardTitle>
-            <CardDescription className="text-xs">
-              Card: <code className="bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700 font-semibold">{rfidUid}</code>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex flex-col items-center gap-3">
-              <div className="relative size-28 rounded-2xl overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
-                {cameraActive ? (
-                  <video ref={videoRef} autoPlay playsInline className="size-full object-cover scale-x-[-1]" />
-                ) : photo ? (
-                  <img src={photo} alt="Preview" className="size-full object-cover" />
-                ) : (
-                  <CameraOff className="size-8 text-zinc-300" />
-                )}
-              </div>
-              <canvas ref={canvasRef} className="hidden" width="200" height="200" />
-
-              <div className="flex flex-wrap justify-center gap-2">
-                {!cameraActive && (
-                  <Button type="button" variant="outline" size="sm" onClick={startCamera}>
-                    <Camera className="size-3.5 cursor-pointer mr-1" /> {photo ? "Retake Photo" : "Take Photo"}
-                  </Button>
-                )}
-                {cameraActive && (
-                  <>
-                    <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800">
-                      <Check className="size-3.5 mr-1" /> Capture
-                    </Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={stopCamera} className="text-red-500 cursor-pointer hover:bg-red-50">
-                      Cancel
-                    </Button>
-                  </>
-                )}
-                <input type="file" accept="image/*" id="edit-photo-upload" onChange={handlePhotoUpload} className="hidden" />
-                <label htmlFor="edit-photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-zinc-200 cursor-pointer hover:bg-zinc-50 text-xs font-medium text-zinc-600">
-                  <ImageIcon className="size-3.5" /> Upload
-                </label>
-              </div>
-            </div>
-
-            <form onSubmit={handleUpdateProfile} className="space-y-3.5">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Role</Label>
-                <select
-                  value={role}
-                  onChange={(e) => handleRoleChange(e.target.value as any)}
-                  className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
-                >
-                  <option value="student">Student</option>
-                  <option value="faculty">Faculty</option>
-                  <option value="staff">Staff</option>
-                </select>
-              </div>
-
-              <div className="grid gap-3 grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
-                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="h-9" />
+        <>
+          <div className="flex items-center justify-center gap-0 mb-4">
+            {[1, 2].map((label, i) => {
+              const stepNum = i + 1
+              const isActive = step === stepNum
+              const isDone = step > stepNum
+              return (
+                <div key={label} className="flex items-center">
+                  {i > 0 && (
+                    <div className={`w-8 h-px mx-1 ${isDone ? "bg-zinc-400" : "bg-zinc-200"}`} />
+                  )}
+                  <div className="flex flex-col items-center gap-0.5">
+                    <div
+                      className={`size-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-colors ${isDone
+                        ? "bg-zinc-800 text-white"
+                        : isActive
+                          ? "bg-zinc-900 text-white"
+                          : "bg-zinc-100 text-zinc-400 border border-zinc-200"
+                        }`}
+                    >
+                      {isDone ? <Check className="size-3" /> : stepNum}
+                    </div>
+                    <span className={`text-[9px] ${isActive || isDone ? "text-zinc-600 font-medium" : "text-zinc-300"}`}>
+                      {label}
+                    </span>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
-                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="h-9" />
-                </div>
-              </div>
+              )
+            })}
+          </div>
 
-              <div className="grid gap-3 grid-cols-2">
-                {role === "student" ? (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Student No. <span className="text-red-500">*</span></Label>
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-9 px-2.5 flex items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-mono text-zinc-500 select-none shrink-0">
-                        {STUDENT_ID_PREFIX}
-                      </div>
-                      <Input
-                        value={studentIdSuffix}
-                        onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                        placeholder="0000"
-                        inputMode="numeric"
-                        maxLength={4}
-                        required
-                        className="h-9 font-mono tracking-widest"
-                      />
+          <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Edit Profile</CardTitle>
+              <CardDescription className="text-xs">
+                Card: <code className="bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700 font-semibold">{rfidUid}</code>
+                {searchedProfile.user_id && <span className="ml-2 text-emerald-600">• Portal account linked</span>}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* EDIT SUB-STEP 1: Profile edit */}
+              {step === 1 && (
+                <>
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative size-28 rounded-2xl overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
+                      {cameraActive ? (
+                        <video ref={videoRef} autoPlay playsInline className="size-full object-cover scale-x-[-1]" />
+                      ) : photo ? (
+                        <img src={photo} alt="Preview" className="size-full object-cover" />
+                      ) : (
+                        <CameraOff className="size-8 text-zinc-300" />
+                      )}
+                    </div>
+                    <canvas ref={canvasRef} className="hidden" width="200" height="200" />
+
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {!cameraActive && (
+                        <Button type="button" variant="outline" size="sm" onClick={startCamera}>
+                          <Camera className="size-3.5 cursor-pointer mr-1" /> {photo ? "Retake Photo" : "Take Photo"}
+                        </Button>
+                      )}
+                      {cameraActive && (
+                        <>
+                          <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800">
+                            <Check className="size-3.5 mr-1" /> Capture
+                          </Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={stopCamera} className="text-red-500 cursor-pointer hover:bg-red-50">
+                            Cancel
+                          </Button>
+                        </>
+                      )}
+                      <input type="file" accept="image/*" id="edit-photo-upload" onChange={handlePhotoUpload} className="hidden" />
+                      <label htmlFor="edit-photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-zinc-200 cursor-pointer hover:bg-zinc-50 text-xs font-medium text-zinc-600">
+                        <ImageIcon className="size-3.5" /> Upload
+                      </label>
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Employee No. <span className="text-red-500">*</span></Label>
-                    <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="EMP-0231" required className="h-9" />
-                  </div>
-                )}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Email</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9" />
-                </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Department</Label>
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
-                >
-                  <option value="">Select Department</option>
-                  <option value="College of Engineering">College of Engineering</option>
-                  <option value="College of Computer Studies">College of Computer Studies</option>
-                  <option value="College of Nursing">College of Nursing</option>
-                  <option value="College of Arts and Sciences">College of Arts and Sciences</option>
-                  <option value="College of Business">College of Business</option>
-                </select>
-              </div>
+                  <form onSubmit={handleUpdateProfile} className="space-y-3.5">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Role</Label>
+                      <select
+                        value={role}
+                        onChange={(e) => handleRoleChange(e.target.value as any)}
+                        className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                      >
+                        <option value="student">Student</option>
+                        <option value="faculty">Faculty</option>
+                        <option value="staff">Staff</option>
+                      </select>
+                    </div>
 
-              {role === "student" && (
-                <div className="grid gap-3 grid-cols-3">
-                  <div className="col-span-2 space-y-1.5">
-                    <Label className="text-xs">Course <span className="text-red-500">*</span></Label>
-                    <select
-                      value={course}
-                      onChange={(e) => setCourse(e.target.value)}
-                      className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
-                      required
-                    >
-                      <option value="">Select Course</option>
-                      <option value="BS Information Technology">BS Information Technology</option>
-                      <option value="BS Computer Science">BS Computer Science</option>
-                      <option value="BS Nursing">BS Nursing</option>
-                      <option value="BS Psychology">BS Psychology</option>
-                      <option value="BS Business Administration">BS Business Administration</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Year</Label>
-                    <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none">
-                      <option value="">—</option>
-                      <option value="1">1st</option>
-                      <option value="2">2nd</option>
-                      <option value="3">3rd</option>
-                      <option value="4">4th</option>
-                    </select>
-                  </div>
-                </div>
+                    <div className="grid gap-3 grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
+                        <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="h-9" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
+                        <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="h-9" />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 grid-cols-2">
+                      {role === "student" ? (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Student No. <span className="text-red-500">*</span></Label>
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-9 px-2.5 flex items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-mono text-zinc-500 select-none shrink-0">
+                              {STUDENT_ID_PREFIX}
+                            </div>
+                            <Input
+                              value={studentIdSuffix}
+                              onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                              placeholder="0000"
+                              inputMode="numeric"
+                              maxLength={4}
+                              required
+                              className="h-9 font-mono tracking-widest"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Employee No. <span className="text-red-500">*</span></Label>
+                          <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="EMP-0231" required className="h-9" />
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Email</Label>
+                        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Department</Label>
+                      <select
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                      >
+                        <option value="">Select Department</option>
+                        <option value="College of Engineering">College of Engineering</option>
+                        <option value="College of Computer Studies">College of Computer Studies</option>
+                        <option value="College of Nursing">College of Nursing</option>
+                        <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+                        <option value="College of Business">College of Business</option>
+                      </select>
+                    </div>
+
+                    {role === "student" && (
+                      <div className="grid gap-3 grid-cols-3">
+                        <div className="col-span-2 space-y-1.5">
+                          <Label className="text-xs">Course <span className="text-red-500">*</span></Label>
+                          <select
+                            value={course}
+                            onChange={(e) => setCourse(e.target.value)}
+                            className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                            required
+                          >
+                            <option value="">Select Course</option>
+                            <option value="BS Information Technology">BS Information Technology</option>
+                            <option value="BS Computer Science">BS Computer Science</option>
+                            <option value="BS Nursing">BS Nursing</option>
+                            <option value="BS Psychology">BS Psychology</option>
+                            <option value="BS Business Administration">BS Business Administration</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Year</Label>
+                          <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none">
+                            <option value="">—</option>
+                            <option value="1">1st</option>
+                            <option value="2">2nd</option>
+                            <option value="3">3rd</option>
+                            <option value="4">4th</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {role !== "student" && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Position <span className="text-red-500">*</span></Label>
+                        <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9" />
+                      </div>
+                    )}
+
+                    <div className="flex gap-2 justify-end pt-3 border-t border-zinc-100">
+                      <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="cursor-pointer">
+                        Cancel
+                      </Button>
+                      <Button type="button" size="sm" onClick={() => setStep(2)} className="bg-zinc-900 text-white cursor-pointer hover:bg-zinc-800 flex items-center gap-1">
+                        Next <ArrowRight className="size-3.5" />
+                      </Button>
+                    </div>
+                  </form>
+                </>
               )}
 
-              {role !== "student" && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Position <span className="text-red-500">*</span></Label>
-                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9" />
+              {/* EDIT SUB-STEP 2: Account creation */}
+              {step === 2 && (
+                <div className="space-y-5">
+                  {editAccountCreated ? (
+                    <div className="text-center space-y-3 py-4">
+                      <div className="mx-auto size-10 rounded-full bg-emerald-50 flex items-center justify-center">
+                        <Check className="size-5 text-emerald-600" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-emerald-800">Account Already Linked</h3>
+                      <p className="text-xs text-zinc-400">This profile already has a portal account.</p>
+                      <div className="bg-zinc-50 rounded-lg p-3 text-left space-y-1 text-xs border border-zinc-200/80">
+                        <div className="flex justify-between">
+                          <span className="text-zinc-400">Email</span>
+                          <span className="font-mono text-zinc-700">{accountEmail}</span>
+                        </div>
+                      </div>
+                      <Button size="sm" onClick={finishWizard} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                        Done (Esc)
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-center space-y-0.5">
+                        <h4 className="text-sm font-semibold text-zinc-700">Create Portal Account</h4>
+                        <p className="text-[10px] text-zinc-400">Allow {firstName} {lastName} to log in to the portal</p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Login Email</Label>
+                          <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="student@school.edu" className="h-9" required />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Temporary Password</Label>
+                          <Input type={showPassword ? "text" : "password"} value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Minimum 8 characters" minLength={8} className="h-9" required />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2 pt-2 border-t border-zinc-100">
+                        <Button size="sm" onClick={handleCreateEditAccount} disabled={creatingAccount} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                          {creatingAccount ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Creating...</> : <><UserCheck className="size-3.5 mr-1" /> Create Account</>}
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setStep(1)} className="text-zinc-400 hover:text-zinc-600 cursor-pointer">
+                          <ArrowLeft className="size-3.5 mr-1" /> Back to Edit
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
-
-              <div className="flex gap-2 justify-end pt-3 border-t border-zinc-100">
-                <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="cursor-pointer">
-                  Cancel
-                </Button>
-                <Button type="submit" size="sm" disabled={loading} className="bg-zinc-900 text-white hover:bg-zinc-800 min-w-[120px] cursor-pointer flex items-center gap-1">
-                  {loading ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Saving...</> : "Save Changes"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {mode === "SUCCESS" && searchedProfile && (
@@ -1012,8 +1294,35 @@ export default function RfidRegistrationPage() {
 
             <div className="space-y-1">
               <h2 className="text-base font-bold text-zinc-900">RFID Linked Successfully</h2>
-              <p className="text-xs text-zinc-400">Card is now associated with this clinic profile</p>
+              <p className="text-xs text-zinc-400">
+                {accountCreated || editAccountCreated
+                  ? "Portal account has been created. The student can now log in."
+                  : skippedAccount
+                    ? "Card is now associated with this profile. No portal account was created."
+                    : "Card is now associated with this clinic profile."}
+              </p>
             </div>
+
+            {(accountCreated || editAccountCreated) && (
+              <div className="bg-zinc-50 rounded-lg p-3 text-left space-y-1 text-xs border border-zinc-200/80">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Email</span>
+                  <span className="font-mono text-zinc-700">{accountEmail}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-zinc-400">Password</span>
+                  <span className="font-mono text-zinc-700 flex items-center gap-2">
+                    {showPassword ? accountPassword : "••••••••"}
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-zinc-400 hover:text-zinc-600">
+                      {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                    </button>
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="text-zinc-400 hover:text-zinc-600">
+                      <Copy className="size-3.5" />
+                    </button>
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center gap-4 border border-zinc-200/80 rounded-lg p-4 bg-zinc-50/50 text-left">
               <div className="size-14 rounded-2xl overflow-hidden border border-zinc-200 bg-white shrink-0 flex items-center justify-center">

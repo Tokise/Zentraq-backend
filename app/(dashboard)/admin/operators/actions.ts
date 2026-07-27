@@ -57,6 +57,7 @@ export async function createOperator(formData: FormData) {
     const email = (formData.get("email") as string)?.trim()
     const password = formData.get("password") as string
     const fullName = (formData.get("fullName") as string)?.trim()
+    const role = (formData.get("role") as string)?.trim() || "nurse"
 
     console.log("Incoming Data:")
     console.log({
@@ -120,7 +121,7 @@ export async function createOperator(formData: FormData) {
     const profilePayload = {
       id: created.user.id,
       email,
-      role: "receptionist",
+      role,
       full_name: fullName || null,
     }
 

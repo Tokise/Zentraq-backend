@@ -78,7 +78,7 @@ export default function PatientsPage() {
     else setLoading(true)
     try {
       const { data, error } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .select("*")
         .order("last_name", { ascending: true })
 
@@ -211,7 +211,7 @@ export default function PatientsPage() {
       }
 
       const { data, error } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .update(payload)
         .eq("id", selected.id)
         .select()
@@ -222,7 +222,7 @@ export default function PatientsPage() {
       let updated = data as PatientProfile | null
       if (!updated) {
         const { data: refetched } = await supabase
-          .from("clinic_profiles")
+          .from("student_accounts")
           .select("*")
           .eq("id", selected.id)
           .maybeSingle()
@@ -243,7 +243,7 @@ export default function PatientsPage() {
   async function toggleActive(p: PatientProfile) {
     try {
       const { data, error } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .update({ active_status: !p.active_status })
         .eq("id", p.id)
         .select()
@@ -263,7 +263,7 @@ export default function PatientsPage() {
     try {
       const nextArchivedAt = p.archived_at ? null : new Date().toISOString()
       const { data, error } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .update({ archived_at: nextArchivedAt })
         .eq("id", p.id)
         .select()
@@ -337,11 +337,10 @@ export default function PatientsPage() {
           <button
             key={key}
             onClick={() => setRoleFilter(key)}
-            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium border transition-colors ${
-              roleFilter === key
-                ? "bg-zinc-900 text-white border-zinc-900"
-                : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
-            }`}
+            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium border transition-colors ${roleFilter === key
+              ? "bg-zinc-900 text-white border-zinc-900"
+              : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
+              }`}
           >
             <Icon className="size-3.5" />
             {label}
@@ -359,11 +358,10 @@ export default function PatientsPage() {
           <button
             key={label}
             onClick={() => setStatusFilter(key)}
-            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium border transition-colors ${
-              statusFilter === key
-                ? "bg-zinc-100 text-zinc-900 border-zinc-300"
-                : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"
-            }`}
+            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium border transition-colors ${statusFilter === key
+              ? "bg-zinc-100 text-zinc-900 border-zinc-300"
+              : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"
+              }`}
           >
             {label}
             <span className="text-[10px] text-zinc-400">{count}</span>
@@ -372,11 +370,10 @@ export default function PatientsPage() {
 
         <button
           onClick={() => setStatusFilter("archived")}
-          className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium border transition-colors ${
-            statusFilter === "archived"
-              ? "bg-amber-100 text-amber-900 border-amber-300"
-              : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"
-          }`}
+          className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium border transition-colors ${statusFilter === "archived"
+            ? "bg-amber-100 text-amber-900 border-amber-300"
+            : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"
+            }`}
         >
           <Archive className="size-3.5" />
           Archived
@@ -410,15 +407,15 @@ export default function PatientsPage() {
                 {patients.length === 0
                   ? "No one's registered yet"
                   : statusFilter === "archived"
-                  ? "Nothing archived"
-                  : "No matches"}
+                    ? "Nothing archived"
+                    : "No matches"}
               </p>
               <p className="text-xs text-zinc-400">
                 {patients.length === 0
                   ? "Registered cards will show up here automatically."
                   : statusFilter === "archived"
-                  ? "Patients you archive will show up here."
-                  : "Try a different search or filter."}
+                    ? "Patients you archive will show up here."
+                    : "Try a different search or filter."}
               </p>
             </div>
           ) : (
@@ -468,9 +465,8 @@ export default function PatientsPage() {
 
                       <Badge
                         variant="outline"
-                        className={`shrink-0 text-[10px] capitalize ${
-                          isStudent ? "text-blue-600 border-blue-200 bg-blue-50" : "text-purple-600 border-purple-200 bg-purple-50"
-                        }`}
+                        className={`shrink-0 text-[10px] capitalize ${isStudent ? "text-blue-600 border-blue-200 bg-blue-50" : "text-purple-600 border-purple-200 bg-purple-50"
+                          }`}
                       >
                         {isStudent ? "Student" : "Employee"}
                       </Badge>
