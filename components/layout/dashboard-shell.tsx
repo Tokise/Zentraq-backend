@@ -9,6 +9,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useSessionSecurity } from "@/lib/auth/session"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,20 +20,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { createClient } from "@/utils/supabase/client"
-import type { StaffRole } from "@/lib/auth/roles"
+import type { UserRole } from "@/lib/auth/roles"
 
 type DashboardShellProps = {
   children: React.ReactNode
   userEmail?: string
-  userRole?: StaffRole
+  userRole?: UserRole
 }
 
 export function DashboardShell({
   children,
   userEmail,
-  userRole = "operator",
+  userRole = "nurse",
 }: DashboardShellProps) {
   const router = useRouter()
+  useSessionSecurity()
 
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)

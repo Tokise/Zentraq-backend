@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import {
   Activity,
   BarChart3,
-  Calendar,
+  Bell,
   CalendarDays,
   ClipboardList,
   CreditCard,
@@ -11,12 +11,14 @@ import {
   HeartPulse,
   LayoutDashboard,
   ListOrdered,
+  Megaphone,
   Package,
   Pill,
   Settings,
   Shield,
   ShieldCheck,
   Stethoscope,
+  UserCheck,
   UserCog,
   UserPlus,
   Users,
@@ -27,6 +29,7 @@ export type NavItem = {
   href: string
   icon: LucideIcon
   target?: "_self" | "_blank"
+  roles?: string[]
 }
 
 export type NavGroup = {
@@ -37,14 +40,22 @@ export type NavGroup = {
 export const navigation: NavGroup[] = [
   {
     label: "",
-    items: [{ title: "Dashboard", href: "/", icon: LayoutDashboard }],
+    items: [
+      { title: "Dashboard", href: "/", icon: LayoutDashboard },
+
+    ],
   },
   {
     label: "PATIENTS",
     items: [
       { title: "Patients", href: "/patients", icon: Users },
       { title: "Medical Records", href: "/patients/medical-records", icon: FileText },
-      { title: "RFID Registration", href: "/patients/rfid-registration", icon: UserPlus },
+      {
+        title: "RFID Registration",
+        href: "/patients/rfid-registration",
+        icon: UserPlus,
+        roles: ["admin"],
+      },
       {
         title: "RFID Kiosk Mode",
         href: "/rfid-kiosk",
@@ -64,7 +75,7 @@ export const navigation: NavGroup[] = [
   {
     label: "APPOINTMENTS",
     items: [
-      { title: "Calendar", href: "/appointments/calendar", icon: Calendar },
+      { title: "Calendar", href: "/appointments/calendar", icon: CalendarDays },
       { title: "Queue", href: "/appointments/queue", icon: ListOrdered },
       { title: "Cleared", href: "/appointments/cleared", icon: FileCheck },
     ],
@@ -95,11 +106,36 @@ export const navigation: NavGroup[] = [
   {
     label: "ADMINISTRATION",
     items: [
-      { title: "Clinic Accounts", href: "/admin/operators", icon: UserCog },
-      { title: "Student Accounts", href: "/admin/users", icon: Users },
-      { title: "Roles", href: "/admin/roles", icon: Shield },
-      { title: "Audit Logs", href: "/admin/audit-logs", icon: ClipboardList },
-      { title: "Settings", href: "/admin/settings", icon: Settings },
+      {
+        title: "Clinic Accounts",
+        href: "/admin/operators",
+        icon: Users,
+        roles: ["admin"],
+      },
+      {
+        title: "Announcements",
+        href: "/admin/announcements",
+        icon: Bell,
+        roles: ["admin"],
+      },
+      {
+        title: "Users Management",
+        href: "/admin/users",
+        icon: Users,
+        roles: ["admin"],
+      },
+    ],
+  },
+]
+
+export const studentNavigation: NavGroup[] = [
+  {
+    label: "STUDENT",
+    items: [
+      { title: "Dashboard", href: "/student", icon: LayoutDashboard },
+      { title: "Announcements", href: "/student/announcements", icon: Megaphone },
+      { title: "Book Appointment", href: "/student/appointments", icon: CalendarDays },
+      { title: "Settings", href: "/student/settings", icon: Settings },
     ],
   },
 ]

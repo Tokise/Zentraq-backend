@@ -85,7 +85,7 @@ export default function RfidKioskPage() {
 
     try {
       const { data, error } = await supabase
-        .from("clinic_profiles")
+        .from("student_accounts")
         .select("*")
         .eq("rfid_uid", uid)
         .maybeSingle()

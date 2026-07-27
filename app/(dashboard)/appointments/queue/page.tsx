@@ -531,7 +531,7 @@ export default function QueuePage() {
                         <div className="flex items-center gap-1.5">
                           {item.queue_number}
                           {item.entry_type === "AI Scheduled" && (
-                            <Sparkles className="size-3 text-purple-600" title="AI Processed Ticket" />
+                            <Sparkles className="size-3 text-purple-600" />
                           )}
                         </div>
                       </TableCell>
@@ -597,8 +597,8 @@ export default function QueuePage() {
               type="button"
               onClick={() => setActiveTab("quick_walkin")}
               className={`pb-2 px-4 text-xs font-semibold transition-colors border-b-2 ${activeTab === "quick_walkin"
-                  ? "border-indigo-600 text-indigo-600"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "border-indigo-600 text-indigo-600"
+                : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
             >
               Direct Walk-In Check-In
@@ -607,8 +607,8 @@ export default function QueuePage() {
               type="button"
               onClick={() => setActiveTab("ai_assistant")}
               className={`pb-2 px-4 text-xs font-semibold transition-colors border-b-2 flex items-center gap-1.5 ${activeTab === "ai_assistant"
-                  ? "border-indigo-600 text-indigo-600"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                ? "border-indigo-600 text-indigo-600"
+                : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
             >
               <Sparkles className="size-3.5" /> AI Triage & Slot Checker
@@ -712,10 +712,10 @@ export default function QueuePage() {
                           disabled={isFull}
                           onClick={() => handleSelectSlot(slot)}
                           className={`p-2 rounded border text-left transition-all text-xs flex flex-col justify-between h-14 ${isFull
-                              ? "bg-muted/80 text-muted-foreground border-transparent cursor-not-allowed opacity-60"
-                              : isSelected
-                                ? "border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-600 text-indigo-950 font-medium"
-                                : "bg-background hover:border-indigo-400 cursor-pointer"
+                            ? "bg-muted/80 text-muted-foreground border-transparent cursor-not-allowed opacity-60"
+                            : isSelected
+                              ? "border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-600 text-indigo-950 font-medium"
+                              : "bg-background hover:border-indigo-400 cursor-pointer"
                             }`}
                         >
                           <div className="flex items-center justify-between w-full">
@@ -778,7 +778,7 @@ export default function QueuePage() {
       {/* Queue Ticket Details Modal */}
       <Dialog
         open={selectedQueueItem !== null}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) {
             setSelectedQueueItem(null)
           }

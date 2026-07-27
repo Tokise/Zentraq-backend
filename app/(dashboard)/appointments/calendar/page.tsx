@@ -307,10 +307,12 @@ export default function CalendarPage() {
     return days
   }, [currentMonthDate, filteredAndSortedAppointments, todayStr])
 
-  const getStatusVariant = (status: Appointment["status"]) => {
+  const getStatusVariant = (status: Appointment["status"]): "success" | "warning" | "default" | "danger" | "info" => {
     switch (status) {
       case "Scheduled":
         return "default"
+      case "Cleared":
+        return "success"
       default:
         return "default"
     }
@@ -791,7 +793,7 @@ export default function CalendarPage() {
 
       <Dialog
         open={selectedAppointment !== null}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open) {
             setSelectedAppointment(null)
           }

@@ -4,18 +4,21 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { navigation } from "@/lib/navigation"
-import { filterNavigationForRole, type StaffRole } from "@/lib/auth/roles"
+import { navigation, studentNavigation } from "@/lib/navigation"
+import { filterNavigationForRole, isStudent, type UserRole } from "@/lib/auth/roles"
 
 type AppSidebarProps = {
   onNavigate?: () => void
   collapsed?: boolean
-  userRole?: StaffRole
+  userRole?: UserRole
 }
 
-export function AppSidebar({ onNavigate, collapsed = false, userRole = "operator" }: AppSidebarProps) {
+export function AppSidebar({ onNavigate, collapsed = false, userRole = "nurse" }: AppSidebarProps) {
   const pathname = usePathname()
-  const visibleNavigation = filterNavigationForRole(navigation, userRole)
+
+  // Students use a different navigation
+  const navGroups = isStudent(userRole) ? studentNavigation : navigation
+  const visibleNavigation = filterNavigationForRole(navGroups, userRole)
 
   return (
     <aside

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
     Search,
     Calendar as CalendarIcon,
@@ -39,6 +39,8 @@ import {
 } from "@/components/ui/dialog"
 
 import { Pagination } from "@/components/pagination"
+import { createClient } from "@/utils/supabase/client"
+import { toast } from "sonner"
 
 type RecordStatus = "Cleared" | "Completed" | "Cancelled" | "No-Show"
 
@@ -59,95 +61,8 @@ type ClearedRecord = {
 
 const PAGE_SIZE = 8
 
-const MOCK_CLEARED_RECORDS: ClearedRecord[] = [
-    {
-        id: "clr-001",
-        clearance_code: "CLR-2026-001",
-        student_number: "2023-00124",
-        patient_name: "John Doe",
-        department: "Computer Studies",
-        purpose: "Fever & Cold Consultation",
-        cleared_date: "2026-07-27",
-        cleared_time: "09:45 AM",
-        cleared_by: "Dr. Sarah Jenkins",
-        clearance_type: "Fit to Return Class",
-        status: "Cleared",
-        remarks: "Patient fully recovered. Medicated and cleared for attendance.",
-    },
-    {
-        id: "clr-002",
-        clearance_code: "CLR-2026-002",
-        student_number: "2022-00582",
-        patient_name: "Jane Smith",
-        department: "Engineering",
-        purpose: "Blood Pressure Check",
-        cleared_date: "2026-07-27",
-        cleared_time: "10:15 AM",
-        cleared_by: "Dr. Mark Rivera",
-        clearance_type: "Routine Consultation",
-        status: "Completed",
-        remarks: "Vital signs normal (120/80 mmHg).",
-    },
-    {
-        id: "clr-003",
-        clearance_code: "CLR-2026-003",
-        student_number: "2021-00891",
-        patient_name: "Emily Davis",
-        department: "Business Administration",
-        purpose: "Severe Allergic Reaction",
-        cleared_date: "2026-07-26",
-        cleared_time: "03:10 PM",
-        cleared_by: "Dr. Sarah Jenkins",
-        clearance_type: "Medical Certificate",
-        status: "Cleared",
-        remarks: "Antihistamine administered. Symptom-free upon discharge.",
-    },
-    {
-        id: "clr-004",
-        clearance_code: "CLR-2026-004",
-        student_number: "2024-00045",
-        patient_name: "David Wilson",
-        department: "Arts & Sciences",
-        purpose: "Annual Physical Exam",
-        cleared_date: "2026-07-26",
-        cleared_time: "01:30 PM",
-        cleared_by: "Nurse Anna Cruz",
-        clearance_type: "Annual Physical",
-        status: "Completed",
-        remarks: "All physical examination milestones completed and validated.",
-    },
-    {
-        id: "clr-005",
-        clearance_code: "CLR-2026-005",
-        student_number: "2023-01103",
-        patient_name: "Michael Brown",
-        department: "Computer Studies",
-        purpose: "Sprained Ankle Evaluation",
-        cleared_date: "2026-07-25",
-        cleared_time: "11:20 AM",
-        cleared_by: "Dr. Mark Rivera",
-        clearance_type: "Fit to Return Class",
-        status: "Cancelled",
-        remarks: "Appointment cancelled by patient prior to examination.",
-    },
-    {
-        id: "clr-006",
-        clearance_code: "CLR-2026-006",
-        student_number: "2021-00334",
-        patient_name: "Olivia Anderson",
-        department: "Architecture",
-        purpose: "Prescription Renewal",
-        cleared_date: "2026-07-25",
-        cleared_time: "08:30 AM",
-        cleared_by: "Nurse Anna Cruz",
-        clearance_type: "Routine Consultation",
-        status: "No-Show",
-        remarks: "Patient failed to arrive during the designated appointment slot.",
-    },
-]
-
 export default function ClearedPage() {
-    const [clearedRecords] = useState<ClearedRecord[]>(MOCK_CLEARED_RECORDS)
+    const [clearedRecords, setClearedRecords] = useState<ClearedRecord[]>([])
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedDate, setSelectedDate] = useState<string>("")
     const [clearanceTypeFilter, setClearanceTypeFilter] = useState<string>("all")
@@ -160,6 +75,8 @@ export default function ClearedPage() {
     const [selectedRecord, setSelectedRecord] = useState<ClearedRecord | null>(null)
     const [page, setPage] = useState(1)
 
+    const [loading, setLoading] = useState(true)
+
     const currentDateFormatted = useMemo(() => {
         return new Date().toLocaleDateString("en-US", {
             weekday: "long",
@@ -167,6 +84,46 @@ export default function ClearedPage() {
             month: "long",
             day: "numeric",
         })
+    }, [])
+
+    useEffect(() => {
+        async function loadRecords() {
+            const supabase = createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            // Fetch completed consultations
+            const { data: consultations, error } = await supabase
+                .from("consultations")
+                .select("*")
+                .in("status", ["completed", "cancelled"])
+                .order("created_at", { ascending: false })
+
+            if (error) {
+                toast.error("Failed to load records")
+                setLoading(false)
+                return
+            }
+
+            const records: ClearedRecord[] = (consultations || []).map((c, idx) => ({
+                id: c.id,
+                clearance_code: `CLR-2026-${String(idx + 1).padStart(3, "0")}`,
+                student_number: c.patient_name || "N/A",
+                patient_name: c.patient_name || "Unknown",
+                department: c.department || "N/A",
+                purpose: c.student_complaint || c.consultation_reason || "Consultation",
+                cleared_date: c.created_at ? c.created_at.split("T")[0] : "",
+                cleared_time: c.created_at ? new Date(c.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "",
+                cleared_by: c.doctor_name || c.nurse_name || "Clinic Staff",
+                clearance_type: (c.clearance_type as ClearedRecord["clearance_type"]) || "Routine Consultation",
+                status: c.status === "cancelled" ? "Cancelled" : "Completed",
+                remarks: c.remarks || null,
+            }))
+
+            setClearedRecords(records)
+            setLoading(false)
+        }
+        loadRecords()
     }, [])
 
     const filteredAndSortedRecords = useMemo(() => {
@@ -471,7 +428,7 @@ export default function ClearedPage() {
             {/* Detail Modal */}
             <Dialog
                 open={selectedRecord !== null}
-                onOpenChange={(open) => {
+                onOpenChange={(open: boolean) => {
                     if (!open) {
                         setSelectedRecord(null)
                     }
