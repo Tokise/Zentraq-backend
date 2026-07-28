@@ -205,7 +205,7 @@ export function MonthCalendar({
                                     className={`
                     flex items-center justify-center rounded-full text-xs font-medium size-6
                     ${!inCurrentMonth ? "text-zinc-300" : isPast ? "text-zinc-300" : "text-zinc-700"}
-                    ${isToday ? "bg-zinc-900 text-white font-semibold" : ""}
+                    ${isToday ? "bg-zinc-900/10 text-zinc-900 font-semibold" : ""}
                     ${isSelected && !isToday && inCurrentMonth ? "ring-1 ring-blue-400 text-blue-700" : ""}
                   `}
                                 >
