@@ -13,14 +13,20 @@ export default async function DashboardLayout({
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
   const { data: { user } } = await supabase.auth.getUser()
-  const userRole = user ? await getUserRole(user.id) : "nurse"
+
+  // Not logged in — redirect to login
+  if (!user) {
+    redirect("/login")
+  }
+
+  const userRole = await getUserRole(user.id)
 
   // If student, redirect to student portal
   if (isStudent(userRole)) {
     redirect("/student")
   }
 
-  // If admin, redirect to /admin (must be authenticated)
+  // Only allow clinic staff roles
   if (userRole !== "admin" && userRole !== "nurse" && userRole !== "doctor") {
     redirect("/login")
   }
