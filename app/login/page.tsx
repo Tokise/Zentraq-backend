@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { toast } from "sonner"
-import { CheckCircle2, Loader2 } from "lucide-react"
+import { CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react"
 import Image from "next/image"
 import NProgress from "nprogress"
 
@@ -17,6 +17,7 @@ export default function LoginPage() {
 
   const [isLoading, setIsLoading] = React.useState(false)
   const [isSuccess, setIsSuccess] = React.useState(false)
+  const [showPassword, setShowPassword] = React.useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -96,7 +97,7 @@ export default function LoginPage() {
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="name@example.com"
+                  placeholder="Enter your email address"
                   required
                   disabled={isLoading || isSuccess}
                   className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400"
@@ -111,14 +112,30 @@ export default function LoginPage() {
                   Password
                 </Label>
 
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  disabled={isLoading || isSuccess}
-                  className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    placeholder="Enter your password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    disabled={isLoading || isSuccess}
+                    className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    disabled={isLoading || isSuccess}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="size-3.5" />
+                    ) : (
+                      <Eye className="size-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
             </CardContent>
 

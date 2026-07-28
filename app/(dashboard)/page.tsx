@@ -1,6 +1,6 @@
 "use client"
 import Link from "next/link"
-import { ArrowRight, CalendarDays, Sparkles } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -36,10 +36,10 @@ import {
   recentConsultations,
 } from "@/lib/data/mock-dashboard"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { HeartPulse, Loader2, Stethoscope } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
+import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
 
 const CONSULT_PAGE_SIZE = 5
 const APPT_PAGE_SIZE = 5
@@ -149,11 +149,30 @@ export default function DashboardPage() {
     if (apptInFlight.current) return
     apptInFlight.current = true
     try {
-      const { data } = await supabase
+      // First try with the join to student_accounts
+      const { data, error } = await supabase
         .from("student_appointments")
         .select("*, student_accounts(first_name, last_name, student_number, employee_number)")
         .order("appointment_date", { ascending: true })
         .limit(50)
+
+      if (error) {
+        console.error("fetchAppointments supabase error (trying without join):", error.message)
+        // If RLS blocks the join, fall back to fetching appointments without the join
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("student_appointments")
+          .select("*")
+          .order("appointment_date", { ascending: true })
+          .limit(50)
+
+        if (fallbackError) {
+          console.error("fetchAppointments fallback error:", fallbackError.message)
+        } else if (fallbackData) {
+          setDbAppointments(fallbackData)
+        }
+        return
+      }
+
       if (data) setDbAppointments(data)
     } catch (err) {
       console.error("fetchAppointments error:", err)
@@ -351,6 +370,17 @@ export default function DashboardPage() {
     consultSafePage * CONSULT_PAGE_SIZE
   )
 
+  // Build calendar markers from all appointments
+  const markersByDate = useMemo(() => {
+    const map: Record<string, CalendarMarker[]> = {}
+    for (const apt of dbAppointments) {
+      const key = apt.appointment_date
+      if (!map[key]) map[key] = []
+      map[key].push({ status: apt.status })
+    }
+    return map
+  }, [dbAppointments])
+
   // Pagination for today's appointments
   const apptTotalPages = Math.max(1, Math.ceil(todaysAppointmentsList.length / APPT_PAGE_SIZE))
   const apptSafePage = Math.min(apptPage, apptTotalPages)
@@ -393,8 +423,43 @@ export default function DashboardPage() {
           value={liveStats.lowStockAlerts}
         />
       </div>
-
+      {/* Appointments + Today's Appointments row */}
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* Calendar - takes left column */}
+        <Card className="shadow-sm border-zinc-200/80">
+          <CardHeader>
+            <SectionHeader title="Appointment Calendar" description="Upcoming clinic schedule" />
+          </CardHeader>
+          <CardContent>
+            <MonthCalendar
+              selectedDate={todayDateKey()}
+              onSelectDate={(dateKey) => router.push(`/appointments/calendar?date=${dateKey}`)}
+              markersByDate={markersByDate}
+            />
+            <div className="flex items-center gap-3 pt-3 flex-wrap px-1">
+              {Object.entries({
+                pending: "bg-amber-400",
+                confirmed: "bg-blue-500",
+                completed: "bg-emerald-500",
+                cancelled: "bg-zinc-300",
+              }).map(([status, dot]) => (
+                <span key={status} className="flex items-center gap-1 text-[11px]  capitalize">
+                  <span className={`size-1.5 rounded-full bg-blue-500/20 ${dot}`} /> {status}
+                </span>
+              ))}
+            </div>
+            <div className="pt-3 flex justify-center">
+              <Link
+                href="/appointments/calendar"
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "")}
+              >
+                View Full Calendar
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Today's Appointments - takes right column */}
         <Card className="shadow-sm">
           <CardHeader>
             <SectionHeader title="Today's Appointments" />
@@ -446,7 +511,10 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+      </div>
 
+      {/* Waiting Patients + Consultation Trend row */}
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card className="shadow-sm">
           <CardHeader>
             <SectionHeader title="Waiting Patients" />
@@ -496,6 +564,30 @@ export default function DashboardPage() {
                 />
               </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <SectionHeader title="Consultation Trend" description="Last 7 days" />
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={consultationTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
+                <YAxis tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                  }}
+                />
+                <Bar dataKey="count" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
@@ -600,58 +692,6 @@ export default function DashboardPage() {
                 {insight}
               </p>
             ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <SectionHeader
-              title="Calendar"
-              description="Upcoming clinic schedule"
-            />
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border py-12">
-              <CalendarDays className="mb-3 size-8 text-muted-foreground" />
-              <p className="text-sm font-medium">
-                {todaysAppointmentsList.length} appointment{todaysAppointmentsList.length === 1 ? "" : "s"} today
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {todaysAppointmentsList.filter(a => a.status === "pending" || a.status === "confirmed").length} remaining
-              </p>
-              <Link
-                href="/appointments/calendar"
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-4")}
-              >
-                View Calendar
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardHeader>
-            <SectionHeader title="Consultation Trend" description="Last 7 days" />
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={consultationTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                <YAxis tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Bar dataKey="count" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
