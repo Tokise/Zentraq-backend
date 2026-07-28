@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, ShieldCheck } from "lucide-react"
+import { PasswordStrengthInput } from "@/components/password-strength-input"
+import { checkPassword } from "@/lib/validation/password"
 
 export default function StudentSettingsPage() {
     const supabase = createClient()
@@ -37,8 +37,10 @@ export default function StudentSettingsPage() {
 
     async function handleChangePassword(e: React.FormEvent) {
         e.preventDefault()
-        if (password.length < 8) {
-            toast.error("Password must be at least 8 characters")
+
+        const { valid, missing } = checkPassword(password)
+        if (!valid) {
+            toast.error(`Password needs: ${missing.join(", ")}`)
             return
         }
         if (password !== confirmPassword) {
@@ -59,6 +61,9 @@ export default function StudentSettingsPage() {
             setChangingPassword(false)
         }
     }
+
+    const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword
+    const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword
 
     return (
         <div className="space-y-6 max-w-xl mx-auto">
@@ -113,35 +118,46 @@ export default function StudentSettingsPage() {
 
             <Card className="shadow-sm">
                 <CardHeader>
-                    <CardTitle className="text-base">Change Password</CardTitle>
+                    <CardTitle className="text-base flex items-center gap-1.5">
+                        <ShieldCheck className="size-4 text-zinc-400" />
+                        Change Password
+                    </CardTitle>
                     <CardDescription>Update your account password</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleChangePassword} className="space-y-4">
+                        <PasswordStrengthInput
+                            label="New Password"
+                            id="new-password"
+                            value={password}
+                            onChange={setPassword}
+                            placeholder="Enter a new password"
+                        />
+
                         <div className="space-y-1.5">
-                            <Label className="text-xs">New Password</Label>
-                            <Input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Minimum 8 characters"
-                                minLength={8}
-                                required
-                                className="h-9"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">Confirm Password</Label>
-                            <Input
+                            <label className="text-xs font-medium text-zinc-700" htmlFor="confirm-password">
+                                Confirm Password
+                            </label>
+                            <input
+                                id="confirm-password"
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 placeholder="Re-enter new password"
-                                minLength={8}
+                                autoComplete="new-password"
                                 required
-                                className="h-9"
+                                className={`w-full h-9 px-3 rounded-md border bg-white text-sm focus:outline-none focus:ring-2 ${passwordsMismatch
+                                        ? "border-red-300 focus:ring-red-400/20"
+                                        : passwordsMatch
+                                            ? "border-emerald-300 focus:ring-emerald-400/20"
+                                            : "border-zinc-200 focus:ring-zinc-900/10"
+                                    }`}
                             />
+                            {passwordsMismatch && (
+                                <p className="text-[11px] text-red-500">Passwords do not match</p>
+                            )}
                         </div>
+
                         <Button
                             type="submit"
                             disabled={changingPassword}

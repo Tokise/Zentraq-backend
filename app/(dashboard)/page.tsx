@@ -24,12 +24,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { Pagination } from "@/components/pagination"
 import {
@@ -40,7 +34,6 @@ import {
   notifications,
   recentActivities,
   recentConsultations,
-  todaysAppointments,
 } from "@/lib/data/mock-dashboard"
 
 import { useState, useEffect, useCallback, useRef } from "react"
@@ -98,9 +91,10 @@ type ApptRow = {
   id: string
   patient_name: string
   time: string
-  type: string
+  reason: string
   status: string
-  appointment_time: string
+  appointment_date: string
+  time_slot: string
 }
 
 type LiveStats = {
@@ -114,8 +108,6 @@ export default function DashboardPage() {
   const router = useRouter()
   const [dbConsultations, setDbConsultations] = useState<any[]>([])
   const [dbAppointments, setDbAppointments] = useState<any[]>([])
-  const [selectedConsult, setSelectedConsult] = useState<ConsultRow | null>(null)
-  const [selectedAppt, setSelectedAppt] = useState<ApptRow | null>(null)
   const [consultPage, setConsultPage] = useState(1)
   const [apptPage, setApptPage] = useState(1)
   const [liveStats, setLiveStats] = useState<LiveStats>({
@@ -158,9 +150,9 @@ export default function DashboardPage() {
     apptInFlight.current = true
     try {
       const { data } = await supabase
-        .from("appointments")
-        .select("*")
-        .order("appointment_time", { ascending: true })
+        .from("student_appointments")
+        .select("*, student_accounts(first_name, last_name, student_number, employee_number)")
+        .order("appointment_date", { ascending: true })
         .limit(50)
       if (data) setDbAppointments(data)
     } catch (err) {
@@ -258,7 +250,7 @@ export default function DashboardPage() {
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "appointments" },
+        { event: "*", schema: "public", table: "student_appointments" },
         () => scheduleAppointments()
       )
       .on(
@@ -318,26 +310,38 @@ export default function DashboardPage() {
     (c) => c.status === "waiting"
   )
 
-  const rawAppointments = dbAppointments.length > 0
+  function todayDateKey() {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  }
+
+  const rawAppointments: ApptRow[] = dbAppointments.length > 0
     ? Array.from(
       new Map(
-        dbAppointments.map((a: any) => [
-          a.id,
-          {
-            id: a.id,
-            patient_name: a.patient_name,
-            time: new Date(a.appointment_time).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
-            type: a.appointment_type,
-            status: a.status,
-            appointment_time: a.appointment_time,
-          },
-        ])
+        dbAppointments.map((a: any) => {
+          const sa = a.student_accounts
+          const name = sa ? `${sa.first_name} ${sa.last_name}` : "Unknown"
+          return [
+            a.id,
+            {
+              id: a.id,
+              patient_name: name,
+              time: a.time_slot,
+              reason: a.reason || "—",
+              status: a.status,
+              appointment_date: a.appointment_date,
+              time_slot: a.time_slot,
+            },
+          ]
+        })
       ).values()
     )
-    : todaysAppointments.map(a => ({
-      ...a,
-      appointment_time: "",
-    }))
+    : []
+
+  // "Today's Appointments" card only shows today's date
+  const todaysAppointmentsList = rawAppointments.filter(
+    (a) => a.appointment_date === todayDateKey()
+  )
 
   // Pagination for consultations (only waiting)
   const consultTotalPages = Math.max(1, Math.ceil(waitingConsultations.length / CONSULT_PAGE_SIZE))
@@ -347,10 +351,10 @@ export default function DashboardPage() {
     consultSafePage * CONSULT_PAGE_SIZE
   )
 
-  // Pagination for appointments
-  const apptTotalPages = Math.max(1, Math.ceil(rawAppointments.length / APPT_PAGE_SIZE))
+  // Pagination for today's appointments
+  const apptTotalPages = Math.max(1, Math.ceil(todaysAppointmentsList.length / APPT_PAGE_SIZE))
   const apptSafePage = Math.min(apptPage, apptTotalPages)
-  const paginatedAppointments = rawAppointments.slice(
+  const paginatedAppointments = todaysAppointmentsList.slice(
     (apptSafePage - 1) * APPT_PAGE_SIZE,
     apptSafePage * APPT_PAGE_SIZE
   )
@@ -407,7 +411,7 @@ export default function DashboardPage() {
                     <TableRow>
                       <TableHead>Patient</TableHead>
                       <TableHead>Time</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead>Reason</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -416,11 +420,11 @@ export default function DashboardPage() {
                       <TableRow
                         key={appt.id}
                         className="cursor-pointer"
-                        onClick={() => setSelectedAppt(appt)}
+                        onClick={() => router.push(`/appointments/calendar?date=${appt.appointment_date}`)}
                       >
                         <TableCell className="font-medium">{appt.patient_name}</TableCell>
                         <TableCell>{appt.time}</TableCell>
-                        <TableCell>{appt.type}</TableCell>
+                        <TableCell className="max-w-[160px] truncate">{appt.reason}</TableCell>
                         <TableCell>
                           <StatusBadge status={appointmentStatusVariant(appt.status)}>
                             {appt.status.replace("_", " ")}
@@ -434,7 +438,7 @@ export default function DashboardPage() {
                 <Pagination
                   currentPage={apptSafePage}
                   totalPages={apptTotalPages}
-                  totalItems={rawAppointments.length}
+                  totalItems={todaysAppointmentsList.length}
                   pageSize={APPT_PAGE_SIZE}
                   onPageChange={setApptPage}
                 />
@@ -611,8 +615,12 @@ export default function DashboardPage() {
           <CardContent>
             <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border py-12">
               <CalendarDays className="mb-3 size-8 text-muted-foreground" />
-              <p className="text-sm font-medium">5 appointments today</p>
-              <p className="mt-1 text-xs text-muted-foreground">3 remaining this afternoon</p>
+              <p className="text-sm font-medium">
+                {todaysAppointmentsList.length} appointment{todaysAppointmentsList.length === 1 ? "" : "s"} today
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {todaysAppointmentsList.filter(a => a.status === "pending" || a.status === "confirmed").length} remaining
+              </p>
               <Link
                 href="/appointments/calendar"
                 className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-4")}
@@ -648,51 +656,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Consultation Detail Modal — only for appointments now */}
-      <Dialog
-        open={selectedAppt !== null}
-        onOpenChange={(open) => { if (!open) setSelectedAppt(null) }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Appointment Details</DialogTitle>
-          </DialogHeader>
-          {selectedAppt && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Patient</p>
-                  <p className="text-sm font-medium">{selectedAppt.patient_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <StatusBadge status={appointmentStatusVariant(selectedAppt.status)} className="mt-0.5">
-                    {selectedAppt.status.replace("_", " ")}
-                  </StatusBadge>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Type</p>
-                <p className="text-sm">{selectedAppt.type}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Time</p>
-                <p className="text-sm">{selectedAppt.time}</p>
-              </div>
-              {selectedAppt.appointment_time && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Scheduled</p>
-                  <p className="text-sm">
-                    {new Date(selectedAppt.appointment_time).toLocaleString("en-US", {
-                      dateStyle: "medium", timeStyle: "short",
-                    })}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
