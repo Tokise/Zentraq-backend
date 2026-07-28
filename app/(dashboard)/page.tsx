@@ -1,6 +1,6 @@
 "use client"
 import Link from "next/link"
-import { ArrowRight, CalendarDays, Sparkles } from "lucide-react"
+import { Sparkles } from "lucide-react"
 import {
   Bar,
   BarChart,
@@ -24,12 +24,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { Pagination } from "@/components/pagination"
 import {
@@ -40,13 +34,12 @@ import {
   notifications,
   recentActivities,
   recentConsultations,
-  todaysAppointments,
 } from "@/lib/data/mock-dashboard"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { HeartPulse, Loader2, Stethoscope } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
+import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
 
 const CONSULT_PAGE_SIZE = 5
 const APPT_PAGE_SIZE = 5
@@ -98,9 +91,10 @@ type ApptRow = {
   id: string
   patient_name: string
   time: string
-  type: string
+  reason: string
   status: string
-  appointment_time: string
+  appointment_date: string
+  time_slot: string
 }
 
 type LiveStats = {
@@ -114,8 +108,6 @@ export default function DashboardPage() {
   const router = useRouter()
   const [dbConsultations, setDbConsultations] = useState<any[]>([])
   const [dbAppointments, setDbAppointments] = useState<any[]>([])
-  const [selectedConsult, setSelectedConsult] = useState<ConsultRow | null>(null)
-  const [selectedAppt, setSelectedAppt] = useState<ApptRow | null>(null)
   const [consultPage, setConsultPage] = useState(1)
   const [apptPage, setApptPage] = useState(1)
   const [liveStats, setLiveStats] = useState<LiveStats>({
@@ -157,11 +149,30 @@ export default function DashboardPage() {
     if (apptInFlight.current) return
     apptInFlight.current = true
     try {
-      const { data } = await supabase
-        .from("appointments")
-        .select("*")
-        .order("appointment_time", { ascending: true })
+      // First try with the join to student_accounts
+      const { data, error } = await supabase
+        .from("student_appointments")
+        .select("*, student_accounts(first_name, last_name, student_number, employee_number)")
+        .order("appointment_date", { ascending: true })
         .limit(50)
+
+      if (error) {
+        console.error("fetchAppointments supabase error (trying without join):", error.message)
+        // If RLS blocks the join, fall back to fetching appointments without the join
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("student_appointments")
+          .select("*")
+          .order("appointment_date", { ascending: true })
+          .limit(50)
+
+        if (fallbackError) {
+          console.error("fetchAppointments fallback error:", fallbackError.message)
+        } else if (fallbackData) {
+          setDbAppointments(fallbackData)
+        }
+        return
+      }
+
       if (data) setDbAppointments(data)
     } catch (err) {
       console.error("fetchAppointments error:", err)
@@ -258,7 +269,7 @@ export default function DashboardPage() {
       )
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "appointments" },
+        { event: "*", schema: "public", table: "student_appointments" },
         () => scheduleAppointments()
       )
       .on(
@@ -318,26 +329,38 @@ export default function DashboardPage() {
     (c) => c.status === "waiting"
   )
 
-  const rawAppointments = dbAppointments.length > 0
+  function todayDateKey() {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  }
+
+  const rawAppointments: ApptRow[] = dbAppointments.length > 0
     ? Array.from(
       new Map(
-        dbAppointments.map((a: any) => [
-          a.id,
-          {
-            id: a.id,
-            patient_name: a.patient_name,
-            time: new Date(a.appointment_time).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
-            type: a.appointment_type,
-            status: a.status,
-            appointment_time: a.appointment_time,
-          },
-        ])
+        dbAppointments.map((a: any) => {
+          const sa = a.student_accounts
+          const name = sa ? `${sa.first_name} ${sa.last_name}` : "Unknown"
+          return [
+            a.id,
+            {
+              id: a.id,
+              patient_name: name,
+              time: a.time_slot,
+              reason: a.reason || "—",
+              status: a.status,
+              appointment_date: a.appointment_date,
+              time_slot: a.time_slot,
+            },
+          ]
+        })
       ).values()
     )
-    : todaysAppointments.map(a => ({
-      ...a,
-      appointment_time: "",
-    }))
+    : []
+
+  // "Today's Appointments" card only shows today's date
+  const todaysAppointmentsList = rawAppointments.filter(
+    (a) => a.appointment_date === todayDateKey()
+  )
 
   // Pagination for consultations (only waiting)
   const consultTotalPages = Math.max(1, Math.ceil(waitingConsultations.length / CONSULT_PAGE_SIZE))
@@ -347,10 +370,21 @@ export default function DashboardPage() {
     consultSafePage * CONSULT_PAGE_SIZE
   )
 
-  // Pagination for appointments
-  const apptTotalPages = Math.max(1, Math.ceil(rawAppointments.length / APPT_PAGE_SIZE))
+  // Build calendar markers from all appointments
+  const markersByDate = useMemo(() => {
+    const map: Record<string, CalendarMarker[]> = {}
+    for (const apt of dbAppointments) {
+      const key = apt.appointment_date
+      if (!map[key]) map[key] = []
+      map[key].push({ status: apt.status })
+    }
+    return map
+  }, [dbAppointments])
+
+  // Pagination for today's appointments
+  const apptTotalPages = Math.max(1, Math.ceil(todaysAppointmentsList.length / APPT_PAGE_SIZE))
   const apptSafePage = Math.min(apptPage, apptTotalPages)
-  const paginatedAppointments = rawAppointments.slice(
+  const paginatedAppointments = todaysAppointmentsList.slice(
     (apptSafePage - 1) * APPT_PAGE_SIZE,
     apptSafePage * APPT_PAGE_SIZE
   )
@@ -389,8 +423,43 @@ export default function DashboardPage() {
           value={liveStats.lowStockAlerts}
         />
       </div>
-
+      {/* Appointments + Today's Appointments row */}
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* Calendar - takes left column */}
+        <Card className="shadow-sm border-zinc-200/80">
+          <CardHeader>
+            <SectionHeader title="Appointment Calendar" description="Upcoming clinic schedule" />
+          </CardHeader>
+          <CardContent>
+            <MonthCalendar
+              selectedDate={todayDateKey()}
+              onSelectDate={(dateKey) => router.push(`/appointments/calendar?date=${dateKey}`)}
+              markersByDate={markersByDate}
+            />
+            <div className="flex items-center gap-3 pt-3 flex-wrap px-1">
+              {Object.entries({
+                pending: "bg-amber-400",
+                confirmed: "bg-blue-500",
+                completed: "bg-emerald-500",
+                cancelled: "bg-zinc-300",
+              }).map(([status, dot]) => (
+                <span key={status} className="flex items-center gap-1 text-[11px]  capitalize">
+                  <span className={`size-1.5 rounded-full bg-blue-500/20 ${dot}`} /> {status}
+                </span>
+              ))}
+            </div>
+            <div className="pt-3 flex justify-center">
+              <Link
+                href="/appointments/calendar"
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "")}
+              >
+                View Full Calendar
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Today's Appointments - takes right column */}
         <Card className="shadow-sm">
           <CardHeader>
             <SectionHeader title="Today's Appointments" />
@@ -407,7 +476,7 @@ export default function DashboardPage() {
                     <TableRow>
                       <TableHead>Patient</TableHead>
                       <TableHead>Time</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead>Reason</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -416,11 +485,11 @@ export default function DashboardPage() {
                       <TableRow
                         key={appt.id}
                         className="cursor-pointer"
-                        onClick={() => setSelectedAppt(appt)}
+                        onClick={() => router.push(`/appointments/calendar?date=${appt.appointment_date}`)}
                       >
                         <TableCell className="font-medium">{appt.patient_name}</TableCell>
                         <TableCell>{appt.time}</TableCell>
-                        <TableCell>{appt.type}</TableCell>
+                        <TableCell className="max-w-[160px] truncate">{appt.reason}</TableCell>
                         <TableCell>
                           <StatusBadge status={appointmentStatusVariant(appt.status)}>
                             {appt.status.replace("_", " ")}
@@ -434,7 +503,7 @@ export default function DashboardPage() {
                 <Pagination
                   currentPage={apptSafePage}
                   totalPages={apptTotalPages}
-                  totalItems={rawAppointments.length}
+                  totalItems={todaysAppointmentsList.length}
                   pageSize={APPT_PAGE_SIZE}
                   onPageChange={setApptPage}
                 />
@@ -442,7 +511,10 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+      </div>
 
+      {/* Waiting Patients + Consultation Trend row */}
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card className="shadow-sm">
           <CardHeader>
             <SectionHeader title="Waiting Patients" />
@@ -492,6 +564,30 @@ export default function DashboardPage() {
                 />
               </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <SectionHeader title="Consultation Trend" description="Last 7 days" />
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={consultationTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
+                <YAxis tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "6px",
+                    fontSize: "12px",
+                  }}
+                />
+                <Bar dataKey="count" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
@@ -600,99 +696,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <SectionHeader
-              title="Calendar"
-              description="Upcoming clinic schedule"
-            />
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-border py-12">
-              <CalendarDays className="mb-3 size-8 text-muted-foreground" />
-              <p className="text-sm font-medium">5 appointments today</p>
-              <p className="mt-1 text-xs text-muted-foreground">3 remaining this afternoon</p>
-              <Link
-                href="/appointments/calendar"
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-4")}
-              >
-                View Calendar
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardHeader>
-            <SectionHeader title="Consultation Trend" description="Last 7 days" />
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={consultationTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                <YAxis tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Bar dataKey="count" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Consultation Detail Modal — only for appointments now */}
-      <Dialog
-        open={selectedAppt !== null}
-        onOpenChange={(open) => { if (!open) setSelectedAppt(null) }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Appointment Details</DialogTitle>
-          </DialogHeader>
-          {selectedAppt && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Patient</p>
-                  <p className="text-sm font-medium">{selectedAppt.patient_name}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <StatusBadge status={appointmentStatusVariant(selectedAppt.status)} className="mt-0.5">
-                    {selectedAppt.status.replace("_", " ")}
-                  </StatusBadge>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Type</p>
-                <p className="text-sm">{selectedAppt.type}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Time</p>
-                <p className="text-sm">{selectedAppt.time}</p>
-              </div>
-              {selectedAppt.appointment_time && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Scheduled</p>
-                  <p className="text-sm">
-                    {new Date(selectedAppt.appointment_time).toLocaleString("en-US", {
-                      dateStyle: "medium", timeStyle: "short",
-                    })}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

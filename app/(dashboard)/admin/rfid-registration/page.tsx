@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
 import { createStudentAccount, resetStudentPassword } from "./actions"
+import { PasswordStrengthInput } from "@/components/password-strength-input"
+import { checkPassword } from "@/lib/validation/password"
 import {
   Camera,
   CameraOff,
@@ -81,7 +83,6 @@ export default function RfidRegistrationPage() {
   // Reset password (for profiles that already have a linked account)
   const [showResetForm, setShowResetForm] = useState(false)
   const [resetPassword, setResetPassword] = useState("")
-  const [showResetPassword, setShowResetPassword] = useState(false)
   const [resettingPassword, setResettingPassword] = useState(false)
 
   // UI
@@ -431,8 +432,9 @@ export default function RfidRegistrationPage() {
       toast.error("Please enter an email and password.")
       return
     }
-    if (accountPassword.length < 12) {
-      toast.error("Password must be at least 8 characters.")
+    const accountPasswordCheck = checkPassword(accountPassword)
+    if (!accountPasswordCheck.valid) {
+      toast.error(`Password needs: ${accountPasswordCheck.missing.join(", ")}`)
       return
     }
     if (!createdProfileId) return
@@ -523,8 +525,9 @@ export default function RfidRegistrationPage() {
       toast.error("Please enter an email and password.")
       return
     }
-    if (accountPassword.length < 12) {
-      toast.error("Password must be at least 8 characters.")
+    const editPasswordCheck = checkPassword(accountPassword)
+    if (!editPasswordCheck.valid) {
+      toast.error(`Password needs: ${editPasswordCheck.missing.join(", ")}`)
       return
     }
     if (!searchedProfile?.id) return
@@ -558,8 +561,9 @@ export default function RfidRegistrationPage() {
       toast.error("Please enter a new password.")
       return
     }
-    if (resetPassword.length < 12) {
-      toast.error("Password must be at least 12 characters.")
+    const resetPasswordCheck = checkPassword(resetPassword)
+    if (!resetPasswordCheck.valid) {
+      toast.error(`Password needs: ${resetPasswordCheck.missing.join(", ")}`)
       return
     }
     if (!searchedProfile?.id) return
@@ -574,11 +578,6 @@ export default function RfidRegistrationPage() {
 
       if (result.error) {
         toast.error(result.error)
-        // TEMP DEBUG — remove once the "Student account not found" issue is resolved
-        if ((result as any).debug) {
-          console.log("[resetStudentPassword debug]", (result as any).debug)
-          toast.error(`Debug: ${JSON.stringify((result as any).debug)}`, { duration: 15000 })
-        }
       } else {
         toast.success("Password reset successfully!")
         setAccountPassword(resetPassword)
@@ -1013,10 +1012,13 @@ export default function RfidRegistrationPage() {
                     <Label className="text-xs">Login Email</Label>
                     <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="student@school.edu" className="h-9" required />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Temporary Password</Label>
-                    <Input type={showPassword ? "text" : "password"} value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Minimum 12 characters" minLength={12} className="h-9" required />
-                  </div>
+                  <PasswordStrengthInput
+                    label="Temporary Password"
+                    id="account-password"
+                    value={accountPassword}
+                    onChange={setAccountPassword}
+                    placeholder="Create a temporary password"
+                  />
                 </div>
 
                 <div className="flex flex-col gap-2 pt-2 border-t border-zinc-100">
@@ -1296,26 +1298,13 @@ export default function RfidRegistrationPage() {
 
                       {showResetForm ? (
                         <div className="space-y-3 text-left pt-1">
-                          <div className="space-y-1.5">
-                            <Label className="text-xs">New Password</Label>
-                            <div className="relative">
-                              <Input
-                                type={showResetPassword ? "text" : "password"}
-                                value={resetPassword}
-                                onChange={(e) => setResetPassword(e.target.value)}
-                                placeholder="Minimum 12 characters"
-                                minLength={12}
-                                className="h-9 pr-9"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowResetPassword(!showResetPassword)}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-                              >
-                                {showResetPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                              </button>
-                            </div>
-                          </div>
+                          <PasswordStrengthInput
+                            label="New Password"
+                            id="reset-password"
+                            value={resetPassword}
+                            onChange={setResetPassword}
+                            placeholder="Create a new password"
+                          />
                           <div className="flex gap-2">
                             <Button
                               size="sm"
@@ -1364,10 +1353,13 @@ export default function RfidRegistrationPage() {
                           <Label className="text-xs">Login Email</Label>
                           <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="student@school.edu" className="h-9" required />
                         </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Temporary Password</Label>
-                          <Input type={showPassword ? "text" : "password"} value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="Minimum 12 characters" minLength={12} className="h-9" required />
-                        </div>
+                        <PasswordStrengthInput
+                          label="Temporary Password"
+                          id="edit-account-password"
+                          value={accountPassword}
+                          onChange={setAccountPassword}
+                          placeholder="Create a temporary password"
+                        />
                       </div>
 
                       <div className="flex flex-col gap-2 pt-2 border-t border-zinc-100">
