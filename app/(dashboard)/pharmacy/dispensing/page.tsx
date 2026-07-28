@@ -238,14 +238,14 @@ export default function DispensingPage() {
     )
   }, [filteredRecords, safePage])
 
-  const getStatusVariant = (status: DispensingRecord["status"]) => {
+  const getStatusVariant = (status: DispensingRecord["status"]): "success" | "warning" | "danger" | "info" | "default" => {
     switch (status) {
       case "Completed":
-        return "default"
+        return "success"
       case "Pending Review":
-        return "default"
+        return "warning"
       case "Cancelled":
-        return "default"
+        return "danger"
       default:
         return "default"
     }
