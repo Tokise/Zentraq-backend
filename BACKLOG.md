@@ -17,6 +17,37 @@
 
 ---
 
+## Iteration Overview
+
+```mermaid
+gantt
+    title ZenTraq Iteration History
+    dateFormat  YYYY-MM-DD
+    axisFormat  %b %d
+
+    section Foundation & Kiosk
+    Iteration 1 — Foundation     :i1, 2026-07-13, 1d
+    Iteration 2 — RFID Kiosk     :i2, 2026-07-17, 4d
+
+    section Auth & Core Modules
+    Iteration 3 — Git Workflow   :i3, 2026-07-22, 1d
+    Iteration 4 — Auth & Login   :i4, 2026-07-22, 1d
+    Iteration 5 — Clinic Accounts:i5, 2026-07-22, 1d
+    Iteration 6 — Consultations  :i6, 2026-07-24, 1d
+
+    section Advanced Features
+    Iteration 7 — Patients       :i7, 2026-07-25, 1d
+    Iteration 8 — Consultation Ex:i8, 2026-07-26, 1d
+    Iteration 9 — Appointments   :i9, 2026-07-27, 1d
+    Iteration 10 — Security & SP :i10, 2026-07-27, 1d
+
+    section Polish & Deployment
+    Iteration 11 — Admin & RBAC  :i11, 2026-07-28, 1d
+    Iteration 12 — Pharmacy & Pol:i12, 2026-07-28, 1d
+```
+
+---
+
 ## Iteration 1 — Project Foundation
 
 **Date:** July 13, 2026
