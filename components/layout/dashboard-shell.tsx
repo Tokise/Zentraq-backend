@@ -96,7 +96,7 @@ export function DashboardShell({
 
       {/* Mobile sidebar overlay */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setMobileOpen(false)}
@@ -112,75 +112,38 @@ export function DashboardShell({
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top header */}
-        <header className="flex h-14 items-center gap-2 border-b border-border bg-background px-3 md:px-4 shrink-0">
-          {/* Hamburger for mobile + sidebar toggle on desktop */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-9 shrink-0 cursor-pointer"
-            onClick={() => {
-              if (window.innerWidth < 1024) {
-                setMobileOpen(!mobileOpen)
-              } else {
-                setSidebarCollapsed(!sidebarCollapsed)
-              }
-            }}
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {sidebarCollapsed ? (
-              <ChevronRight className="size-4" />
-            ) : (
-              <ChevronLeft className="size-4" />
-            )}
-          </Button>
-
-          {/* Page title */}
-          <div className="hidden sm:block text-sm font-semibold text-foreground truncate min-w-0 max-w-[200px]">
-            {pageTitle}
-          </div>
-
-          {/* Search bar */}
-          <div className="flex-1 flex justify-center px-2">
-            <div
-              className={cn(
-                "relative w-full max-w-md transition-all duration-200",
-                searchFocused && "max-w-lg"
-              )}
+        <header className="flex h-14 items-center justify-between border-b border-border bg-background px-3 md:px-4 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Hamburger for mobile + sidebar toggle on desktop */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9 shrink-0 cursor-pointer"
+              onClick={() => {
+                if (window.innerWidth < 1024) {
+                  setMobileOpen(!mobileOpen)
+                } else {
+                  setSidebarCollapsed(!sidebarCollapsed)
+                }
+              }}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                ref={searchRef}
-                type="text"
-                placeholder="Search patients, records... (Ctrl+K)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setSearchQuery("")
-                    searchRef.current?.blur()
-                  }
-                }}
-                className="h-8 pl-9 pr-3 text-xs rounded-full bg-muted/40 border-0 focus-visible:ring-1 focus-visible:ring-ring"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => {
-                    setSearchQuery("")
-                    searchRef.current?.focus()
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  <X className="size-3" />
-                </button>
+              {sidebarCollapsed ? (
+                <ChevronRight className="size-4" />
+              ) : (
+                <ChevronLeft className="size-4" />
               )}
+            </Button>
+
+            {/* Page title */}
+            <div className="hidden sm:block text-sm font-semibold text-foreground truncate min-w-0 max-w-[200px]">
+              {pageTitle}
             </div>
           </div>
 
           {/* Right side: Notification bell + Avatar */}
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <NotificationDropdown userRole={userRole} />
 
             <DropdownMenu>

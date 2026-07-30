@@ -64,9 +64,19 @@ export function useSessionSecurity() {
 
         checkIntervalRef.current = setInterval(validateSession, SESSION_CHECK_INTERVAL)
 
+        const handlePageShow = async (event: PageTransitionEvent) => {
+            if (event.persisted) {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) {
+                    window.location.href = "/login"
+                }
+            }
+        }
+        window.addEventListener("pageshow", handlePageShow)
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === "SIGNED_OUT" || (!session && event !== "INITIAL_SESSION")) {
-                router.push("/login")
+                window.location.href = "/login"
             }
         })
 
@@ -74,6 +84,7 @@ export function useSessionSecurity() {
             if (timeoutRef.current) clearTimeout(timeoutRef.current)
             if (checkIntervalRef.current) clearInterval(checkIntervalRef.current)
             events.forEach((event) => window.removeEventListener(event, resetTimer))
+            window.removeEventListener("pageshow", handlePageShow)
             subscription.unsubscribe()
         }
     }, [resetTimer, router, supabase.auth])

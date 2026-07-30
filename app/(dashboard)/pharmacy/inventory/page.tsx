@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   Search,
   Calendar as CalendarIcon,
@@ -169,7 +169,11 @@ const MOCK_INVENTORY: InventoryItem[] = [
   },
 ]
 
+import { useSearchParams } from "next/navigation"
+
 export default function InventoryPage() {
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get("id") || searchParams.get("item")
   const [inventoryList, setInventoryList] = useState<InventoryItem[]>(MOCK_INVENTORY)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -178,6 +182,18 @@ export default function InventoryPage() {
 
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [page, setPage] = useState(1)
+
+  // Auto-pop up targeted inventory item detail modal when ?id= or ?item= parameter is present
+  useEffect(() => {
+    if (targetId && inventoryList.length > 0) {
+      const match = inventoryList.find(
+        (item) => item.id === targetId || item.item_code === targetId || item.medicine_name.toLowerCase().includes(targetId.toLowerCase())
+      )
+      if (match) {
+        setSelectedItem(match)
+      }
+    }
+  }, [targetId, inventoryList])
 
   // Today's date banner string
   const currentDateFormatted = useMemo(() => {
@@ -613,4 +629,4 @@ export default function InventoryPage() {
       </Dialog>
     </div>
   )
-}
+} 

@@ -11,16 +11,28 @@ import { fetchAnnouncementsWithPosters } from "@/lib/announcements"
 import { toast } from "sonner"
 import { Loader2, Plus, Pencil, Trash2, X, Check, ImagePlus, ImageOff } from "lucide-react"
 
+import { useSearchParams } from "next/navigation"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+
 const ANNOUNCEMENT_BUCKET = "announcement-images"
 
 export default function AdminClinicAnnouncementsPage() {
     const supabase = createClient()
+    const searchParams = useSearchParams()
+    const targetId = searchParams.get("id")
+
     const [announcements, setAnnouncements] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [submitting, setSubmitting] = useState(false)
     const [form, setForm] = useState({ title: "", content: "" })
+    const [selectedAnnModal, setSelectedAnnModal] = useState<any | null>(null)
 
     // Image handling
     const [imageFile, setImageFile] = useState<File | null>(null)
@@ -39,6 +51,16 @@ export default function AdminClinicAnnouncementsPage() {
     useEffect(() => {
         fetchAnnouncements()
     }, [supabase])
+
+    // Auto-pop up targeted announcement detail modal when ?id= parameter is present
+    useEffect(() => {
+        if (targetId && announcements.length > 0) {
+            const match = announcements.find((a) => a.id === targetId)
+            if (match) {
+                setSelectedAnnModal(match)
+            }
+        }
+    }, [targetId, announcements])
 
     function resetForm() {
         setForm({ title: "", content: "" })
@@ -222,12 +244,12 @@ export default function AdminClinicAnnouncementsPage() {
                                 <Label className="text-xs">Image (optional)</Label>
 
                                 {displayedPreview ? (
-                                    <div className="relative rounded-lg border border-zinc-200 overflow-hidden bg-zinc-50">
-                                        <img src={displayedPreview} alt="Preview" className="w-full max-h-64 object-cover" />
+                                    <div className="relative rounded-lg border border-zinc-200 overflow-hidden bg-zinc-50/50 p-1">
+                                        <img src={displayedPreview} alt="Preview" className="w-full h-auto max-h-[500px] object-contain rounded-md block mx-auto" />
                                         <button
                                             type="button"
                                             onClick={clearImage}
-                                            className="absolute top-2 right-2 size-7 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center cursor-pointer"
+                                            className="absolute top-2 right-2 size-7 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center cursor-pointer shadow-md"
                                         >
                                             <X className="size-3.5" />
                                         </button>
@@ -277,69 +299,107 @@ export default function AdminClinicAnnouncementsPage() {
                 </Card>
             )}
 
-            {loading ? (
-                <div className="space-y-4">
-                    {[1, 2, 3].map((i) => (
-                        <Card key={i} className="animate-pulse">
-                            <CardContent className="p-5">
-                                <div className="h-4 w-48 bg-zinc-100 rounded mb-3" />
-                                <div className="h-3 w-full bg-zinc-100 rounded mb-2" />
-                                <div className="h-3 w-3/4 bg-zinc-100 rounded" />
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            ) : announcements.length === 0 ? (
-                <Card>
-                    <CardContent className="py-12 text-center">
-                        <ImageOff className="size-6 text-zinc-300 mx-auto mb-2" />
-                        <p className="text-sm text-muted-foreground">No announcements yet</p>
-                    </CardContent>
-                </Card>
-            ) : (
-                <div className="space-y-4">
-                    {announcements.map((ann) => (
-                        <Card key={ann.id} className="shadow-sm overflow-hidden">
-                            {ann.image_url && (
-                                <div className="w-full max-h-64 overflow-hidden bg-zinc-100">
-                                    <img src={ann.image_url} alt={ann.title} className="w-full object-cover max-h-64" />
+            {!showForm && (
+                loading ? (
+                    <div className="space-y-4">
+                        {[1, 2, 3].map((i) => (
+                            <Card key={i} className="animate-pulse">
+                                <CardContent className="p-5">
+                                    <div className="h-4 w-48 bg-zinc-100 rounded mb-3" />
+                                    <div className="h-3 w-full bg-zinc-100 rounded mb-2" />
+                                    <div className="h-3 w-3/4 bg-zinc-100 rounded" />
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                ) : announcements.length === 0 ? (
+                    <Card>
+                        <CardContent className="py-12 text-center">
+                            <ImageOff className="size-6 text-zinc-300 mx-auto mb-2" />
+                            <p className="text-sm text-muted-foreground">No announcements yet</p>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <div className="space-y-6">
+                        {announcements.map((ann) => (
+                            <div key={ann.id} className="space-y-3">
+                                {/* Card for text content ON TOP */}
+                                <Card className="shadow-sm">
+                                    <CardHeader className="pb-2">
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex-1 min-w-0">
+                                                <CardTitle className="text-base font-semibold">{ann.title}</CardTitle>
+                                                <p className="text-xs text-muted-foreground mt-0.5">
+                                                    Posted {ann.created_at ? new Date(ann.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
+                                                    {ann.poster?.full_name ? ` by ${ann.poster.full_name}` : ""}
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-1 shrink-0 ml-4">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => startEdit(ann)}
+                                                    className="size-8 text-muted-foreground cursor-pointer"
+                                                >
+                                                    <Pencil className="size-3.5" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleDelete(ann.id)}
+                                                    className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                                                >
+                                                    <Trash2 className="size-3.5" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{ann.content}</p>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Full-length picture standalone below the text card */}
+                                {ann.image_url && (
+                                    <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-muted/20 p-1 shadow-sm">
+                                        <img
+                                            src={ann.image_url}
+                                            alt={ann.title}
+                                            className="w-full h-auto object-contain rounded-lg"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )
+            )}
+
+            {/* Targeted Announcement Detail Pop-up Dialog */}
+            {selectedAnnModal && (
+                <Dialog open={!!selectedAnnModal} onOpenChange={() => setSelectedAnnModal(null)}>
+                    <DialogContent className="sm:max-w-xl">
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-semibold">{selectedAnnModal.title}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3 py-2">
+                            <p className="text-xs text-muted-foreground">
+                                Posted {selectedAnnModal.created_at ? new Date(selectedAnnModal.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                                {selectedAnnModal.poster?.full_name ? ` by ${selectedAnnModal.poster.full_name}` : ""}
+                            </p>
+                            <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground">{selectedAnnModal.content}</p>
+                            {selectedAnnModal.image_url && (
+                                <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-muted/20 p-1 mt-2">
+                                    <img
+                                        src={selectedAnnModal.image_url}
+                                        alt={selectedAnnModal.title}
+                                        className="w-full h-auto object-contain rounded-lg"
+                                    />
                                 </div>
                             )}
-                            <CardHeader className="pb-2">
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1 min-w-0">
-                                        <CardTitle className="text-base">{ann.title}</CardTitle>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            Posted {ann.created_at ? new Date(ann.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
-                                            {ann.poster?.full_name ? ` by ${ann.poster.full_name}` : ""}
-                                        </p>
-                                    </div>
-                                    <div className="flex gap-1 shrink-0 ml-4">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => startEdit(ann)}
-                                            className="size-8 text-muted-foreground cursor-pointer"
-                                        >
-                                            <Pencil className="size-3.5" />
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => handleDelete(ann.id)}
-                                            className="size-8 text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                                        >
-                                            <Trash2 className="size-3.5" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-sm whitespace-pre-wrap">{ann.content}</p>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             )}
         </div>
     )

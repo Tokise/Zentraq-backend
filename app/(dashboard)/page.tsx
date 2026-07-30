@@ -423,175 +423,172 @@ export default function DashboardPage() {
           value={liveStats.lowStockAlerts}
         />
       </div>
-      {/* Appointments + Today's Appointments row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Calendar - takes left column */}
-        <Card className="shadow-sm border-zinc-200/80">
-          <CardHeader>
-            <SectionHeader title="Appointment Calendar" description="Upcoming clinic schedule" />
-          </CardHeader>
-          <CardContent>
-            <MonthCalendar
-              selectedDate={todayDateKey()}
-              onSelectDate={(dateKey) => router.push(`/appointments/calendar?date=${dateKey}`)}
-              markersByDate={markersByDate}
-            />
-            <div className="flex items-center gap-3 pt-3 flex-wrap px-1">
+      {/* 1. Full-Width Appointment Calendar Section */}
+      <Card className="shadow-sm border-zinc-200/80 w-full">
+        <CardHeader>
+          <SectionHeader title="Appointment Calendar" description="Upcoming clinic schedule" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <MonthCalendar
+            selectedDate={todayDateKey()}
+            onSelectDate={(dateKey) => router.push(`/appointments/calendar?date=${dateKey}`)}
+            markersByDate={markersByDate}
+          />
+          <div className="flex items-center justify-between gap-3 pt-2 flex-wrap px-1 border-t border-border/50">
+            <div className="flex items-center gap-4 flex-wrap">
               {Object.entries({
                 pending: "bg-amber-400",
                 confirmed: "bg-blue-500",
                 completed: "bg-emerald-500",
                 cancelled: "bg-zinc-300",
               }).map(([status, dot]) => (
-                <span key={status} className="flex items-center gap-1 text-[11px]  capitalize">
-                  <span className={`size-1.5 rounded-full bg-blue-500/20 ${dot}`} /> {status}
+                <span key={status} className="flex items-center gap-1.5 text-xs capitalize text-muted-foreground">
+                  <span className={`size-2 rounded-full ${dot}`} /> {status}
                 </span>
               ))}
             </div>
-            <div className="pt-3 flex justify-center">
-              <Link
-                href="/appointments/calendar"
-                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "")}
-              >
-                View Full Calendar
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+            <Link
+              href="/appointments/calendar"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              View Full Calendar
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* Today's Appointments - takes right column */}
-        <Card className="shadow-sm">
-          <CardHeader>
-            <SectionHeader title="Today's Appointments" />
-          </CardHeader>
-          <CardContent>
-            {paginatedAppointments.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No appointments scheduled.
-              </p>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Patient</TableHead>
-                      <TableHead>Time</TableHead>
-                      <TableHead>Reason</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedAppointments.map((appt) => (
-                      <TableRow
-                        key={appt.id}
-                        className="cursor-pointer"
-                        onClick={() => router.push(`/appointments/calendar?date=${appt.appointment_date}`)}
-                      >
-                        <TableCell className="font-medium">{appt.patient_name}</TableCell>
-                        <TableCell>{appt.time}</TableCell>
-                        <TableCell className="max-w-[160px] truncate">{appt.reason}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={appointmentStatusVariant(appt.status)}>
-                            {appt.status.replace("_", " ")}
-                          </StatusBadge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-                <Pagination
-                  currentPage={apptSafePage}
-                  totalPages={apptTotalPages}
-                  totalItems={todaysAppointmentsList.length}
-                  pageSize={APPT_PAGE_SIZE}
-                  onPageChange={setApptPage}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Waiting Patients + Consultation Trend row */}
+      {/* 2. Side-by-Side: Waiting Patients & Today's Appointments */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <SectionHeader title="Waiting Patients" />
-          </CardHeader>
-          <CardContent>
-            {paginatedConsultations.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No patients waiting.
-              </p>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Patient</TableHead>
-                      <TableHead>Complaint</TableHead>
-                      <TableHead>Time</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedConsultations.map((consult) => (
-                      <TableRow
-                        key={consult.id}
-                        className="cursor-pointer"
-                        onClick={() => router.push("/consultations")}
-                      >
-                        <TableCell className="font-medium">{consult.patient_name}</TableCell>
-                        <TableCell className="max-w-[180px] truncate">{consult.student_complaint}</TableCell>
-                        <TableCell>{consult.time}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={consultationStatusVariant(consult.status)}>
-                            {consult.status.replace("_", " ")}
-                          </StatusBadge>
-                        </TableCell>
+        {/* Waiting Patients Card with Pagination */}
+        <Card className="shadow-sm flex flex-col justify-between overflow-hidden">
+          <div>
+            <CardHeader>
+              <SectionHeader title="Waiting Patients" description="Live patient queue" />
+            </CardHeader>
+            <CardContent className="px-3 sm:px-6">
+              {paginatedConsultations.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No patients waiting.
+                </p>
+              ) : (
+                <div className="w-full overflow-hidden">
+                  <Table className="w-full table-fixed text-xs sm:text-sm">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[30%] px-2">Patient</TableHead>
+                        <TableHead className="w-[36%] px-2">Complaint</TableHead>
+                        <TableHead className="w-[18%] px-1 text-center">Time</TableHead>
+                        <TableHead className="w-[16%] px-1 text-right">Status</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-                <Pagination
-                  currentPage={consultSafePage}
-                  totalPages={consultTotalPages}
-                  totalItems={waitingConsultations.length}
-                  pageSize={CONSULT_PAGE_SIZE}
-                  onPageChange={setConsultPage}
-                />
-              </>
-            )}
-          </CardContent>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedConsultations.map((consult) => (
+                        <TableRow
+                          key={consult.id}
+                          className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() => router.push("/consultations")}
+                        >
+                          <TableCell className="font-medium truncate px-2 py-2.5" title={consult.patient_name}>
+                            {consult.patient_name}
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-2.5 text-muted-foreground" title={consult.student_complaint}>
+                            {consult.student_complaint}
+                          </TableCell>
+                          <TableCell className="text-center px-1 py-2.5 text-xs text-muted-foreground">
+                            {consult.time}
+                          </TableCell>
+                          <TableCell className="text-right px-1 py-2.5">
+                            <StatusBadge status={consultationStatusVariant(consult.status)} className="text-[10px] px-1.5 py-0.5">
+                              {consult.status.replace("_", " ")}
+                            </StatusBadge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </div>
+          {paginatedConsultations.length > 0 && (
+            <div className="p-4 pt-2 border-t border-border/40">
+              <Pagination
+                currentPage={consultSafePage}
+                totalPages={consultTotalPages}
+                totalItems={waitingConsultations.length}
+                pageSize={CONSULT_PAGE_SIZE}
+                onPageChange={setConsultPage}
+              />
+            </div>
+          )}
         </Card>
 
-        <Card className="shadow-sm">
-          <CardHeader>
-            <SectionHeader title="Consultation Trend" description="Last 7 days" />
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={consultationTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                <YAxis tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                  }}
-                />
-                <Bar dataKey="count" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
+        {/* Today's Appointments Card with Pagination */}
+        <Card className="shadow-sm flex flex-col justify-between overflow-hidden">
+          <div>
+            <CardHeader>
+              <SectionHeader title="Today's Appointments" description="Scheduled visits for today" />
+            </CardHeader>
+            <CardContent className="px-3 sm:px-6">
+              {paginatedAppointments.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No appointments scheduled.
+                </p>
+              ) : (
+                <div className="w-full overflow-hidden">
+                  <Table className="w-full table-fixed text-xs sm:text-sm">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[30%] px-2">Patient</TableHead>
+                        <TableHead className="w-[18%] px-1 text-center">Time</TableHead>
+                        <TableHead className="w-[36%] px-2">Reason</TableHead>
+                        <TableHead className="w-[16%] px-1 text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedAppointments.map((appt) => (
+                        <TableRow
+                          key={appt.id}
+                          className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() => router.push(`/appointments/calendar?date=${appt.appointment_date}`)}
+                        >
+                          <TableCell className="font-medium truncate px-2 py-2.5" title={appt.patient_name}>
+                            {appt.patient_name}
+                          </TableCell>
+                          <TableCell className="text-center px-1 py-2.5 text-xs text-muted-foreground">
+                            {appt.time}
+                          </TableCell>
+                          <TableCell className="truncate px-2 py-2.5 text-muted-foreground" title={appt.reason}>
+                            {appt.reason}
+                          </TableCell>
+                          <TableCell className="text-right px-1 py-2.5">
+                            <StatusBadge status={appointmentStatusVariant(appt.status)} className="text-[10px] px-1.5 py-0.5">
+                              {appt.status.replace("_", " ")}
+                            </StatusBadge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </div>
+          {paginatedAppointments.length > 0 && (
+            <div className="p-4 pt-2 border-t border-border/40">
+              <Pagination
+                currentPage={apptSafePage}
+                totalPages={apptTotalPages}
+                totalItems={todaysAppointmentsList.length}
+                pageSize={APPT_PAGE_SIZE}
+                onPageChange={setApptPage}
+              />
+            </div>
+          )}
         </Card>
       </div>
 
+      {/* 3. Alerts, Emergency, Notifications */}
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="shadow-sm">
           <CardHeader>
@@ -659,6 +656,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* 4. Recent Activities & AI Insights */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="shadow-sm">
           <CardHeader>
@@ -696,6 +694,30 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* 5. Full-Width Consultation Trend Section at the Very Bottom */}
+      <Card className="shadow-sm w-full">
+        <CardHeader>
+          <SectionHeader title="Consultation Trend" description="Last 7 days overview" />
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={consultationTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="date" tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
+              <YAxis tick={{ fontSize: 12, fill: "var(--muted-foreground)" }} />
+              <Tooltip
+                contentStyle={{
+                  background: "var(--card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                }}
+              />
+              <Bar dataKey="count" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
     </div>
   )
 }

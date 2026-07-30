@@ -65,8 +65,12 @@ function formatTime(iso: string) {
   })
 }
 
+import { useSearchParams } from "next/navigation"
+
 export default function ConsultationsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get("id")
   const supabase = createClient()
 
   const [consultations, setConsultations] = useState<ConsultationRecord[]>([])
@@ -118,7 +122,17 @@ export default function ConsultationsPage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [fetchConsultations, supabase])
+  }, [supabase, fetchConsultations])
+
+  // Auto-pop up the exact consultation detail when ?id= parameter is present
+  useEffect(() => {
+    if (targetId && consultations.length > 0) {
+      const match = consultations.find((c) => c.id === targetId)
+      if (match) {
+        setSelectedConsult(match)
+      }
+    }
+  }, [targetId, consultations])
 
   const fetchComplaints = useCallback(async () => {
     try {

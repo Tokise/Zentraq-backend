@@ -46,6 +46,7 @@ type RecordStatus = "Cleared" | "Completed" | "Cancelled" | "No-Show"
 
 type ClearedRecord = {
     id: string
+    queue_number: string
     clearance_code: string
     student_number: string
     patient_name: string
@@ -61,7 +62,12 @@ type ClearedRecord = {
 
 const PAGE_SIZE = 8
 
+import { useSearchParams } from "next/navigation"
+
 export default function ClearedPage() {
+    const searchParams = useSearchParams()
+    const targetId = searchParams.get("id") || searchParams.get("code")
+
     const [clearedRecords, setClearedRecords] = useState<ClearedRecord[]>([])
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedDate, setSelectedDate] = useState<string>("")
@@ -76,6 +82,18 @@ export default function ClearedPage() {
     const [page, setPage] = useState(1)
 
     const [loading, setLoading] = useState(true)
+
+    // Auto-pop up targeted cleared record detail modal when ?id= or ?code= parameter is present
+    useEffect(() => {
+        if (targetId && clearedRecords.length > 0) {
+            const match = clearedRecords.find(
+                (r) => r.id === targetId || r.clearance_code === targetId || r.queue_number === targetId || r.patient_name.toLowerCase().includes(targetId.toLowerCase())
+            )
+            if (match) {
+                setSelectedRecord(match)
+            }
+        }
+    }, [targetId, clearedRecords])
 
     const currentDateFormatted = useMemo(() => {
         return new Date().toLocaleDateString("en-US", {
@@ -92,33 +110,49 @@ export default function ClearedPage() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
-            // Fetch completed consultations
-            const { data: consultations, error } = await supabase
-                .from("consultations")
-                .select("*")
-                .in("status", ["completed", "cancelled"])
-                .order("created_at", { ascending: false })
+            // Fetch completed consultations and student accounts
+            const [consultationsRes, studentsRes] = await Promise.all([
+                supabase.from("consultations").select("*").in("status", ["completed", "cancelled", "dismissed"]).order("created_at", { ascending: false }),
+                supabase.from("student_accounts").select("id, user_id, student_number, employee_number, department"),
+            ])
 
-            if (error) {
+            if (consultationsRes.error) {
                 toast.error("Failed to load records")
                 setLoading(false)
                 return
             }
 
-            const records: ClearedRecord[] = (consultations || []).map((c, idx) => ({
-                id: c.id,
-                clearance_code: `CLR-2026-${String(idx + 1).padStart(3, "0")}`,
-                student_number: c.patient_name || "N/A",
-                patient_name: c.patient_name || "Unknown",
-                department: c.department || "N/A",
-                purpose: c.student_complaint || c.consultation_reason || "Consultation",
-                cleared_date: c.created_at ? c.created_at.split("T")[0] : "",
-                cleared_time: c.created_at ? new Date(c.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "",
-                cleared_by: c.doctor_name || c.nurse_name || "Clinic Staff",
-                clearance_type: (c.clearance_type as ClearedRecord["clearance_type"]) || "Routine Consultation",
-                status: c.status === "cancelled" ? "Cancelled" : "Completed",
-                remarks: c.remarks || null,
-            }))
+            const studentMap = new Map<string, { student_number: string; department: string }>()
+            studentsRes.data?.forEach((s: any) => {
+                const num = s.student_number || s.employee_number || ""
+                const dept = s.department || "General"
+                if (s.id) studentMap.set(s.id, { student_number: num, department: dept })
+                if (s.user_id) studentMap.set(s.user_id, { student_number: num, department: dept })
+            })
+
+            const consultations = consultationsRes.data || []
+            const records: ClearedRecord[] = consultations.map((c, idx) => {
+                const studMeta = c.profile_id ? studentMap.get(c.profile_id) : null
+                const realStudentNum = studMeta?.student_number || c.student_number || "Walk-In"
+                const realDept = studMeta?.department || c.department || "General"
+                const qNum = c.queue_number || `Q-${String(consultations.length - idx).padStart(3, "0")}`
+
+                return {
+                    id: c.id,
+                    queue_number: qNum,
+                    clearance_code: `CLR-2026-${String(consultations.length - idx).padStart(3, "0")}`,
+                    student_number: realStudentNum,
+                    patient_name: c.patient_name || "Unknown",
+                    department: realDept,
+                    purpose: c.student_complaint || c.consultation_reason || "Consultation",
+                    cleared_date: c.created_at ? c.created_at.split("T")[0] : "",
+                    cleared_time: c.created_at ? new Date(c.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "",
+                    cleared_by: c.doctor_name || c.nurse_name || "Clinic Staff",
+                    clearance_type: (c.clearance_type as ClearedRecord["clearance_type"]) || "Routine Consultation",
+                    status: c.status === "cancelled" ? "Cancelled" : "Completed",
+                    remarks: c.remarks || null,
+                }
+            })
 
             setClearedRecords(records)
             setLoading(false)
@@ -135,6 +169,7 @@ export default function ClearedPage() {
             result = result.filter((item) => {
                 const name = item.patient_name?.toLowerCase() ?? ""
                 const studentNum = item.student_number?.toLowerCase() ?? ""
+                const qCode = item.queue_number?.toLowerCase() ?? ""
                 const code = item.clearance_code?.toLowerCase() ?? ""
                 const dept = item.department?.toLowerCase() ?? ""
                 const staff = item.cleared_by?.toLowerCase() ?? ""
@@ -143,6 +178,7 @@ export default function ClearedPage() {
                 return (
                     name.includes(keyword) ||
                     studentNum.includes(keyword) ||
+                    qCode.includes(keyword) ||
                     code.includes(keyword) ||
                     dept.includes(keyword) ||
                     staff.includes(keyword) ||
@@ -211,32 +247,11 @@ export default function ClearedPage() {
         switch (status) {
             case "Cleared":
             case "Completed":
-                return (
-                    <StatusBadge status="success">
-                        <span className="flex items-center gap-1">
-                            <CheckCircle2 className="size-3 inline" />
-                            {status}
-                        </span>
-                    </StatusBadge>
-                )
+                return <StatusBadge status="success">Completed</StatusBadge>
             case "Cancelled":
-                return (
-                    <StatusBadge status="danger">
-                        <span className="flex items-center gap-1">
-                            <XCircle className="size-3 inline" />
-                            Cancelled
-                        </span>
-                    </StatusBadge>
-                )
+                return <StatusBadge status="danger">Cancelled</StatusBadge>
             case "No-Show":
-                return (
-                    <StatusBadge status="warning">
-                        <span className="flex items-center gap-1">
-                            <AlertTriangle className="size-3 inline" />
-                            No-Show
-                        </span>
-                    </StatusBadge>
-                )
+                return <StatusBadge status="warning">No-Show</StatusBadge>
             default:
                 return <StatusBadge status="default">{status}</StatusBadge>
         }
@@ -250,16 +265,27 @@ export default function ClearedPage() {
                 <span>Today: {currentDateFormatted}</span>
             </div>
 
-            <PageHeader
-                title="Cleared Consultations & Slips"
-                description="View archived completed visits, medical clearance certificates, and status logs."
-            />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <PageHeader
+                    title="Cleared Patients & Clearance Archive"
+                    description="View and verify historical consultation records, medical clearances, and generated certificates."
+                />
+
+                <Button
+                    variant="outline"
+                    className="flex items-center gap-2 border-primary/20 text-primary hover:bg-primary/5"
+                    onClick={() => toast.info("Exporting clearance log report...")}
+                >
+                    <Download className="size-4" />
+                    <span>Export Clearance Log</span>
+                </Button>
+            </div>
 
             <Card className="shadow-sm">
                 <CardHeader>
                     <SectionHeader
-                        title="Cleared Patient Directory"
-                        description={`${filteredAndSortedRecords.length} patient record(s)`}
+                        title="Cleared Patients Registry"
+                        description={`${filteredAndSortedRecords.length} completed clearance record(s)`}
                     />
 
                     {/* Filter & Sorting Toolbar */}
@@ -268,7 +294,7 @@ export default function ClearedPage() {
                         <div className="relative min-w-[220px] flex-1 sm:flex-none sm:w-64">
                             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Search code, student, staff..."
+                                placeholder="Search code, queue, student..."
                                 value={searchQuery}
                                 onChange={(e) => {
                                     setSearchQuery(e.target.value)
@@ -371,6 +397,7 @@ export default function ClearedPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <TableHead>Queue No.</TableHead>
                                         <TableHead>Clearance Code</TableHead>
                                         <TableHead>Student No.</TableHead>
                                         <TableHead>Patient Name</TableHead>
@@ -387,7 +414,10 @@ export default function ClearedPage() {
                                             className="cursor-pointer hover:bg-muted/50"
                                             onClick={() => setSelectedRecord(item)}
                                         >
-                                            <TableCell className="font-bold text-emerald-600">
+                                            <TableCell className="font-bold text-primary">
+                                                {item.queue_number}
+                                            </TableCell>
+                                            <TableCell className="font-semibold text-emerald-600">
                                                 {item.clearance_code}
                                             </TableCell>
                                             <TableCell>{item.student_number}</TableCell>

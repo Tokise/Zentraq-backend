@@ -30,8 +30,8 @@ export default function StudentDashboard() {
 
                 setProfile(studentData)
 
-                // Load recent announcements
-                const announcementData = await fetchAnnouncementsWithPosters(supabase, { limit: 4 })
+                // Load recent announcements (latest 5)
+                const announcementData = await fetchAnnouncementsWithPosters(supabase, { limit: 5 })
 
                 setAnnouncements(announcementData)
             } catch (err) {
@@ -127,25 +127,34 @@ export default function StudentDashboard() {
                         </CardContent>
                     </Card>
                 ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-6">
                         {announcements.map((ann) => (
-                            <Card key={ann.id} className="shadow-sm overflow-hidden">
+                            <div key={ann.id} className="space-y-2">
+                                {/* Card for text content ON TOP */}
+                                <Card className="shadow-sm">
+                                    <CardHeader className="pb-1.5">
+                                        <CardTitle className="text-sm font-semibold">{ann.title}</CardTitle>
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {ann.created_at ? new Date(ann.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                                            {ann.poster?.full_name ? ` • ${ann.poster.full_name}` : ""}
+                                        </p>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="text-sm text-zinc-700 leading-relaxed whitespace-pre-wrap">{ann.content}</p>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Full-length picture standalone below the text card */}
                                 {ann.image_url && (
-                                    <div className="w-full max-h-56 overflow-hidden bg-zinc-100">
-                                        <img src={ann.image_url} alt={ann.title} className="w-full object-cover max-h-56" />
+                                    <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-muted/20 p-1 shadow-sm">
+                                        <img
+                                            src={ann.image_url}
+                                            alt={ann.title}
+                                            className="w-full h-auto object-contain rounded-lg"
+                                        />
                                     </div>
                                 )}
-                                <CardHeader className="pb-1.5">
-                                    <CardTitle className="text-sm">{ann.title}</CardTitle>
-                                    <p className="text-[11px] text-muted-foreground">
-                                        {ann.created_at ? new Date(ann.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
-                                        {ann.poster?.full_name ? ` • ${ann.poster.full_name}` : ""}
-                                    </p>
-                                </CardHeader>
-                                <CardContent className="pt-0">
-                                    <p className="text-sm text-zinc-600 line-clamp-3 whitespace-pre-wrap">{ann.content}</p>
-                                </CardContent>
-                            </Card>
+                            </div>
                         ))}
                     </div>
                 )}
