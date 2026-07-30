@@ -44,8 +44,12 @@ type MedicalRecord = {
 
 const PAGE_SIZE = 8
 
+import { useSearchParams } from "next/navigation"
+
 export default function MedicalRecordsPage() {
   const supabase = useMemo(() => createClient(), [])
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get("id") || searchParams.get("patient")
 
   const [records, setRecords] = useState<MedicalRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -90,6 +94,18 @@ export default function MedicalRecordsPage() {
       supabase.removeChannel(channel)
     }
   }, [fetchRecords, supabase])
+
+  // Auto-pop up targeted medical record detail modal when ?id= or ?patient= parameter is present
+  useEffect(() => {
+    if (targetId && records.length > 0) {
+      const match = records.find(
+        (r) => r.id === targetId || r.student_number === targetId || `${r.first_name} ${r.last_name}`.toLowerCase().includes(targetId.toLowerCase())
+      )
+      if (match) {
+        setSelectedRecord(match)
+      }
+    }
+  }, [targetId, records])
 
   const filteredRecords = records.filter((record) => {
     const keyword = searchQuery.toLowerCase().trim()

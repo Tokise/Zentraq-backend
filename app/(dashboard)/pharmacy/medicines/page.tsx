@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   Search,
   Pill,
@@ -198,7 +198,12 @@ const INITIAL_FORM_STATE: Omit<CatalogMedicine, "id"> = {
   description: "",
 }
 
+
+import { useSearchParams } from "next/navigation"
+
 export default function MedicinesPage() {
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get("id") || searchParams.get("item")
   const [catalog, setCatalog] = useState<CatalogMedicine[]>(MOCK_CATALOG)
   const [searchQuery, setSearchQuery] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
@@ -211,6 +216,18 @@ export default function MedicinesPage() {
   const [formData, setFormData] = useState<Omit<CatalogMedicine, "id">>(INITIAL_FORM_STATE)
 
   const [page, setPage] = useState(1)
+
+  // Auto-pop up targeted catalog medicine detail modal when ?id= or ?item= parameter is present
+  useEffect(() => {
+    if (targetId && catalog.length > 0) {
+      const match = catalog.find(
+        (m) => m.id === targetId || m.item_code === targetId || m.medicine_name.toLowerCase().includes(targetId.toLowerCase()) || m.generic_name.toLowerCase().includes(targetId.toLowerCase())
+      )
+      if (match) {
+        setSelectedItem(match)
+      }
+    }
+  }, [targetId, catalog])
 
   // Today's date banner string
   const currentDateFormatted = useMemo(() => {
@@ -591,8 +608,8 @@ export default function MedicinesPage() {
                       <TableCell className="align-middle">
                         <span
                           className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${item.prescription_type === "Prescription"
-                              ? "bg-purple-50 text-purple-700 border-purple-200"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            ? "bg-purple-50 text-purple-700 border-purple-200"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
                             }`}
                         >
                           {item.prescription_type === "Prescription" ? "Rx" : "OTC"}

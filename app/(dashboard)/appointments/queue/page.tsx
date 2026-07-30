@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import {
   Search,
   Users,
@@ -52,7 +52,7 @@ type QueueItem = {
   arrival_time: string
   status: "Waiting" | "In Consultation" | "Completed" | "Skipped"
   priority: "Normal" | "Urgent"
-  notes?: string
+  notes?: string | null
   entry_type?: "Walk-in" | "AI Scheduled"
 }
 
@@ -75,68 +75,203 @@ const DEFAULT_TIME_SLOTS: TimeSlot[] = [
   { time: "04:00 PM", bookedCount: 4, maxCapacity: 4 },
 ]
 
-const MOCK_QUEUE: QueueItem[] = [
-  {
-    id: "q-001",
-    queue_number: "Q-001",
-    student_number: "2023-00124",
-    patient_name: "John Doe",
-    department: "Computer Studies",
-    purpose: "Fever & Cold Consultation",
-    arrival_time: "08:15 AM",
-    status: "In Consultation",
-    priority: "Normal",
-    notes: "Patient checked in at front desk.",
-    entry_type: "Walk-in",
-  },
-  {
-    id: "q-002",
-    queue_number: "Q-002",
-    student_number: "2022-00582",
-    patient_name: "Jane Smith",
-    department: "Engineering",
-    purpose: "Blood Pressure Check",
-    arrival_time: "08:30 AM",
-    status: "Waiting",
-    priority: "Normal",
-    entry_type: "Walk-in",
-  },
-  {
-    id: "q-003",
-    queue_number: "Q-003",
-    student_number: "2021-00891",
-    patient_name: "Emily Davis",
-    department: "Business Administration",
-    purpose: "Severe Allergic Reaction",
-    arrival_time: "08:42 AM",
-    status: "Waiting",
-    priority: "Urgent",
-    notes: "AI Triage flagged for immediate doctor attention.",
-    entry_type: "AI Scheduled",
-  },
-  {
-    id: "q-004",
-    queue_number: "Q-004",
-    student_number: "2024-00045",
-    patient_name: "David Wilson",
-    department: "Arts & Sciences",
-    purpose: "Medical Certificate Clearance",
-    arrival_time: "08:50 AM",
-    status: "Waiting",
-    priority: "Normal",
-    entry_type: "Walk-in",
-  },
-]
+import { createClient } from "@/utils/supabase/client"
+import { toast } from "sonner"
+import { useSearchParams } from "next/navigation"
 
 export default function QueuePage() {
-  const [queueList, setQueueList] = useState<QueueItem[]>(MOCK_QUEUE)
+  const supabase = createClient()
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get("id") || searchParams.get("queue")
+
+  const [dbConsultations, setDbConsultations] = useState<any[]>([])
+  const [localQueueItems, setLocalQueueItems] = useState<QueueItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "Waiting" | "In Consultation" | "Completed" | "Skipped">("all")
+  const [priorityFilter, setPriorityFilter] = useState<string>("all")
   const [timeSortOrder, setTimeSortOrder] = useState<"asc" | "desc">("asc")
 
   const [selectedQueueItem, setSelectedQueueItem] = useState<QueueItem | null>(null)
   const [page, setPage] = useState(1)
 
+  // Reschedule Dialog State
+  const [rescheduleItem, setRescheduleItem] = useState<QueueItem | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState("")
+  const [rescheduleTime, setRescheduleTime] = useState("")
+
+  const [dbAppointments, setDbAppointments] = useState<any[]>([])
+
+  // Fetch Real Student Appointments from Supabase
+  const fetchRealQueue = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("student_appointments")
+        .select("*, student_accounts(first_name, last_name, student_number, employee_number, department)")
+        .order("appointment_date", { ascending: true })
+
+      if (!error && data) {
+        setDbAppointments(data)
+      }
+    } catch (err) {
+      console.error("Error fetching live student appointments queue from Supabase:", err)
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchRealQueue()
+
+    const channel = supabase
+      .channel("student-appointments-queue-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "student_appointments" },
+        () => fetchRealQueue()
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase, fetchRealQueue])
+
+  // Load any locally added walk-ins from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("clinic_queue_list")
+    if (saved) {
+      try {
+        setLocalQueueItems(JSON.parse(saved))
+      } catch (e) {
+        console.error("Failed to parse local queue state", e)
+      }
+    }
+  }, [])
+
+  // Combine Real Student Appointments DB + Local Walk-Ins into unified Queue List
+  // EXCLUDES Completed and Cancelled/Skipped appointments (which belong on the Cleared page)
+  const queueList = useMemo(() => {
+    const mappedDb: QueueItem[] = dbAppointments.map((apt: any, index: number) => {
+      const sa = apt.student_accounts
+      let status: QueueItem["status"] = "Waiting"
+      if (apt.status === "confirmed") status = "In Consultation"
+      else if (apt.status === "completed") status = "Completed"
+      else if (apt.status === "cancelled") status = "Skipped"
+
+      const name = sa ? `${sa.first_name} ${sa.last_name}` : "Student Patient"
+      const studentNum = sa ? (sa.student_number || sa.employee_number || "Walk-In") : "Walk-In"
+      const dept = sa?.department || "General"
+
+      return {
+        id: apt.id,
+        queue_number: `Q-${String(index + 1).padStart(3, "0")}`,
+        student_number: studentNum,
+        patient_name: name,
+        department: dept,
+        purpose: apt.reason || "Student Clinic Appointment",
+        arrival_time: apt.time_slot || "09:00 AM",
+        status,
+        priority: "Normal",
+        notes: apt.appointment_date ? `Scheduled for ${apt.appointment_date}` : null,
+        entry_type: "AI Scheduled",
+      }
+    })
+
+    // Deduplicate by ID
+    const combinedMap = new Map<string, QueueItem>()
+    mappedDb.forEach((item) => combinedMap.set(item.id, item))
+    localQueueItems.forEach((item) => combinedMap.set(item.id, item))
+
+    // Exclude Completed and Skipped/Cancelled tickets from active live queue
+    return Array.from(combinedMap.values()).filter((item) => item.status !== "Completed" && item.status !== "Skipped")
+  }, [dbAppointments, localQueueItems])
+
+  const saveLocalQueue = (newList: QueueItem[]) => {
+    setLocalQueueItems(newList)
+    localStorage.setItem("clinic_queue_list", JSON.stringify(newList))
+  }
+
+  // Auto-pop up targeted queue item detail modal when ?id= or ?queue= parameter is present
+  useEffect(() => {
+    if (targetId && queueList.length > 0) {
+      const match = queueList.find(
+        (q) => q.id === targetId || q.queue_number === targetId || q.patient_name.toLowerCase().includes(targetId.toLowerCase())
+      )
+      if (match) {
+        setSelectedQueueItem(match)
+      }
+    }
+  }, [targetId, queueList])
+
+  // Queue Item Actions
+  const handleConfirmQueue = async (id: string) => {
+    const target = queueList.find((q) => q.id === id)
+    if (!target) return
+    const nextStatus = target.status === "Waiting" ? "In Consultation" : "Completed"
+
+    // Update student_appointments in Supabase
+    const dbStatus = nextStatus === "In Consultation" ? "confirmed" : "completed"
+    await supabase.from("student_appointments").update({ status: dbStatus }).eq("id", id)
+
+    // Update local state
+    const updatedLocal = localQueueItems.map((q) => (q.id === id ? { ...q, status: nextStatus as any } : q))
+    saveLocalQueue(updatedLocal)
+    fetchRealQueue()
+
+    if (nextStatus === "Completed") {
+      toast.success(`Student Appointment ${target.queue_number} (${target.patient_name}) completed and moved to Cleared Patients!`)
+      setSelectedQueueItem(null)
+    } else {
+      toast.success(`Student Appointment ${target.queue_number} (${target.patient_name}) updated to "${nextStatus}"`)
+      if (selectedQueueItem?.id === id) {
+        setSelectedQueueItem((prev) => (prev ? { ...prev, status: nextStatus as any } : null))
+      }
+    }
+  }
+
+  const handleCancelQueue = async (id: string) => {
+    const target = queueList.find((q) => q.id === id)
+    if (!target) return
+
+    await supabase.from("student_appointments").update({ status: "cancelled" }).eq("id", id)
+
+    const updatedLocal = localQueueItems.map((q) => (q.id === id ? { ...q, status: "Skipped" as const } : q))
+    saveLocalQueue(updatedLocal)
+    fetchRealQueue()
+
+    toast.error(`Student Appointment ${target.queue_number} (${target.patient_name}) cancelled`)
+    if (selectedQueueItem?.id === id) {
+      setSelectedQueueItem((prev) => (prev ? { ...prev, status: "Skipped" } : null))
+    }
+  }
+
+  const handleOpenReschedule = (item: QueueItem) => {
+    setRescheduleItem(item)
+    setRescheduleDate(new Date().toISOString().split("T")[0])
+    setRescheduleTime(item.arrival_time || "09:00 AM")
+  }
+
+  const handleSaveReschedule = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!rescheduleItem) return
+
+    await supabase
+      .from("student_appointments")
+      .update({ appointment_date: rescheduleDate, time_slot: rescheduleTime })
+      .eq("id", rescheduleItem.id)
+
+    const updatedLocal = localQueueItems.map((q) =>
+      q.id === rescheduleItem.id
+        ? { ...q, arrival_time: rescheduleTime, notes: `Rescheduled to ${rescheduleDate} at ${rescheduleTime}` }
+        : q
+    )
+    saveLocalQueue(updatedLocal)
+    fetchRealQueue()
+
+    toast.success(`Rescheduled appointment ${rescheduleItem.queue_number} to ${rescheduleDate} at ${rescheduleTime}`)
+    setRescheduleItem(null)
+    if (selectedQueueItem?.id === rescheduleItem.id) {
+      setSelectedQueueItem((prev) => (prev ? { ...prev, arrival_time: rescheduleTime, notes: `Rescheduled to ${rescheduleDate} at ${rescheduleTime}` } : null))
+    }
+  }
   // AI Intake & Schedule Checker States
   const [isAiModalOpen, setIsAiModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"quick_walkin" | "ai_assistant">("quick_walkin")
@@ -165,20 +300,8 @@ export default function QueuePage() {
     })
   }, [])
 
-  useEffect(() => {
-    const savedQueue = localStorage.getItem("clinic_queue_list")
-    if (savedQueue) {
-      try {
-        setQueueList(JSON.parse(savedQueue))
-      } catch (e) {
-        console.error("Failed to parse queue state", e)
-      }
-    }
-  }, [])
-
   const saveQueueState = (newList: QueueItem[]) => {
-    setQueueList(newList)
-    localStorage.setItem("clinic_queue_list", JSON.stringify(newList))
+    saveLocalQueue(newList)
   }
 
   // Rapid Walk-In Manual Registration
@@ -186,7 +309,7 @@ export default function QueuePage() {
     e.preventDefault()
     if (!walkInName.trim()) return
 
-    const nextQueueNo = `Q-00${queueList.length + 1}`
+    const nextQueueNo = `Q-${String(queueList.length + 1).padStart(3, "0")}`
     const timeNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
     const newTicket: QueueItem = {
@@ -203,8 +326,8 @@ export default function QueuePage() {
       entry_type: "Walk-in",
     }
 
-    const updated = [newTicket, ...queueList]
-    saveQueueState(updated)
+    const updated = [newTicket, ...localQueueItems]
+    saveLocalQueue(updated)
 
     // Reset Form
     setWalkInName("")
@@ -507,17 +630,16 @@ export default function QueuePage() {
             </div>
           ) : (
             <>
-              <Table>
+              <Table className="w-full table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Queue No.</TableHead>
-                    <TableHead>Student No.</TableHead>
-                    <TableHead>Patient Name</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Purpose</TableHead>
-                    <TableHead>Arrival Time</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="w-[10%]">Queue No.</TableHead>
+                    <TableHead className="w-[15%]">Student No.</TableHead>
+                    <TableHead className="w-[20%]">Patient Name</TableHead>
+                    <TableHead className="w-[22%]">Department</TableHead>
+                    <TableHead className="w-[20%]">Purpose</TableHead>
+                    <TableHead className="w-[13%]">Arrival Time</TableHead>
+                    <TableHead className="w-[10%] text-right">Priority</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -527,40 +649,35 @@ export default function QueuePage() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => setSelectedQueueItem(item)}
                     >
-                      <TableCell className="font-bold text-primary">
+                      <TableCell className="font-bold text-primary whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           {item.queue_number}
                           {item.entry_type === "AI Scheduled" && (
-                            <Sparkles className="size-3 text-purple-600" />
+                            <Sparkles className="size-3 text-purple-600 shrink-0" />
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{item.student_number}</TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="truncate">{item.student_number}</TableCell>
+                      <TableCell className="font-medium truncate">
                         {item.patient_name}
                       </TableCell>
-                      <TableCell>{item.department}</TableCell>
-                      <TableCell>{item.purpose}</TableCell>
-                      <TableCell>
+                      <TableCell className="truncate text-muted-foreground">{item.department}</TableCell>
+                      <TableCell className="truncate text-muted-foreground">{item.purpose}</TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="size-3 inline" />
+                          <Clock className="size-3 inline shrink-0" />
                           {item.arrival_time}
                         </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         {item.priority === "Urgent" ? (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-destructive">
-                            <AlertCircle className="size-3.5" />
+                            <AlertCircle className="size-3.5 shrink-0" />
                             Urgent
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground">Normal</span>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={getStatusVariant(item.status)}>
-                          {item.status}
-                        </StatusBadge>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -583,41 +700,43 @@ export default function QueuePage() {
 
       {/* Flexible Walk-In & AI Registration Modal */}
       <Dialog open={isAiModalOpen} onOpenChange={setIsAiModalOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-indigo-600">
-              <UserPlus className="size-5" />
-              <span>Patient Intake & Walk-In Desk</span>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="size-5 text-indigo-600" />
+              <span>Register Patient Intake Ticket</span>
             </DialogTitle>
           </DialogHeader>
 
-          {/* Tab Selection Switcher */}
-          <div className="flex border-b border-muted">
+          {/* Tab Selection */}
+          <div className="grid grid-cols-2 gap-2 border-b pb-3">
             <button
               type="button"
               onClick={() => setActiveTab("quick_walkin")}
-              className={`pb-2 px-4 text-xs font-semibold transition-colors border-b-2 ${activeTab === "quick_walkin"
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+              className={`flex items-center justify-center gap-1.5 py-2 text-xs rounded-md font-medium transition-colors ${activeTab === "quick_walkin"
+                ? "bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200"
+                : "text-muted-foreground hover:bg-muted"
                 }`}
             >
-              Direct Walk-In Check-In
+              <UserPlus className="size-3.5" />
+              Quick Walk-In Registration
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("ai_assistant")}
-              className={`pb-2 px-4 text-xs font-semibold transition-colors border-b-2 flex items-center gap-1.5 ${activeTab === "ai_assistant"
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+              className={`flex items-center justify-center gap-1.5 py-2 text-xs rounded-md font-medium transition-colors ${activeTab === "ai_assistant"
+                ? "bg-purple-50 text-purple-700 font-semibold border border-purple-200"
+                : "text-muted-foreground hover:bg-muted"
                 }`}
             >
-              <Sparkles className="size-3.5" /> AI Triage & Slot Checker
+              <Bot className="size-3.5" />
+              Schedule Slot Availability
             </button>
           </div>
 
           {activeTab === "quick_walkin" ? (
-            /* Direct Walk-In Form */
-            <form onSubmit={handleQuickWalkIn} className="space-y-4 pt-2">
+            /* Quick Walk-In Form */
+            <form onSubmit={handleQuickWalkIn} className="space-y-3 pt-2">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground font-medium">Patient Full Name *</label>
@@ -683,7 +802,7 @@ export default function QueuePage() {
               </div>
             </form>
           ) : (
-            /* AI Schedule & Triage Interface */
+            /* Schedule Slot Availability */
             <div className="space-y-4 pt-2">
               <div className="rounded-lg border p-3 bg-muted/30 space-y-3">
                 <div className="flex items-center justify-between">
@@ -710,21 +829,18 @@ export default function QueuePage() {
                           key={slot.time}
                           type="button"
                           disabled={isFull}
-                          onClick={() => handleSelectSlot(slot)}
-                          className={`p-2 rounded border text-left transition-all text-xs flex flex-col justify-between h-14 ${isFull
-                            ? "bg-muted/80 text-muted-foreground border-transparent cursor-not-allowed opacity-60"
+                          onClick={() => setSelectedSlot(slot.time)}
+                          className={`p-2 rounded-md border text-left transition-all ${isFull
+                            ? "bg-muted/50 opacity-60 cursor-not-allowed border-muted"
                             : isSelected
-                              ? "border-indigo-600 bg-indigo-50/80 ring-2 ring-indigo-600 text-indigo-950 font-medium"
-                              : "bg-background hover:border-indigo-400 cursor-pointer"
+                              ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                              : "bg-background hover:border-purple-300"
                             }`}
                         >
-                          <div className="flex items-center justify-between w-full">
-                            <span className="font-semibold">{slot.time}</span>
-                            {isSelected && <CheckCircle2 className="size-3.5 text-indigo-600" />}
-                          </div>
-                          <span className="text-[10px] text-muted-foreground">
-                            {isFull ? "Fully Booked" : `${slot.maxCapacity - slot.bookedCount} slot(s) open`}
-                          </span>
+                          <p className="text-xs font-bold">{slot.time}</p>
+                          <p className={`text-[10px] ${isSelected ? "text-purple-100" : "text-muted-foreground"}`}>
+                            {isFull ? "Full" : `${slot.maxCapacity - slot.bookedCount} slots left`}
+                          </p>
                         </button>
                       )
                     })}
@@ -732,44 +848,23 @@ export default function QueuePage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <textarea
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  placeholder="e.g. Student 2024-00124 John Doe has high fever and severe headache..."
-                  className="w-full min-h-[90px] rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                />
-              </div>
-
-              {aiFeedback && (
-                <div className="p-3 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-md text-sm flex items-start gap-2">
-                  <Sparkles className="size-4 text-indigo-600 mt-0.5 shrink-0" />
-                  <span>{aiFeedback}</span>
+              {selectedSlot && (
+                <div className="rounded-md bg-purple-50 border border-purple-200 p-3 flex items-center justify-between text-xs text-purple-900">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="size-4 text-purple-600" />
+                    <span>Slot selected: <strong>{selectedSlot}</strong> on {checkDate}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setIsAiModalOpen(false)
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs h-7"
+                  >
+                    Confirm Booking
+                  </Button>
                 </div>
               )}
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <Button variant="outline" onClick={() => setIsAiModalOpen(false)}>
-                  Close
-                </Button>
-                <Button
-                  onClick={handleAiProcess}
-                  disabled={isAnalyzing || !aiPrompt.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2"
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <Sparkles className="size-4 animate-spin" />
-                      <span>Processing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Bot className="size-4" />
-                      <span>Confirm via AI</span>
-                    </>
-                  )}
-                </Button>
-              </div>
             </div>
           )}
         </DialogContent>
@@ -846,10 +941,91 @@ export default function QueuePage() {
                   </p>
                 </div>
               )}
+
+              {/* Centered Modal Action Buttons */}
+              <div className="flex items-center justify-center gap-2 pt-3 border-t border-border/40 w-full">
+                {selectedQueueItem.status !== "Completed" && selectedQueueItem.status !== "Skipped" && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleConfirmQueue(selectedQueueItem.id)}
+                    className="h-8 text-xs px-3 cursor-pointer"
+                  >
+                    Confirm
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleOpenReschedule(selectedQueueItem)}
+                  className="h-8 text-xs px-3 cursor-pointer"
+                >
+                  Reschedule Ticket
+                </Button>
+                {selectedQueueItem.status !== "Skipped" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleCancelQueue(selectedQueueItem.id)}
+                    className="h-8 text-xs px-3 text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                  >
+                    Cancel Ticket
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Dedicated Reschedule Ticket Dialog */}
+      {rescheduleItem && (
+        <Dialog open={!!rescheduleItem} onOpenChange={() => setRescheduleItem(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-base font-semibold">Reschedule Queue Ticket</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSaveReschedule} className="space-y-4 py-2">
+              <div className="rounded-md border p-3 bg-muted/30">
+                <p className="text-xs text-muted-foreground">Patient Name</p>
+                <p className="text-sm font-semibold">{rescheduleItem.patient_name} ({rescheduleItem.queue_number})</p>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground font-medium">New Target Date</label>
+                <Input
+                  type="date"
+                  required
+                  value={rescheduleDate}
+                  onChange={(e) => setRescheduleDate(e.target.value)}
+                  className="h-9 text-xs mt-1"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground font-medium">New Arrival / Time Slot</label>
+                <select
+                  value={rescheduleTime}
+                  onChange={(e) => setRescheduleTime(e.target.value)}
+                  className="w-full h-9 mt-1 rounded-md border border-input bg-background px-3 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {["08:00 AM", "08:30 AM", "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "01:00 PM", "01:30 PM", "02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM", "04:00 PM"].map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                <Button type="button" variant="outline" size="sm" onClick={() => setRescheduleItem(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm">
+                  Save Reschedule
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

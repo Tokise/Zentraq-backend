@@ -11,6 +11,14 @@ import { toast } from "sonner"
 import { CalendarDays, Loader2, X } from "lucide-react"
 import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
 
+import { useSearchParams } from "next/navigation"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+
 const TIME_SLOTS = [
     "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM",
     "11:00 AM", "11:30 AM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
@@ -33,6 +41,10 @@ function statusVariant(status: string) {
 
 export default function StudentAppointmentsPage() {
     const supabase = createClient()
+    const searchParams = useSearchParams()
+    const targetId = searchParams.get("id")
+    const dateParam = searchParams.get("date")
+
     const [appointments, setAppointments] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
@@ -40,7 +52,8 @@ export default function StudentAppointmentsPage() {
     const [form, setForm] = useState({ date: "", time_slot: "", reason: "" })
     const [studentAccountId, setStudentAccountId] = useState<string | null>(null)
     const [userId, setUserId] = useState<string | null>(null)
-    const [selectedDay, setSelectedDay] = useState<string>(todayKey())
+    const [selectedDay, setSelectedDay] = useState<string>(dateParam || todayKey())
+    const [selectedAptModal, setSelectedAptModal] = useState<any | null>(null)
 
     useEffect(() => {
         async function load() {
@@ -71,6 +84,17 @@ export default function StudentAppointmentsPage() {
         }
         load()
     }, [supabase])
+
+    // Auto-pop up targeted appointment details modal when redirected with ?id=
+    useEffect(() => {
+        if (targetId && appointments.length > 0) {
+            const match = appointments.find((a) => a.id === targetId)
+            if (match) {
+                setSelectedDay(match.appointment_date)
+                setSelectedAptModal(match)
+            }
+        }
+    }, [targetId, appointments])
 
     async function refreshAppointments() {
         if (!userId) return
@@ -305,6 +329,37 @@ export default function StudentAppointmentsPage() {
                         </CardContent>
                     </Card>
                 </div>
+            )}
+
+            {/* Exact Appointment Pop-up Dialog from Notification */}
+            {selectedAptModal && (
+                <Dialog open={!!selectedAptModal} onOpenChange={() => setSelectedAptModal(null)}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-semibold">My Appointment Details</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3 py-2">
+                            <div className="flex items-center justify-between border-b pb-2">
+                                <span className="text-xs text-muted-foreground">Date & Time</span>
+                                <span className="text-sm font-semibold">
+                                    {selectedAptModal.appointment_date} at {selectedAptModal.time_slot}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between border-b pb-2">
+                                <span className="text-xs text-muted-foreground">Status</span>
+                                <StatusBadge status={statusVariant(selectedAptModal.status)}>
+                                    {selectedAptModal.status}
+                                </StatusBadge>
+                            </div>
+                            {selectedAptModal.reason && (
+                                <div className="space-y-1">
+                                    <span className="text-xs text-muted-foreground">Reason / Purpose</span>
+                                    <p className="text-xs bg-muted/40 p-2.5 rounded-md text-foreground">{selectedAptModal.reason}</p>
+                                </div>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
             )}
         </div>
     )

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   Search,
   Pill,
@@ -174,7 +174,11 @@ const INITIAL_FORM_STATE: Omit<DispensingRecord, "id" | "transaction_code"> = {
   notes: "",
 }
 
+import { useSearchParams } from "next/navigation"
+
 export default function DispensingPage() {
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get("id") || searchParams.get("code")
   const [records, setRecords] = useState<DispensingRecord[]>(MOCK_DISPENSING)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -186,6 +190,18 @@ export default function DispensingPage() {
   const [formData, setFormData] = useState(INITIAL_FORM_STATE)
 
   const [page, setPage] = useState(1)
+
+  // Auto-pop up targeted dispensing record detail modal when ?id= or ?code= parameter is present
+  useEffect(() => {
+    if (targetId && records.length > 0) {
+      const match = records.find(
+        (r) => r.id === targetId || r.transaction_code === targetId || r.patient_name.toLowerCase().includes(targetId.toLowerCase())
+      )
+      if (match) {
+        setSelectedRecord(match)
+      }
+    }
+  }, [targetId, records])
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], [])
 

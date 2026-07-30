@@ -2,10 +2,13 @@ import { createClient } from "@supabase/supabase-js"
 
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+
 
   if (!url || !serviceKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE is required for admin operations")
+    throw new Error("SUPABASE_SERVICE_ROLE environment variable is missing")
   }
 
   return createClient(url, serviceKey, {

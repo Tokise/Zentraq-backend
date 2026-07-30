@@ -1,236 +1,162 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/status-badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Pagination } from "@/components/pagination"
 import { createClient } from "@/utils/supabase/client"
-import { toast } from "sonner"
-import { CalendarDays, Loader2, Check, X, Undo2 } from "lucide-react"
-import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
+import { fetchAnnouncementsWithPosters } from "@/lib/announcements"
+import { Bell, ImageOff } from "lucide-react"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
 
-function todayDateKey() {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-}
+const PAGE_SIZE = 5
 
-function statusVariant(status: string) {
-    switch (status) {
-        case "confirmed": return "info" as const
-        case "completed": return "success" as const
-        case "cancelled": return "danger" as const
-        default: return "warning" as const
-    }
-}
-
-export default function AppointmentsCalendarPage() {
+export default function StudentAnnouncementsPage() {
     const supabase = createClient()
     const searchParams = useSearchParams()
-    const dateParam = searchParams.get("date")
+    const targetId = searchParams.get("id")
 
-    const [appointments, setAppointments] = useState<any[]>([])
+    const [announcements, setAnnouncements] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
-    const [selectedDay, setSelectedDay] = useState<string>(dateParam || todayDateKey())
-    const [updatingId, setUpdatingId] = useState<string | null>(null)
+    const [page, setPage] = useState(1)
+    const [selectedAnnModal, setSelectedAnnModal] = useState<any | null>(null)
 
-    const fetchAppointments = useCallback(async () => {
+    async function fetchAnnouncements() {
         try {
-            const { data } = await supabase
-                .from("student_appointments")
-                .select("*, student_accounts(first_name, last_name, student_number, employee_number, department)")
-                .order("appointment_date", { ascending: true })
-
-            setAppointments(data || [])
+            const data = await fetchAnnouncementsWithPosters(supabase)
+            setAnnouncements(data || [])
         } catch (err) {
             console.error(err)
         } finally {
             setLoading(false)
         }
-    }, [supabase])
-
-    useEffect(() => {
-        fetchAppointments()
-
-        const channel = supabase
-            .channel("appointments-calendar-realtime")
-            .on(
-                "postgres_changes",
-                { event: "*", schema: "public", table: "student_appointments" },
-                () => fetchAppointments()
-            )
-            .subscribe()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [supabase, fetchAppointments])
-
-    async function updateStatus(id: string, status: string) {
-        setUpdatingId(id)
-        try {
-            const { error } = await supabase
-                .from("student_appointments")
-                .update({ status })
-                .eq("id", id)
-
-            if (error) throw error
-
-            setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
-            toast.success(`Marked as ${status}`)
-        } catch (err: any) {
-            toast.error(err.message || "Failed to update appointment")
-        } finally {
-            setUpdatingId(null)
-        }
     }
 
-    const markersByDate = useMemo(() => {
-        const map: Record<string, CalendarMarker[]> = {}
-        for (const apt of appointments) {
-            const key = apt.appointment_date
-            if (!map[key]) map[key] = []
-            const sa = apt.student_accounts
-            const name = sa ? `${sa.first_name} ${sa.last_name}` : "Unknown"
-            map[key].push({ status: apt.status, label: `${apt.time_slot} ${name}` })
+    useEffect(() => {
+        fetchAnnouncements()
+    }, [supabase])
+
+    // Auto-pop up targeted announcement detail modal when ?id= parameter is present
+    useEffect(() => {
+        if (targetId && announcements.length > 0) {
+            const match = announcements.find((a) => a.id === targetId)
+            if (match) {
+                setSelectedAnnModal(match)
+            }
         }
-        return map
-    }, [appointments])
+    }, [targetId, announcements])
 
-    const appointmentsOnSelectedDay = appointments
-        .filter((a) => a.appointment_date === selectedDay)
-        .sort((a, b) => a.time_slot.localeCompare(b.time_slot))
+    const totalPages = Math.ceil(announcements.length / PAGE_SIZE)
+    const safePage = Math.min(Math.max(1, page), Math.max(1, totalPages))
 
-    const selectedDayLabel = new Date(selectedDay + "T00:00:00").toLocaleDateString("en-US", {
-        weekday: "long", month: "long", day: "numeric", year: "numeric",
-    })
+    const paginatedAnnouncements = useMemo(() => {
+        const start = (safePage - 1) * PAGE_SIZE
+        return announcements.slice(start, start + PAGE_SIZE)
+    }, [announcements, safePage])
 
     return (
-        <div className="space-y-6 max-w-5xl mx-auto">
-            <PageHeader title="Appointments Calendar" description="All student appointments, organized by date" />
+        <div className="space-y-6 max-w-3xl mx-auto">
+            <PageHeader
+                title="Clinic Announcements"
+                description="Stay updated with the latest announcements and news from the student health clinic"
+            />
 
             {loading ? (
-                <div className="flex items-center justify-center py-24">
-                    <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                        <Card key={i} className="animate-pulse">
+                            <CardContent className="p-5">
+                                <div className="h-4 w-48 bg-zinc-100 rounded mb-3" />
+                                <div className="h-3 w-full bg-zinc-100 rounded mb-2" />
+                                <div className="h-3 w-3/4 bg-zinc-100 rounded" />
+                            </CardContent>
+                        </Card>
+                    ))}
                 </div>
+            ) : announcements.length === 0 ? (
+                <Card>
+                    <CardContent className="py-12 text-center">
+                        <ImageOff className="size-6 text-zinc-300 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">No announcements posted yet</p>
+                    </CardContent>
+                </Card>
             ) : (
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-                    {/* Calendar is the main view */}
-                    <Card className="shadow-sm border-zinc-200/80">
-                        <CardContent className="p-4">
-                            <MonthCalendar
-                                selectedDate={selectedDay}
-                                onSelectDate={setSelectedDay}
-                                markersByDate={markersByDate}
-                            />
-                            <div className="flex items-center gap-3 pt-3 flex-wrap px-1">
-                                {Object.entries({
-                                    pending: "bg-amber-400",
-                                    confirmed: "bg-blue-500",
-                                    completed: "bg-emerald-500",
-                                    cancelled: "bg-zinc-300",
-                                }).map(([status, dot]) => (
-                                    <span key={status} className="flex items-center gap-1 text-[11px] text-zinc-500 capitalize">
-                                        <span className={`size-1.5 rounded-full ${dot}`} /> {status}
-                                    </span>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Selected day panel */}
-                    <Card className="shadow-sm border-zinc-200/80 h-fit">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm">{selectedDayLabel}</CardTitle>
-                            <CardDescription className="text-xs">
-                                {appointmentsOnSelectedDay.length} appointment{appointmentsOnSelectedDay.length === 1 ? "" : "s"}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            {appointmentsOnSelectedDay.length === 0 ? (
-                                <div className="py-8 text-center">
-                                    <CalendarDays className="size-6 text-zinc-300 mx-auto mb-2" />
-                                    <p className="text-sm text-muted-foreground">Nothing scheduled</p>
-                                </div>
-                            ) : (
-                                appointmentsOnSelectedDay.map((apt) => {
-                                    const sa = apt.student_accounts
-                                    const name = sa ? `${sa.first_name} ${sa.last_name}` : "Unknown"
-                                    const isUpdating = updatingId === apt.id
-
-                                    return (
-                                        <div key={apt.id} className="rounded-lg border border-zinc-200/80 p-3 space-y-2">
-                                            <div className="flex items-start justify-between gap-2">
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-medium truncate">{name}</p>
-                                                    <p className="text-xs text-zinc-400">
-                                                        {apt.time_slot}
-                                                        {sa?.student_number || sa?.employee_number ? ` • ${sa.student_number || sa.employee_number}` : ""}
-                                                    </p>
-                                                </div>
-                                                <StatusBadge status={statusVariant(apt.status)} className="shrink-0">
-                                                    {apt.status}
-                                                </StatusBadge>
-                                            </div>
-
-                                            {apt.reason && (
-                                                <p className="text-xs text-zinc-500 line-clamp-2">{apt.reason}</p>
-                                            )}
-
-                                            <div className="flex gap-1.5 pt-1">
-                                                {apt.status === "pending" && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={isUpdating}
-                                                        onClick={() => updateStatus(apt.id, "confirmed")}
-                                                        className="h-7 text-xs px-2 cursor-pointer"
-                                                    >
-                                                        <Check className="size-3 mr-1" /> Confirm
-                                                    </Button>
-                                                )}
-                                                {(apt.status === "pending" || apt.status === "confirmed") && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={isUpdating}
-                                                        onClick={() => updateStatus(apt.id, "completed")}
-                                                        className="h-7 text-xs px-2 cursor-pointer"
-                                                    >
-                                                        <Check className="size-3 mr-1" /> Complete
-                                                    </Button>
-                                                )}
-                                                {apt.status !== "cancelled" && apt.status !== "completed" && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        disabled={isUpdating}
-                                                        onClick={() => updateStatus(apt.id, "cancelled")}
-                                                        className="h-7 text-xs px-2 text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                                                    >
-                                                        <X className="size-3 mr-1" /> Cancel
-                                                    </Button>
-                                                )}
-                                                {apt.status === "cancelled" && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        disabled={isUpdating}
-                                                        onClick={() => updateStatus(apt.id, "pending")}
-                                                        className="h-7 text-xs px-2 text-zinc-500 cursor-pointer"
-                                                    >
-                                                        <Undo2 className="size-3 mr-1" /> Reopen
-                                                    </Button>
-                                                )}
-                                            </div>
+                <div className="space-y-6">
+                    {paginatedAnnouncements.map((ann) => (
+                        <div key={ann.id} className="space-y-3">
+                            <Card className="shadow-sm border-zinc-200/80">
+                                <CardHeader className="pb-2">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex-1 min-w-0">
+                                            <CardTitle className="text-base font-semibold text-zinc-900">{ann.title}</CardTitle>
+                                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                                                <Bell className="size-3 text-zinc-400 shrink-0" />
+                                                Posted {ann.created_at ? new Date(ann.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
+                                                {ann.poster?.full_name ? ` by ${ann.poster.full_name}` : ""}
+                                            </p>
                                         </div>
-                                    )
-                                })
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <p className="text-sm text-zinc-700 whitespace-pre-wrap leading-relaxed">{ann.content}</p>
+                                </CardContent>
+                            </Card>
+
+                            {ann.image_url && (
+                                <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-muted/20 p-1 shadow-sm">
+                                    <img
+                                        src={ann.image_url}
+                                        alt={ann.title}
+                                        className="w-full h-auto object-contain rounded-lg"
+                                    />
+                                </div>
                             )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    ))}
+
+                    <div className="pt-2">
+                        <Pagination
+                            currentPage={safePage}
+                            totalPages={totalPages}
+                            totalItems={announcements.length}
+                            pageSize={PAGE_SIZE}
+                            onPageChange={setPage}
+                        />
+                    </div>
                 </div>
+            )}
+
+            {/* Targeted Announcement Detail Pop-up Dialog */}
+            {selectedAnnModal && (
+                <Dialog open={!!selectedAnnModal} onOpenChange={() => setSelectedAnnModal(null)}>
+                    <DialogContent className="sm:max-w-xl">
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-semibold">{selectedAnnModal.title}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3 py-2">
+                            <p className="text-xs text-muted-foreground">
+                                Posted {selectedAnnModal.created_at ? new Date(selectedAnnModal.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                                {selectedAnnModal.poster?.full_name ? ` by ${selectedAnnModal.poster.full_name}` : ""}
+                            </p>
+                            <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground">{selectedAnnModal.content}</p>
+                            {selectedAnnModal.image_url && (
+                                <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-muted/20 p-1 mt-2">
+                                    <img
+                                        src={selectedAnnModal.image_url}
+                                        alt={selectedAnnModal.title}
+                                        className="w-full h-auto object-contain rounded-lg"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
             )}
         </div>
     )

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Search } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { PageHeader } from "@/components/page-header"
@@ -107,6 +107,8 @@ function formatTimeOnly(iso: string) {
 
 export default function VisitLogsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get("id")
   const supabase = createClient()
 
   const [records, setRecords] = useState<VisitLogRecord[]>([])
@@ -150,6 +152,16 @@ export default function VisitLogsPage() {
       supabase.removeChannel(channel)
     }
   }, [fetchRecords, supabase])
+
+  // Auto-pop up exact visit log record dialog when ?id= parameter is present
+  useEffect(() => {
+    if (targetId && records.length > 0) {
+      const match = records.find((r) => r.id === targetId)
+      if (match) {
+        setSelectedRecord(match)
+      }
+    }
+  }, [targetId, records])
 
   const filteredRecords = records.filter(
     (r) =>

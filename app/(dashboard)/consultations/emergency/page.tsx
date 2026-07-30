@@ -134,6 +134,18 @@ export default function EmergencyCasesPage() {
     }
   }, [fetchRecords, supabase])
 
+  const targetId = searchParams.get("id")
+
+  // Auto-pop up targeted emergency case detail dialog when ?id= parameter is present
+  useEffect(() => {
+    if (targetId && records.length > 0) {
+      const match = records.find((r) => r.id === targetId)
+      if (match) {
+        setSelectedRecord(match)
+      }
+    }
+  }, [targetId, records])
+
   useEffect(() => {
     fetchComplaints()
 

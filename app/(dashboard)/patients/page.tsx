@@ -41,9 +41,13 @@ type Patient = {
 
 const PAGE_SIZE = 8
 
+import { useSearchParams } from "next/navigation"
+
 export default function PatientsPage() {
   // Memoize client to prevent recreation on every re-render
   const supabase = useMemo(() => createClient(), [])
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get("id") || searchParams.get("patient")
 
   const [patients, setPatients] = useState<Patient[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,6 +92,18 @@ export default function PatientsPage() {
       supabase.removeChannel(channel)
     }
   }, [fetchPatients, supabase])
+
+  // Auto-pop up targeted patient profile modal when ?id= or ?patient= parameter is present
+  useEffect(() => {
+    if (targetId && patients.length > 0) {
+      const match = patients.find(
+        (p) => p.id === targetId || p.student_number === targetId || `${p.first_name} ${p.last_name}`.toLowerCase().includes(targetId.toLowerCase())
+      )
+      if (match) {
+        setSelectedPatient(match)
+      }
+    }
+  }, [targetId, patients])
 
   // Filter patients with safe optional chaining against null DB fields
   const filteredPatients = patients.filter((patient) => {

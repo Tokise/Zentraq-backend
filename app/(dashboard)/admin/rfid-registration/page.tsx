@@ -448,10 +448,13 @@ export default function RfidRegistrationPage() {
 
       const result = await createStudentAccount(formData)
 
-      if (result.error) {
+      if ("error" in result && result.error) {
         toast.error(result.error)
-      } else {
+      } else if (!("error" in result)) {
         setAccountCreated(true)
+        if (searchedProfile && result.userId) {
+          setSearchedProfile({ ...searchedProfile, user_id: result.userId })
+        }
         toast.success("Portal account created! The student can now log in.")
       }
     } catch (err: any) {
@@ -541,12 +544,14 @@ export default function RfidRegistrationPage() {
 
       const result = await createStudentAccount(formData)
 
-      if (result.error) {
+      if ("error" in result && result.error) {
         toast.error(result.error)
-      } else {
+      } else if (!("error" in result)) {
         setEditAccountCreated(true)
         toast.success("Portal account created!")
-        setSearchedProfile({ ...searchedProfile, user_id: result.email })
+        if (searchedProfile) {
+          setSearchedProfile({ ...searchedProfile, user_id: result.userId || result.email })
+        }
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to create account")
