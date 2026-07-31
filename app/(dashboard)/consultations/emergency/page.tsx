@@ -28,6 +28,8 @@ import { EmptyState } from "@/components/empty-state"
 import { Pagination } from "@/components/pagination"
 import { ConsultationWizard, type CompletionReport, type DispositionStatus } from "@/components/consultation-wizard"
 import { toast } from "sonner"
+import { updateEmergencyComplaint, updateEmergencyStatus, completeEmergencyCase } from "./actions"
+import { addComplaintType } from "../actions"
 
 type ConsultationRecord = {
   id: string
@@ -194,20 +196,22 @@ export default function EmergencyCasesPage() {
   }, [searchParams, records, supabase, router])
 
   async function handleAddComplaint(complaint: string) {
-    const { error } = await supabase
-      .from("complaints")
-      .insert({ name: complaint })
-    if (error) throw error
+    const result = await addComplaintType(complaint)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
     fetchComplaints()
   }
 
   async function handleSaveEmergencyComplaint() {
     if (!handlingRecord || !editedEmergencyComplaint.trim()) return
     try {
-      await supabase
-        .from("consultations")
-        .update({ student_complaint: editedEmergencyComplaint.trim() })
-        .eq("id", handlingRecord.id)
+      const result = await updateEmergencyComplaint(handlingRecord.id, editedEmergencyComplaint.trim())
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
       toast.success("Complaint updated")
       setEditingEmergencyComplaint(false)
       setHandlingRecord({ ...handlingRecord, student_complaint: editedEmergencyComplaint.trim() })
@@ -219,7 +223,11 @@ export default function EmergencyCasesPage() {
 
   async function handleStatusChange(id: string, newStatus: ConsultationRecord["status"]) {
     try {
-      await supabase.from("consultations").update({ status: newStatus }).eq("id", id)
+      const result = await updateEmergencyStatus(id, newStatus)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
       toast.success(`Case ${newStatus.replace("_", " ")}`)
       setSelectedRecord(null)
       setHandlingRecord(null)
@@ -241,33 +249,18 @@ export default function EmergencyCasesPage() {
     const notesJson = JSON.stringify(report)
     const now = new Date().toISOString()
 
-    const { error } = await supabase
-      .from("consultations")
-      .update({
-        status: "completed",
-        student_complaint: complaint,
-        handled_at: now,
-        notes: notesJson,
-      })
-      .eq("id", wizardRecord.id)
+    const result = await completeEmergencyCase(
+      wizardRecord.id,
+      complaint,
+      notesJson,
+      disposition,
+      wizardRecord.patient_name
+    )
 
-    if (error) throw error
-
-    const { error: visitError } = await supabase
-      .from("visit_logs")
-      .insert({
-        consultation_id: wizardRecord.id,
-        patient_name: wizardRecord.patient_name,
-        student_complaint: complaint,
-        origin: "emergency",
-        diagnosis: report.diagnosis,
-        treatment: report.treatment,
-        recommendations: report.recommendations,
-        handled_at: now,
-        status: disposition,
-      })
-
-    if (visitError) throw visitError
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
 
     toast.success("Emergency case resolved and logged to visit records")
     setWizardOpen(false)

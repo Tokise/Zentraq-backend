@@ -7,9 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { createStudentAccount, resetStudentPassword } from "./actions"
+import { createStudentAccount, resetStudentPassword, registerStudentProfile, updateStudentProfile, generateStudentId as generateStudentIdAction, lookupStudentByRfid } from "./actions"
 import { PasswordStrengthInput } from "@/components/password-strength-input"
 import { checkPassword } from "@/lib/validation/password"
 import {
@@ -95,8 +94,6 @@ export default function RfidRegistrationPage() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-
-  const supabase = createClient()
 
   // Auto-focus RFID input on step 1
   useEffect(() => {
@@ -187,45 +184,12 @@ export default function RfidRegistrationPage() {
   async function generateStudentId() {
     setGeneratingId(true)
     try {
-      const { data: lastRecords, error: lastError } = await supabase
-        .from("student_accounts")
-        .select("student_number")
-        .not("student_number", "is", null)
-        .like("student_number", `${STUDENT_ID_PREFIX}%`)
-        .order("student_number", { ascending: false })
-        .limit(1)
-
-      if (lastError) throw lastError
-
-      let nextNumber = 1
-      if (lastRecords && lastRecords.length > 0) {
-        const lastSuffix = parseStudentIdSuffix(lastRecords[0].student_number)
-        const lastNum = parseInt(lastSuffix, 10)
-        if (!isNaN(lastNum)) nextNumber = lastNum + 1
+      const result = await generateStudentIdAction()
+      if ("error" in result && result.error) {
+        toast.error(result.error)
+      } else {
+        setStudentIdSuffix(result.suffix || "")
       }
-
-      let suffix = String(nextNumber).padStart(4, "0")
-      let attempts = 0
-      while (attempts < 50) {
-        const candidate = `${STUDENT_ID_PREFIX}${suffix}`
-        const { data: existing, error: checkError } = await supabase
-          .from("student_accounts")
-          .select("id")
-          .eq("student_number", candidate)
-          .maybeSingle()
-        if (checkError) throw checkError
-        if (!existing) break
-        nextNumber++
-        suffix = String(nextNumber).padStart(4, "0")
-        attempts++
-      }
-
-      if (nextNumber > 9999) {
-        toast.error("All student IDs in the 23011-0001 to 23011-9999 range are taken.")
-        return
-      }
-
-      setStudentIdSuffix(suffix)
     } catch (err: any) {
       toast.error(err.message || "Failed to generate student ID")
     } finally {
@@ -240,19 +204,20 @@ export default function RfidRegistrationPage() {
     setLoading(true)
 
     try {
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .select("*")
-        .eq("rfid_uid", uid)
-        .maybeSingle()
+      const formData = new FormData()
+      formData.set("rfidUid", uid)
+      const result = await lookupStudentByRfid(formData)
 
-      if (error) throw error
+      if ("error" in result && result.error) {
+        toast.error(result.error)
+        return
+      }
 
-      if (data) {
-        setSearchedProfile(data as PatientProfile)
+      if (result.data) {
+        setSearchedProfile(result.data as PatientProfile)
         setMode("VERIFIED")
         setResetTimer(8)
-        toast.success(`Profile already registered for ${data.first_name}`)
+        toast.success(`Profile already registered for ${result.data.first_name}`)
       } else {
         setStep(2)
         toast.info("Card not registered. Fill in student details to continue.")
@@ -383,42 +348,44 @@ export default function RfidRegistrationPage() {
     reader.readAsDataURL(file)
   }
 
-  // Step 4 → Create student_accounts record, then go to Step 5 (Account Setup)
+  // Step 4 → Create student_accounts record via Server Action, then go to Step 5 (Account Setup)
   async function handleRegister() {
     if (!rfidUid) return
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .insert({
-          rfid_uid: rfidUid,
-          first_name: firstName,
-          last_name: lastName,
-          email: email || null,
-          department: department || null,
-          course: role === "student" ? course : null,
-          year_level: role === "student" ? yearLevel : null,
-          position: role !== "student" ? position : null,
-          student_number: role === "student" ? idNumber : null,
-          employee_number: role !== "student" ? idNumber : null,
-          clinic_photo_url: photo || null,
-          active_status: true
-        })
-        .select()
-        .single()
+      const formData = new FormData()
+      formData.set("rfidUid", rfidUid)
+      formData.set("firstName", firstName)
+      formData.set("lastName", lastName)
+      formData.set("email", email || "")
+      formData.set("department", department || "")
+      formData.set("course", role === "student" ? course : "")
+      formData.set("yearLevel", role === "student" ? yearLevel : "")
+      formData.set("position", role !== "student" ? position : "")
+      formData.set("studentNumber", role === "student" ? idNumber : "")
+      formData.set("employeeNumber", role !== "student" ? idNumber : "")
+      formData.set("clinicPhotoUrl", photo || "")
+      formData.set("role", role)
 
-      if (error) throw error
+      const result = await registerStudentProfile(formData)
 
-      setCreatedProfileId(data.id)
-      setSearchedProfile(data as PatientProfile)
-
-      // Pre-fill account email
-      if (data.email && !accountEmail) {
-        setAccountEmail(data.email)
+      if ("error" in result && result.error) {
+        toast.error(result.error)
+        return
       }
 
-      toast.success("Profile registered! Now set up their portal account.")
-      setStep(5) // Go to Account Setup step
+      if (result.data) {
+        setCreatedProfileId(result.data.id)
+        setSearchedProfile(result.data as PatientProfile)
+
+        // Pre-fill account email
+        if (result.data.email && !accountEmail) {
+          setAccountEmail(result.data.email)
+        }
+
+        toast.success("Profile registered! Now set up their portal account.")
+        setStep(5) // Go to Account Setup step
+      }
     } catch (err: any) {
       toast.error(err.message || "Registration failed")
     } finally {
@@ -492,29 +459,33 @@ export default function RfidRegistrationPage() {
 
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .update({
-          first_name: firstName,
-          last_name: lastName,
-          email: email || null,
-          department: department || null,
-          course: role === "student" ? course : null,
-          year_level: role === "student" ? yearLevel : null,
-          position: role !== "student" ? position : null,
-          student_number: role === "student" ? idNumber : null,
-          employee_number: role !== "student" ? idNumber : null,
-          clinic_photo_url: photo || null,
-        })
-        .eq("id", searchedProfile.id)
-        .select()
-        .single()
+      const formData = new FormData()
+      formData.set("profileId", searchedProfile.id)
+      formData.set("firstName", firstName)
+      formData.set("lastName", lastName)
+      formData.set("email", email || "")
+      formData.set("department", department || "")
+      formData.set("course", role === "student" ? course : "")
+      formData.set("yearLevel", role === "student" ? yearLevel : "")
+      formData.set("position", role !== "student" ? position : "")
+      formData.set("studentNumber", role === "student" ? idNumber : "")
+      formData.set("employeeNumber", role !== "student" ? idNumber : "")
+      formData.set("clinicPhotoUrl", photo || "")
+      formData.set("role", role)
 
-      if (error) throw error
-      toast.success("Profile updated!")
-      setSearchedProfile(data as PatientProfile)
-      setMode("SUCCESS")
-      setResetTimer(8)
+      const result = await updateStudentProfile(formData)
+
+      if ("error" in result && result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      if (result.data) {
+        toast.success("Profile updated!")
+        setSearchedProfile(result.data as PatientProfile)
+        setMode("SUCCESS")
+        setResetTimer(8)
+      }
     } catch (err: any) {
       toast.error(err.message || "Update failed")
     } finally {

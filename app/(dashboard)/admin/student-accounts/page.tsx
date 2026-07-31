@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
+import { toggleStudentActiveStatus, archiveStudentProfile, saveStudentProfileEdit } from "./actions"
 import { Pagination } from "@/components/pagination"
 import {
   Search,
@@ -199,40 +200,29 @@ export default function StudentAccountsPage() {
 
     setSaving(true)
     try {
-      const payload = {
-        first_name: editForm.firstName,
-        last_name: editForm.lastName,
+      const result = await saveStudentProfileEdit(selected.id, {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
         email: editForm.email || null,
         department: editForm.department || null,
         course: isStudent ? (editForm.course || null) : null,
-        year_level: isStudent ? (editForm.yearLevel || null) : null,
+        yearLevel: isStudent ? (editForm.yearLevel || null) : null,
         position: !isStudent ? (editForm.position || null) : null,
-        student_number: isStudent ? `${STUDENT_ID_PREFIX}${editForm.idSuffix}` : null,
-        employee_number: !isStudent ? editForm.employeeId : null,
+        studentNumber: isStudent ? `${STUDENT_ID_PREFIX}${editForm.idSuffix}` : null,
+        employeeNumber: !isStudent ? editForm.employeeId : null,
+      })
+
+      if ("error" in result && result.error) {
+        toast.error(result.error)
+        return
       }
 
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .update(payload)
-        .eq("id", selected.id)
-        .select()
-        .maybeSingle()
-
-      if (error) throw error
-
-      let updated = data as PatientProfile | null
-      if (!updated) {
-        const { data: refetched } = await supabase
-          .from("student_accounts")
-          .select("*")
-          .eq("id", selected.id)
-          .maybeSingle()
-        updated = refetched as PatientProfile | null
-      }
-
+      const updated = result.data as PatientProfile | null
       toast.success("Profile updated")
-      setPatients((prev) => prev.map((p) => (p.id === selected.id ? (updated || { ...p, ...payload }) : p)))
-      setSelected(updated || { ...selected, ...payload })
+      if (updated) {
+        setPatients((prev) => prev.map((p) => (p.id === selected.id ? updated : p)))
+        setSelected(updated)
+      }
       setEditing(false)
     } catch (err: any) {
       toast.error(err.message || "Update failed")
@@ -243,18 +233,14 @@ export default function StudentAccountsPage() {
 
   async function toggleActive(p: PatientProfile) {
     try {
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .update({ active_status: !p.active_status })
-        .eq("id", p.id)
-        .select()
-        .maybeSingle()
-
-      if (error) throw error
-      const updated = (data as PatientProfile) || { ...p, active_status: !p.active_status }
-      setPatients((prev) => prev.map((row) => (row.id === p.id ? updated : row)))
-      if (selected?.id === p.id) setSelected(updated)
-      toast.success(updated.active_status ? "Marked active" : "Marked inactive")
+      const result = await toggleStudentActiveStatus(p.id, p.active_status)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+      setPatients((prev) => prev.map((row) => (row.id === p.id ? { ...row, active_status: !row.active_status } : row)))
+      if (selected?.id === p.id) setSelected({ ...selected, active_status: !selected.active_status })
+      toast.success(!p.active_status ? "Marked active" : "Marked inactive")
     } catch (err: any) {
       toast.error(err.message || "Failed to update status")
     }
@@ -262,26 +248,22 @@ export default function StudentAccountsPage() {
 
   async function toggleArchived(p: PatientProfile) {
     try {
-      const nextArchivedAt = p.archived_at ? null : new Date().toISOString()
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .update({ archived_at: nextArchivedAt })
-        .eq("id", p.id)
-        .select()
-        .maybeSingle()
-
-      if (error) throw error
-      const updated = (data as PatientProfile) || { ...p, archived_at: nextArchivedAt }
-      setPatients((prev) => prev.map((row) => (row.id === p.id ? updated : row)))
+      const isArchived = !!p.archived_at
+      const result = await archiveStudentProfile(p.id, isArchived)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+      const nextArchivedAt = isArchived ? null : new Date().toISOString()
+      setPatients((prev) => prev.map((row) => (row.id === p.id ? { ...row, archived_at: nextArchivedAt } : row)))
       if (selected?.id === p.id) {
-        if (!updated.archived_at) {
-          setSelected(updated)
-        } else {
-          // Archived patient no longer belongs in the currently open panel
+        if (!isArchived) {
           closePanel()
+        } else {
+          setSelected({ ...selected, archived_at: null })
         }
       }
-      toast.success(updated.archived_at ? "Moved to archive" : "Restored from archive")
+      toast.success(isArchived ? "Restored from archive" : "Moved to archive")
     } catch (err: any) {
       toast.error(err.message || "Failed to update archive status")
     }

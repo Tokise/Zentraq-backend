@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
+import { createConsultation as createConsultationAction } from "./actions"
 
 type KioskMode = "IDLE" | "DISPLAY" | "UNREGISTERED"
 
@@ -94,13 +95,12 @@ export default function RfidKioskPage() {
 
       if (data) {
         const fullName = `${data.first_name} ${data.last_name}`
-        await supabase.from("consultations").insert({
-          profile_id: data.id,
-          patient_name: fullName,
-          student_complaint: "Routine Check-in (RFID Kiosk)",
-          status: "waiting",
-          origin: "consultation"
-        })
+        const result = await createConsultationAction(data.id, fullName, "Routine Check-in (RFID Kiosk)")
+        if (result.error) {
+          toast.error(result.error)
+          resetScanner()
+          return
+        }
 
         setProfile(data as PatientProfile)
         setKioskState("DISPLAY")
