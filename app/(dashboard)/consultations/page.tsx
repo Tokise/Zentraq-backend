@@ -29,6 +29,7 @@ import { EmptyState } from "@/components/empty-state"
 import { Pagination } from "@/components/pagination"
 import { ConsultationWizard, type CompletionReport, type DispositionStatus } from "@/components/consultation-wizard"
 import { toast } from "sonner"
+import { updateConsultationStatus, escalateToEmergency, completeConsultation, addComplaintType } from "./actions"
 
 type ConsultationRecord = {
   id: string
@@ -177,21 +178,21 @@ export default function ConsultationsPage() {
   }
 
   async function handleAddComplaint(complaint: string) {
-    const { error } = await supabase
-      .from("complaints")
-      .insert({ name: complaint })
-    if (error) throw error
+    const result = await addComplaintType(complaint)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
     fetchComplaints()
   }
 
   async function handleStatusChange(id: string, newStatus: ConsultationRecord["status"]) {
     try {
-      const updates: Partial<ConsultationRecord> = { status: newStatus }
-      if (newStatus === "in_consultation") {
-        updates.handled_at = new Date().toISOString()
+      const result = await updateConsultationStatus(id, newStatus)
+      if (result.error) {
+        toast.error(result.error)
+        return
       }
-      const { error } = await supabase.from("consultations").update(updates).eq("id", id)
-      if (error) throw error
       toast.success(`Consultation ${newStatus.replace("_", " ")}`)
       setSelectedConsult(null)
       fetchConsultations()
@@ -202,7 +203,11 @@ export default function ConsultationsPage() {
 
   async function handleEmergencyRedirect(id: string) {
     try {
-      await supabase.from("consultations").update({ status: "in_emergency", origin: "emergency" }).eq("id", id)
+      const result = await escalateToEmergency(id)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
       router.push(`/consultations/emergency?id=${id}`)
     } catch (err: any) {
       toast.error(err.message || "Failed to escalate")
@@ -215,33 +220,18 @@ export default function ConsultationsPage() {
     const notesJson = JSON.stringify(report)
     const now = new Date().toISOString()
 
-    const { error } = await supabase
-      .from("consultations")
-      .update({
-        status: "completed",
-        student_complaint: complaint,
-        handled_at: now,
-        notes: notesJson,
-      })
-      .eq("id", wizardConsult.id)
+    const result = await completeConsultation(
+      wizardConsult.id,
+      complaint,
+      notesJson,
+      disposition,
+      wizardConsult.patient_name
+    )
 
-    if (error) throw error
-
-    const { error: visitError } = await supabase
-      .from("visit_logs")
-      .insert({
-        consultation_id: wizardConsult.id,
-        patient_name: wizardConsult.patient_name,
-        student_complaint: complaint,
-        origin: "consultation",
-        diagnosis: report.diagnosis,
-        treatment: report.treatment,
-        recommendations: report.recommendations,
-        handled_at: now,
-        status: disposition,
-      })
-
-    if (visitError) throw visitError
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
 
     toast.success("Consultation completed and logged")
     setWizardOpen(false)

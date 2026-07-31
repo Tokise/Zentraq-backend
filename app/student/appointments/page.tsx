@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { StatusBadge } from "@/components/status-badge"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
+import { createAppointment, cancelAppointment } from "./actions"
 import { CalendarDays, Loader2, X } from "lucide-react"
 import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
 
@@ -116,16 +117,19 @@ export default function StudentAppointmentsPage() {
 
         setSubmitting(true)
         try {
-            const { error } = await supabase.from("student_appointments").insert({
-                student_user_id: userId,
-                student_account_id: studentAccountId,
-                appointment_date: form.date,
-                time_slot: form.time_slot,
-                reason: form.reason || null,
-                status: "pending",
+            const result = await createAppointment({
+                studentUserId: userId,
+                appointmentDate: form.date,
+                timeSlot: form.time_slot,
+                complaint: form.reason || "Student appointment",
+                patientName: "Student",
+                department: "Student",
             })
 
-            if (error) throw error
+            if (result.error) {
+                toast.error(result.error)
+                return
+            }
 
             toast.success("Appointment booked!")
             setShowForm(false)
@@ -142,12 +146,11 @@ export default function StudentAppointmentsPage() {
 
     async function handleCancel(id: string) {
         try {
-            const { error } = await supabase
-                .from("student_appointments")
-                .update({ status: "cancelled" })
-                .eq("id", id)
-
-            if (error) throw error
+            const result = await cancelAppointment(id)
+            if (result.error) {
+                toast.error(result.error)
+                return
+            }
 
             toast.success("Appointment cancelled")
             setAppointments((prev) =>

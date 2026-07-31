@@ -77,6 +77,7 @@ const DEFAULT_TIME_SLOTS: TimeSlot[] = [
 
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
+import { updateAppointmentStatus, cancelAppointment, rescheduleAppointment } from "../actions"
 import { useSearchParams } from "next/navigation"
 
 export default function QueuePage() {
@@ -207,9 +208,13 @@ export default function QueuePage() {
     if (!target) return
     const nextStatus = target.status === "Waiting" ? "In Consultation" : "Completed"
 
-    // Update student_appointments in Supabase
+    // Update student_appointments in Supabase via server action
     const dbStatus = nextStatus === "In Consultation" ? "confirmed" : "completed"
-    await supabase.from("student_appointments").update({ status: dbStatus }).eq("id", id)
+    const result = await updateAppointmentStatus(id, dbStatus)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
 
     // Update local state
     const updatedLocal = localQueueItems.map((q) => (q.id === id ? { ...q, status: nextStatus as any } : q))
@@ -231,7 +236,11 @@ export default function QueuePage() {
     const target = queueList.find((q) => q.id === id)
     if (!target) return
 
-    await supabase.from("student_appointments").update({ status: "cancelled" }).eq("id", id)
+    const result = await cancelAppointment(id)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
 
     const updatedLocal = localQueueItems.map((q) => (q.id === id ? { ...q, status: "Skipped" as const } : q))
     saveLocalQueue(updatedLocal)
@@ -253,10 +262,11 @@ export default function QueuePage() {
     e.preventDefault()
     if (!rescheduleItem) return
 
-    await supabase
-      .from("student_appointments")
-      .update({ appointment_date: rescheduleDate, time_slot: rescheduleTime })
-      .eq("id", rescheduleItem.id)
+    const result = await rescheduleAppointment(rescheduleItem.id, rescheduleDate, rescheduleTime)
+    if (result.error) {
+      toast.error(result.error)
+      return
+    }
 
     const updatedLocal = localQueueItems.map((q) =>
       q.id === rescheduleItem.id

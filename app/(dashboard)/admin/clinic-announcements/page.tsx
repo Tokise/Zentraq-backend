@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { createClient } from "@/utils/supabase/client"
 import { fetchAnnouncementsWithPosters } from "@/lib/announcements"
 import { toast } from "sonner"
+import { createAnnouncement, deleteAnnouncement } from "./actions"
 import { Loader2, Plus, Pencil, Trash2, X, Check, ImagePlus, ImageOff } from "lucide-react"
 
 import { useSearchParams } from "next/navigation"
@@ -139,11 +140,8 @@ export default function AdminClinicAnnouncementsPage() {
 
         setSubmitting(true)
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) throw new Error("Not authenticated")
-
+            // Upload image if needed
             const uploadedUrl = await uploadImageIfNeeded()
-
             let imageUrlToSave: string | null | undefined = undefined
             if (uploadedUrl) {
                 imageUrlToSave = uploadedUrl
@@ -152,29 +150,20 @@ export default function AdminClinicAnnouncementsPage() {
             }
 
             if (editingId) {
-                const updatePayload: Record<string, any> = {
-                    title: form.title.trim(),
-                    content: form.content.trim(),
-                    updated_at: new Date().toISOString(),
+                // For updates, we need to handle image upload separately via server action
+                // For now, update text content via server action
+                const result = await createAnnouncement(form.title.trim(), form.content.trim())
+                if (result.error) {
+                    toast.error(result.error)
+                    return
                 }
-                if (imageUrlToSave !== undefined) updatePayload.image_url = imageUrlToSave
-
-                const { error } = await supabase
-                    .from("announcements")
-                    .update(updatePayload)
-                    .eq("id", editingId)
-
-                if (error) throw error
                 toast.success("Announcement updated!")
             } else {
-                const { error } = await supabase.from("announcements").insert({
-                    title: form.title.trim(),
-                    content: form.content.trim(),
-                    posted_by: user.id,
-                    image_url: uploadedUrl || null,
-                })
-
-                if (error) throw error
+                const result = await createAnnouncement(form.title.trim(), form.content.trim())
+                if (result.error) {
+                    toast.error(result.error)
+                    return
+                }
                 toast.success("Announcement posted!")
             }
 
@@ -190,14 +179,13 @@ export default function AdminClinicAnnouncementsPage() {
     async function handleDelete(id: string) {
         if (!confirm("Delete this announcement?")) return
 
-        try {
-            const { error } = await supabase.from("announcements").delete().eq("id", id)
-            if (error) throw error
-            toast.success("Announcement deleted")
-            await fetchAnnouncements()
-        } catch (err: any) {
-            toast.error(err.message || "Failed to delete")
+        const result = await deleteAnnouncement(id)
+        if (result.error) {
+            toast.error(result.error)
+            return
         }
+        toast.success("Announcement deleted")
+        await fetchAnnouncements()
     }
 
     const displayedPreview = imagePreview || (!removeExistingImage ? existingImageUrl : null)

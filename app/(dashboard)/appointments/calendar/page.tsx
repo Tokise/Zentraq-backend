@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/status-badge"
 import { Pagination } from "@/components/pagination"
 import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
+import { updateAppointmentStatus, cancelAppointment, rescheduleAppointment } from "../actions"
 import { CalendarDays, Loader2, Check, X, Search, List, Users } from "lucide-react"
 import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
 import {
@@ -111,12 +112,11 @@ export default function AppointmentsCalendarPage() {
   async function updateStatus(id: string, status: string) {
     setUpdatingId(id)
     try {
-      const { error } = await supabase
-        .from("student_appointments")
-        .update({ status })
-        .eq("id", id)
-
-      if (error) throw error
+      const result = await updateAppointmentStatus(id, status)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
 
       setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
       toast.success(`Marked as ${status}`)

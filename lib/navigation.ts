@@ -16,6 +16,7 @@ import {
   Pill,
   Settings,
   Shield,
+  ShieldAlert,
   ShieldCheck,
   Stethoscope,
   UserCheck,
@@ -66,6 +67,7 @@ export const adminNavigation: NavGroup[] = [
     label: "Portal Management",
     items: [
       { title: "Announcements", href: "/admin/clinic-announcements", icon: Bell, roles: ["admin"] },
+      { title: "Audit Logs", href: "/admin/audit-logs", icon: ShieldAlert, roles: ["admin"] },
     ],
   },
   {
