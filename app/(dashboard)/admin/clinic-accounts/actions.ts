@@ -6,6 +6,9 @@ import { getUserRole } from "@/lib/auth/get-user-role"
 import { isAdmin } from "@/lib/auth/roles"
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
+import { logAuditEvent } from "@/lib/audit-logger"
+
+const MIN_PASSWORD_LENGTH = 12
 
 async function requireAdmin() {
   const cookieStore = await cookies()
@@ -16,247 +19,131 @@ async function requireAdmin() {
     error: authError,
   } = await supabase.auth.getUser()
 
-  console.log("========== REQUIRE ADMIN ==========")
-  console.log("Auth Error:", authError)
-  console.log("Current User:", user?.id)
-
-  if (!user) {
+  if (authError || !user) {
     return { error: "Not authenticated", user: null }
   }
 
   const role = await getUserRole(user.id)
 
-  console.log("Current Role:", role)
-
   if (!isAdmin(role)) {
     return {
-      error: "Only administrators can manage operators",
+      error: "Access Denied: Only administrators can manage clinic operator accounts",
       user: null,
     }
   }
-
-  console.log("===================================")
 
   return { error: null, user }
 }
 
 export async function createOperator(formData: FormData) {
   try {
-    console.log("")
-    console.log("==============================================")
-    console.log("CREATE OPERATOR START")
-    console.log("==============================================")
-
     const auth = await requireAdmin()
-
     if (auth.error || !auth.user) {
-      console.error("Authorization Failed:", auth.error)
       return { error: auth.error ?? "Unauthorized" }
     }
 
-    const email = (formData.get("email") as string)?.trim()
+    const email = (formData.get("email") as string)?.trim().toLowerCase()
     const password = formData.get("password") as string
     const fullName = (formData.get("fullName") as string)?.trim()
     const role = (formData.get("role") as string)?.trim() || "nurse"
 
-    console.log("Incoming Data:")
-    console.log({
-      email,
-      fullName,
-      passwordLength: password?.length,
-    })
-
     if (!email || !password) {
-      return {
-        error: "Email and password are required",
-      }
+      return { error: "Email and password are required" }
     }
 
-    if (password.length < 8) {
-      return {
-        error: "Password must be at least 8 characters",
-      }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }
     }
-
-    console.log("")
-    console.log("Creating Admin Client...")
 
     const admin = createAdminClient()
 
-    console.log("Admin Client Created Successfully")
-
-    console.log("")
-    console.log("STEP 1 - Creating Auth User")
-
-    const {
-      data: created,
-      error: createError,
-    } = await admin.auth.admin.createUser({
+    // 1. Create Auth User
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
     })
 
-    console.log("Auth User Result:")
-    console.log(created)
-
-    if (createError) {
-      console.error("createUser Error")
-      console.error(createError)
-
-      return {
-        error: createError.message,
-      }
+    if (createError || !created.user) {
+      return { error: createError?.message || "Failed to create operator account" }
     }
 
-    if (!created.user) {
-      return {
-        error: "User was not returned after creation.",
-      }
-    }
-
-    console.log("")
-    console.log("STEP 2 - Inserting Profile")
-
-    const profilePayload = {
+    // 2. Insert into clinic_accounts table (Target table correctly updated from legacy profiles)
+    const accountPayload = {
       id: created.user.id,
       email,
       role,
       full_name: fullName || null,
     }
 
-    console.log("Payload:")
-    console.log(profilePayload)
-
-    const {
-      data: insertedProfile,
-      error: profileError,
-    } = await admin
-      .from("profiles")
-      .upsert(profilePayload)
-      .select()
-
-    console.log("")
-    console.log("Insert Result:")
-    console.log(insertedProfile)
+    const { error: profileError } = await admin
+      .from("clinic_accounts")
+      .upsert(accountPayload)
 
     if (profileError) {
-      console.error("")
-      console.error("PROFILE INSERT FAILED")
-      console.error(profileError)
-
-      console.log("Cleaning up Auth user...")
-
-      const { error: deleteError } =
-        await admin.auth.admin.deleteUser(created.user.id)
-
-      console.log("Cleanup Result:")
-      console.log(deleteError)
-
-      return {
-        error: JSON.stringify(profileError, null, 2),
-      }
+      // Clean up Auth user if DB insert fails
+      await admin.auth.admin.deleteUser(created.user.id)
+      return { error: profileError.message }
     }
 
-    console.log("")
-    console.log("SUCCESS")
-    console.log("Operator Created Successfully")
+    // 3. Log Audit Event
+    await logAuditEvent({
+      action: "OPERATOR_CREATED",
+      userId: auth.user.id,
+      email: auth.user.email,
+      resource: created.user.id,
+      details: { createdEmail: email, role, fullName },
+    })
 
-    revalidatePath("/admin/operators")
-
-    return {
-      success: true,
-    }
-  } catch (err) {
-    console.error("")
-    console.error("UNEXPECTED ERROR")
-    console.error(err)
-
-    if (err instanceof Error) {
-      console.error("Message:", err.message)
-      console.error("Stack:", err.stack)
-
-      return {
-        error: err.message,
-      }
-    }
-
-    return {
-      error: "Unknown server error.",
-    }
-  } finally {
-    console.log("==============================================")
-    console.log("CREATE OPERATOR END")
-    console.log("==============================================")
+    revalidatePath("/admin/clinic-accounts")
+    return { success: true }
+  } catch (err: any) {
+    console.error("[createOperator Exception]:", err)
+    return { error: err?.message || "Unknown server error occurred." }
   }
 }
 
-export async function removeOperator(userId: string) {
+export async function removeOperator(targetUserId: string) {
   try {
-    console.log("")
-    console.log("REMOVE OPERATOR:", userId)
-
     const auth = await requireAdmin()
-
     if (auth.error || !auth.user) {
-      return {
-        error: auth.error ?? "Unauthorized",
-      }
+      return { error: auth.error ?? "Unauthorized" }
     }
 
-    if (userId === auth.user.id) {
-      return {
-        error: "You cannot remove your own account",
-      }
+    if (targetUserId === auth.user.id) {
+      return { error: "Security Violation: You cannot remove your own administrator account" }
     }
 
     const admin = createAdminClient()
 
-    console.log("Deleting profile...")
-
-    const { error: profileDeleteError } = await admin
-      .from("profiles")
+    // Delete clinic_accounts record
+    const { error: dbDeleteError } = await admin
+      .from("clinic_accounts")
       .delete()
-      .eq("id", userId)
+      .eq("id", targetUserId)
 
-    if (profileDeleteError) {
-      console.error(profileDeleteError)
-      return {
-        error: profileDeleteError.message,
-      }
+    if (dbDeleteError) {
+      return { error: dbDeleteError.message }
     }
 
-    console.log("Deleting auth user...")
-
-    const { error: deleteAuthError } =
-      await admin.auth.admin.deleteUser(userId)
-
+    // Delete auth user
+    const { error: deleteAuthError } = await admin.auth.admin.deleteUser(targetUserId)
     if (deleteAuthError) {
-      console.error(deleteAuthError)
-
-      return {
-        error: deleteAuthError.message,
-      }
+      return { error: deleteAuthError.message }
     }
 
-    revalidatePath("/admin/operators")
+    // Log Audit Event
+    await logAuditEvent({
+      action: "OPERATOR_REMOVED",
+      userId: auth.user.id,
+      email: auth.user.email,
+      resource: targetUserId,
+    })
 
-    console.log("Operator Removed Successfully")
-
-    return {
-      success: true,
-    }
-  } catch (err) {
-    console.error(err)
-
-    if (err instanceof Error) {
-      return {
-        error: err.message,
-      }
-    }
-
-    return {
-      error: "Unknown server error.",
-    }
+    revalidatePath("/admin/clinic-accounts")
+    return { success: true }
+  } catch (err: any) {
+    console.error("[removeOperator Exception]:", err)
+    return { error: err?.message || "Unknown server error occurred." }
   }
 }
