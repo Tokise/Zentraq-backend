@@ -39,16 +39,9 @@ export default function LoginPage() {
 
       if (result?.success) {
         setIsSuccess(true)
-
-        // Store session token for one-device-only enforcement
-        if (result.sessionToken) {
-          localStorage.setItem("session_token", result.sessionToken)
-        }
-
-        // Redirect based on role
+        // Session token is securely stored in HttpOnly cookie by Server Action
         const redirectTo = result.redirectTo || "/"
         router.push(redirectTo)
-
         return
       }
 
@@ -66,13 +59,12 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div
-        className={`w-full max-w-md space-y-6 transition-all duration-300 ${isSuccess
-          ? "scale-[0.99] opacity-90"
-          : "scale-100 opacity-100"
-          }`}
+        className={`w-full max-w-md space-y-6 transition-all duration-300 ${
+          isSuccess ? "scale-[0.99] opacity-90" : "scale-100 opacity-100"
+        }`}
       >
         <Card className="rounded-xl border-slate-200 bg-white shadow-lg">
-          <div className="flex flex-col items-center space-y-3 text-center">
+          <div className="flex flex-col items-center space-y-3 text-center pt-6">
             <Image
               src="/4.png"
               alt="Zentraq Clinic Center"
@@ -84,7 +76,7 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit}>
-            <CardContent className="grid gap-4">
+            <CardContent className="grid gap-4 pt-4">
               <div className="grid gap-2">
                 <Label
                   htmlFor="email"
