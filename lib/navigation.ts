@@ -66,15 +66,23 @@ export const adminNavigation: NavGroup[] = [
   {
     label: "Portal Management",
     items: [
-      { title: "Announcements", href: "/admin/clinic-announcements", icon: Bell, roles: ["admin"] },
+      { title: "Announcements", href: "/admin/clinic-announcements", icon: Megaphone, roles: ["admin"] },
       { title: "Audit Logs", href: "/admin/audit-logs", icon: ShieldAlert, roles: ["admin"] },
+    ],
+  },
+  {
+    label: "Access Control",
+    items: [
+      { title: "Roles & Permissions", href: "/admin/roles", icon: Shield, roles: ["admin"] },
+      { title: "Admin Settings", href: "/admin/settings", icon: Settings, roles: ["admin"] },
     ],
   },
   {
     label: "Services",
     items: [
-      { title: "Health Programs", href: "/admin/services/programs", icon: Activity, roles: ["admin"] },
-      { title: "Health Clearance", href: "/admin/services/clearance", icon: FileCheck, roles: ["admin"] },
+      { title: "Services", href: "/admin/services", icon: Activity, roles: ["admin"] },
+      { title: "Health Programs", href: "/admin/services/programs", icon: FileCheck, roles: ["admin"] },
+      { title: "Health Clearance", href: "/admin/services/clearance", icon: Stethoscope, roles: ["admin"] },
     ],
   },
   {

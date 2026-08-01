@@ -75,16 +75,24 @@ export interface ClearedRecordDTO {
     student_complaint: string | null
     status: string
     created_at: string
-    doctor_name: string | null
-    nurse_name: string | null
-    clearance_type: string | null
-    remarks: string | null
+    handled_at: string | null
+    notes: string | null
+    handled_by: string | null
+    handler_name: string | null
+    handler_role: string | null
+    origin: string | null
 }
 
 /**
  * Server Action: Fetch cleared/completed consultations for the clearances archive.
  * Uses Service Role via createAdminClient() with explicit field selection.
  * Requires clinic staff authentication.
+ *
+ * Root cause of the original error: the query selected `doctor_name`, `nurse_name`,
+ * `clearance_type`, and `remarks` from the `consultations` table — but those columns
+ * do not exist. The current schema defines `handled_by` (FK → auth.users) instead.
+ * We resolve the handler's display name and role from `clinic_accounts` via the
+ * `handled_by` user-id, and surface `notes`/`handled_at`/`origin` which ARE real columns.
  */
 export async function getClearedRecordsAction() {
     try {
@@ -94,18 +102,62 @@ export async function getClearedRecordsAction() {
         }
 
         const admin = createAdminClient()
-        const { data, error } = await admin
+
+        // 1. Fetch cleared consultations using ONLY real columns from the schema.
+        //    Status 'cancelled' is NOT a valid consultations status per the CHECK
+        //    constraint; the valid cleared states are 'completed' and 'dismissed'.
+        const { data: consultations, error: consultError } = await admin
             .from("consultations")
-            .select("id, patient_name, student_complaint, status, created_at, doctor_name, nurse_name, clearance_type, remarks")
-            .in("status", ["completed", "cancelled", "dismissed"])
+            .select("id, patient_name, student_complaint, status, created_at, handled_at, notes, handled_by, origin")
+            .in("status", ["completed", "dismissed"])
             .order("created_at", { ascending: false })
 
-        if (error) {
-            console.error("[getClearedRecordsAction DB Error]:", error)
-            return { error: error.message, records: [] }
+        if (consultError) {
+            console.error("[getClearedRecordsAction DB Error]:", consultError)
+            return { error: consultError.message, records: [] }
         }
 
-        return { error: null, records: (data || []) as ClearedRecordDTO[] }
+        // 2. Resolve handler names from clinic_accounts via handled_by (user-id).
+        //    This replaces the removed doctor_name / nurse_name columns with real data.
+        const handlerIds = [...new Set((consultations || [])
+            .map((c) => c.handled_by)
+            .filter(Boolean))]
+        let handlerMap: Record<string, { full_name: string | null; role: string | null }> = {}
+
+        if (handlerIds.length > 0) {
+            const { data: accounts, error: handlerError } = await admin
+                .from("clinic_accounts")
+                .select("id, full_name, role")
+                .in("id", handlerIds)
+
+            if (handlerError) {
+                console.error("[getClearedRecordsAction handler lookup Error]:", handlerError)
+            } else if (accounts) {
+                handlerMap = Object.fromEntries(
+                    accounts.map((a) => [a.id, { full_name: a.full_name ?? null, role: a.role ?? null }])
+                )
+            }
+        }
+
+        // 3. Assemble DTOs with data minimization — only the fields the page needs.
+        const records: ClearedRecordDTO[] = (consultations || []).map((c) => {
+            const handler = c.handled_by ? handlerMap[c.handled_by] : null
+            return {
+                id: c.id,
+                patient_name: c.patient_name,
+                student_complaint: c.student_complaint || null,
+                status: c.status,
+                created_at: c.created_at,
+                handled_at: c.handled_at || null,
+                notes: c.notes || null,
+                handled_by: c.handled_by || null,
+                handler_name: handler?.full_name || null,
+                handler_role: handler?.role || null,
+                origin: c.origin || null,
+            }
+        })
+
+        return { error: null, records }
     } catch (err: any) {
         console.error("[getClearedRecordsAction Exception]:", err)
         return { error: err?.message || "Failed to fetch cleared records", records: [] }

@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Bell, Loader2, X, Check, CalendarDays, Stethoscope, HeartPulse, ClipboardList, ShieldCheck, Megaphone } from "lucide-react"
-import { createClient } from "@/utils/supabase/client"
+import { Bell, Loader2, X, Check, CalendarDays, Stethoscope, HeartPulse, ClipboardList, ShieldCheck, Megaphone, FileCheck, Pill } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -15,29 +14,81 @@ import {
 import { cn } from "@/lib/utils"
 import type { UserRole } from "@/lib/auth/roles"
 import {
-    getStoredNotifications,
-    saveNotifications,
-    addNotificationToStore,
-    type NotificationItem,
+    getNotifications,
+    getUnreadNotificationCount,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    deleteNotification,
+    type NotificationDTO,
     type NotificationType,
-} from "@/lib/notifications"
+} from "@/app/(dashboard)/admin/notifications/actions"
 
-const NOTIFICATION_ICONS: Record<NotificationType, any> = {
+const NOTIFICATION_ICONS: Record<string, any> = {
     appointment: CalendarDays,
     consultation: Stethoscope,
     emergency: HeartPulse,
     visit_log: ClipboardList,
     system: Megaphone,
     rfid: ShieldCheck,
+    clearance: FileCheck,
+    service: Pill,
 }
 
-const NOTIFICATION_COLORS: Record<NotificationType, string> = {
+const NOTIFICATION_COLORS: Record<string, string> = {
     appointment: "text-blue-500 bg-blue-50",
     consultation: "text-emerald-500 bg-emerald-50",
     emergency: "text-red-500 bg-red-50",
     visit_log: "text-purple-500 bg-purple-50",
     system: "text-indigo-500 bg-indigo-50",
     rfid: "text-amber-500 bg-amber-50",
+    clearance: "text-cyan-500 bg-cyan-50",
+    service: "text-rose-500 bg-rose-50",
+}
+
+// Map related_resource to a route for click-to-navigate
+const RESOURCE_ROUTES: Record<string, (id: string) => string> = {
+    appointment: (id) => `/appointments/calendar?id=${id}`,
+    consultation: (id) => `/consultations?id=${id}`,
+    emergency: (id) => `/consultations/emergency?id=${id}`,
+    visit_log: (id) => `/consultations/visit-logs?id=${id}`,
+    announcement: (id) => `/admin/clinic-announcements?id=${id}`,
+    student: (id) => `/admin/rfid-registration?id=${id}`,
+    role: () => `/admin/roles`,
+    service: (id) => `/admin/services?id=${id}`,
+    setting: () => `/admin/settings`,
+}
+
+function getRelativeTime(iso: string): string {
+    const date = new Date(iso)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+    const diffWeeks = Math.floor(diffDays / 7)
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`
+
+    // Yesterday / days / weeks
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+    const isYesterday = date.toDateString() === yesterday.toDateString()
+    if (isYesterday) return "Yesterday"
+    if (diffDays < 7) return `${diffDays} days ago`
+    if (diffWeeks < 4) return `${diffWeeks} week${diffWeeks !== 1 ? "s" : ""} ago`
+
+    // Fall back to a date
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
+
+// Build navigation href from notification
+function getNotificationHref(n: NotificationDTO): string | undefined {
+    if (!n.related_resource) return undefined
+    const routeBuilder = RESOURCE_ROUTES[n.related_resource]
+    if (!routeBuilder) return undefined
+    return routeBuilder(n.related_resource_id || "")
 }
 
 type NotificationDropdownProps = {
@@ -45,212 +96,97 @@ type NotificationDropdownProps = {
 }
 
 export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdownProps) {
-    const supabase = createClient()
-    const [notifications, setNotifications] = useState<NotificationItem[]>([])
-    const [loading, setLoading] = useState(true)
+    const [notifications, setNotifications] = useState<NotificationDTO[]>([])
     const [unreadCount, setUnreadCount] = useState(0)
+    const [loading, setLoading] = useState(false)
     const [open, setOpen] = useState(false)
-    const [currentUserId, setCurrentUserId] = useState<string | undefined>(undefined)
+    const hasFetchedRef = useRef(false)
 
-    const isAdmin = userRole === "admin"
-    const isStaff = userRole === "nurse" || userRole === "doctor"
-    const isStudentUser = userRole === "student"
-
-    // Load initial stored notifications
-    useEffect(() => {
-        async function init() {
-            let uid: string | undefined = undefined
-            if (isStudentUser) {
-                const { data: { user } } = await supabase.auth.getUser()
-                uid = user?.id
-                setCurrentUserId(uid)
-            }
-
-            const stored = getStoredNotifications(userRole, uid)
-            setNotifications(stored)
-            setUnreadCount(stored.filter((n) => !n.read).length)
-            setLoading(false)
+    // Load unread count on mount (lightweight — always keep in sync)
+    const refreshUnreadCount = useCallback(async () => {
+        const res = await getUnreadNotificationCount()
+        if (!res.error) {
+            setUnreadCount(res.count)
         }
-        init()
-    }, [userRole, isStudentUser, supabase])
+    }, [])
 
-    const pushNewNotification = useCallback(
-        (type: NotificationType, title: string, message: string, link?: string) => {
-            const added = addNotificationToStore(
-                userRole,
-                { type, title, message, link },
-                currentUserId
+    // Load notification list when dropdown opens (lazy load)
+    const loadNotifications = useCallback(async () => {
+        setLoading(true)
+        const res = await getNotifications({ limit: 20 })
+        if (!res.error) {
+            setNotifications(res.notifications)
+        }
+        setLoading(false)
+        await refreshUnreadCount()
+    }, [refreshUnreadCount])
+
+    // Fetch unread count on mount and set up a polling interval
+    useEffect(() => {
+        refreshUnreadCount()
+        const interval = setInterval(refreshUnreadCount, 30000)
+        return () => clearInterval(interval)
+    }, [refreshUnreadCount])
+
+    // When dropdown opens, fetch the latest notifications (if not already fetched recently)
+    useEffect(() => {
+        if (open) {
+            loadNotifications()
+            hasFetchedRef.current = true
+        }
+    }, [open, loadNotifications])
+
+    const handleMarkSingle = async (id: string, isRead: boolean) => {
+        // Optimistic update
+        setNotifications((prev) =>
+            prev.map((n) => (n.id === id ? { ...n, is_read: isRead } : n))
+        )
+        setUnreadCount((prev) => Math.max(0, prev + (isRead ? -1 : 1)))
+
+        const res = await markNotificationAsRead(id, isRead)
+        if (res.error) {
+            // Revert on failure
+            setNotifications((prev) =>
+                prev.map((n) => (n.id === id ? { ...n, is_read: !isRead } : n))
             )
-            setNotifications((prev) => {
-                const updated = [added, ...prev.filter((n) => n.id !== added.id)].slice(0, 50)
-                setUnreadCount(updated.filter((n) => !n.read).length)
-                return updated
-            })
-        },
-        [userRole, currentUserId]
-    )
-
-    useEffect(() => {
-        const channel = supabase.channel(`notifications-${userRole}`)
-
-        async function setupRealtime() {
-            let uid = currentUserId
-            if (isStudentUser && !uid) {
-                const { data: { user } } = await supabase.auth.getUser()
-                uid = user?.id
-                if (uid) setCurrentUserId(uid)
-            }
-
-            // Staff (nurse/doctor) notifications: clinical items
-            if (isStaff) {
-                channel
-                    .on(
-                        "postgres_changes",
-                        { event: "INSERT", schema: "public", table: "student_appointments" },
-                        (payload: any) => {
-                            const apt = payload.new
-                            pushNewNotification(
-                                "appointment",
-                                "New Appointment Booking",
-                                `A student booked an appointment on ${apt.appointment_date} at ${apt.time_slot}`,
-                                `/appointments/calendar?id=${apt.id}&date=${apt.appointment_date}`
-                            )
-                        }
-                    )
-                    .on(
-                        "postgres_changes",
-                        { event: "INSERT", schema: "public", table: "consultations" },
-                        (payload: any) => {
-                            const c = payload.new
-                            if (c.origin === "emergency") {
-                                pushNewNotification(
-                                    "emergency",
-                                    "🚨 Emergency Case",
-                                    `${c.patient_name} — ${c.student_complaint || "Emergency"}`,
-                                    `/consultations?id=${c.id}`
-                                )
-                            } else {
-                                pushNewNotification(
-                                    "consultation",
-                                    "New Patient Waiting",
-                                    `${c.patient_name} is waiting in queue`,
-                                    `/consultations?id=${c.id}`
-                                )
-                            }
-                        }
-                    )
-                    .on(
-                        "postgres_changes",
-                        { event: "INSERT", schema: "public", table: "visit_logs" },
-                        (payload: any) => {
-                            const v = payload.new
-                            pushNewNotification(
-                                "visit_log",
-                                "Visit Logged",
-                                `${v.patient_name} — ${v.student_complaint || "Check-up"}`,
-                                `/consultations/visit-logs?id=${v.id}`
-                            )
-                        }
-                    )
-            }
-
-            // Admin notifications: administrative / system items
-            if (isAdmin) {
-                channel
-                    .on(
-                        "postgres_changes",
-                        { event: "INSERT", schema: "public", table: "announcements" },
-                        (payload: any) => {
-                            const a = payload.new
-                            pushNewNotification(
-                                "system",
-                                "Announcement Published",
-                                `New announcement posted: "${a.title}"`,
-                                `/admin/clinic-announcements?id=${a.id}`
-                            )
-                        }
-                    )
-                    .on(
-                        "postgres_changes",
-                        { event: "INSERT", schema: "public", table: "student_accounts" },
-                        (payload: any) => {
-                            const sa = payload.new
-                            pushNewNotification(
-                                "rfid",
-                                "Student Account Created",
-                                `${sa.first_name} ${sa.last_name} profile added`,
-                                `/admin/rfid-registration?id=${sa.id}`
-                            )
-                        }
-                    )
-            }
-
-            // Student notifications: personal appointments / announcements
-            if (isStudentUser && uid) {
-                channel
-                    .on(
-                        "postgres_changes",
-                        { event: "INSERT", schema: "public", table: "student_appointments", filter: `student_user_id=eq.${uid}` },
-                        (payload: any) => {
-                            const apt = payload.new
-                            pushNewNotification(
-                                "appointment",
-                                "Appointment Booked",
-                                `Your appointment on ${apt.appointment_date} at ${apt.time_slot} is pending`,
-                                `/student/appointments?id=${apt.id}&date=${apt.appointment_date}`
-                            )
-                        }
-                    )
-                    .on(
-                        "postgres_changes",
-                        { event: "UPDATE", schema: "public", table: "student_appointments", filter: `student_user_id=eq.${uid}` },
-                        (payload: any) => {
-                            const apt = payload.new
-                            pushNewNotification(
-                                "appointment",
-                                "Appointment Status",
-                                `Your appointment on ${apt.appointment_date} is now "${apt.status}"`,
-                                `/student/appointments?id=${apt.id}&date=${apt.appointment_date}`
-                            )
-                        }
-                    )
-            }
-
-            channel.subscribe()
+            setUnreadCount((prev) => prev + (isRead ? 1 : -1))
         }
+    }
 
-        setupRealtime()
-
-        return () => {
-            supabase.removeChannel(channel)
-        }
-    }, [supabase, userRole, isStaff, isAdmin, isStudentUser, currentUserId, pushNewNotification])
-
-    const markAllRead = () => {
-        setNotifications((prev) => {
-            const updated = prev.map((n) => ({ ...n, read: true }))
-            saveNotifications(userRole, updated, currentUserId)
-            return updated
-        })
+    const handleMarkAllRead = async () => {
+        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
         setUnreadCount(0)
+
+        const res = await markAllNotificationsAsRead()
+        if (res.error) {
+            await loadNotifications()
+        }
     }
 
-    const markSingleRead = (id: string) => {
-        setNotifications((prev) => {
-            const updated = prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-            saveNotifications(userRole, updated, currentUserId)
-            setUnreadCount(updated.filter((n) => !n.read).length)
-            return updated
-        })
+    const handleDelete = async (id: string) => {
+        // Optimistic remove
+        const target = notifications.find((n) => n.id === id)
+        setNotifications((prev) => prev.filter((n) => n.id !== id))
+        if (target && !target.is_read) {
+            setUnreadCount((prev) => Math.max(0, prev - 1))
+        }
+
+        const res = await deleteNotification(id)
+        if (res.error) {
+            // Revert on failure
+            await loadNotifications()
+            await refreshUnreadCount()
+        }
     }
 
-    const removeNotification = (id: string) => {
-        setNotifications((prev) => {
-            const updated = prev.filter((n) => n.id !== id)
-            setUnreadCount(updated.filter((n) => !n.read).length)
-            saveNotifications(userRole, updated, currentUserId)
-            return updated
-        })
+    const handleClickNotification = async (n: NotificationDTO) => {
+        if (!n.is_read) {
+            await handleMarkSingle(n.id, true)
+        }
+        const href = getNotificationHref(n)
+        if (href) {
+            window.location.href = href
+        }
     }
 
     return (
@@ -285,7 +221,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                             variant="ghost"
                             size="sm"
                             className="h-7 text-xs px-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer"
-                            onClick={markAllRead}
+                            onClick={handleMarkAllRead}
                         >
                             <Check className="size-3 mr-1" />
                             Mark all read
@@ -303,14 +239,14 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                             <Bell className="size-8 text-muted-foreground/30 mb-2" />
                             <p className="text-sm text-muted-foreground">No notifications yet</p>
                             <p className="text-xs text-muted-foreground/60 mt-0.5">
-                                Events will appear here in real time
+                                You're all caught up
                             </p>
                         </div>
                     ) : (
-                        notifications.slice(0, 30).map((notif) => {
+                        notifications.map((notif) => {
                             const Icon = NOTIFICATION_ICONS[notif.type] || Bell
                             const colorClasses = NOTIFICATION_COLORS[notif.type] || "text-zinc-500 bg-zinc-50"
-                            const isUnread = !notif.read
+                            const isUnread = !notif.is_read
 
                             return (
                                 <DropdownMenuItem
@@ -321,12 +257,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                                             ? "bg-blue-50/60 dark:bg-blue-950/20 hover:bg-blue-50/90 dark:hover:bg-blue-950/30"
                                             : "bg-transparent hover:bg-muted/40"
                                     )}
-                                    onClick={() => {
-                                        markSingleRead(notif.id)
-                                        if (notif.link) {
-                                            window.location.href = notif.link
-                                        }
-                                    }}
+                                    onClick={() => handleClickNotification(notif)}
                                 >
                                     <div
                                         className={cn(
@@ -354,7 +285,9 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                                         )}>
                                             {notif.message}
                                         </p>
-                                        <p className="text-[10px] text-muted-foreground/70 mt-1">{notif.time}</p>
+                                        <p className="text-[10px] text-muted-foreground/70 mt-1">
+                                            {getRelativeTime(notif.created_at)}
+                                        </p>
                                     </div>
                                     <Button
                                         variant="ghost"
@@ -363,7 +296,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                                         title="Dismiss notification"
                                         onClick={(e) => {
                                             e.stopPropagation()
-                                            removeNotification(notif.id)
+                                            handleDelete(notif.id)
                                         }}
                                     >
                                         <X className="size-3" />
@@ -379,7 +312,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                         <DropdownMenuSeparator />
                         <div className="px-4 py-2 bg-muted/10">
                             <p className="text-[11px] text-muted-foreground text-center font-medium">
-                                {notifications.length} notification{notifications.length !== 1 ? "s" : ""}
+                                {notifications.length} notification{notifications.length !== 1 ? "s" : ""} · latest
                             </p>
                         </div>
                     </>
