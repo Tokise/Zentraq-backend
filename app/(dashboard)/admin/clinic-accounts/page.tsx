@@ -15,8 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { createClient } from "@/utils/supabase/client"
-import { createOperator, removeOperator } from "@/app/(dashboard)/admin/clinic-accounts/actions"
+import { createOperator, removeOperator, getClinicAccountsAction, type StaffAccountDTO } from "@/app/(dashboard)/admin/clinic-accounts/actions"
 import { toast } from "sonner"
 import {
   Loader2,
@@ -33,19 +32,11 @@ import { Pagination } from "@/components/pagination"
 
 type StaffRole = "admin" | "nurse" | "doctor"
 
-interface StaffAccount {
-  id: string
-  user_id?: string
-  email: string
-  role: StaffRole
-  full_name: string | null
-  created_at: string
-}
+type StaffAccount = StaffAccountDTO
 
 const STEPS = ["Role", "Account Details", "Review"]
 
 export default function ClinicAccountsPage() {
-  const supabase = createClient()
   const [operators, setOperators] = useState<StaffAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -55,17 +46,19 @@ export default function ClinicAccountsPage() {
 
   async function fetchOperators() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from("clinic_accounts")
-      .select("*")
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      toast.error(error.message)
-    } else {
-      setOperators((data as unknown as StaffAccount[]) ?? [])
+    try {
+      const res = await getClinicAccountsAction()
+      if (res.error) {
+        toast.error(res.error)
+        setOperators([])
+      } else {
+        setOperators(res.operators || [])
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to load staff accounts")
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -357,7 +350,8 @@ export default function ClinicAccountsPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedOperators.map((account) => {
-                    const accountId = account.id || account.user_id || ""
+                    const accountId = account.id
+
                     return (
                       <TableRow key={accountId} className="cursor-pointer">
                         <TableCell className="font-medium">{account.full_name || "—"}</TableCell>

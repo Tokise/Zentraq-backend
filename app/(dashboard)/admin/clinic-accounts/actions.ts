@@ -147,3 +147,36 @@ export async function removeOperator(targetUserId: string) {
     return { error: err?.message || "Unknown server error occurred." }
   }
 }
+
+export interface StaffAccountDTO {
+  id: string
+  email: string
+  role: "admin" | "nurse" | "doctor"
+  full_name: string | null
+  created_at: string
+}
+
+export async function getClinicAccountsAction() {
+  try {
+    const auth = await requireAdmin()
+    if (auth.error || !auth.user) {
+      return { error: auth.error, operators: [] }
+    }
+
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from("clinic_accounts")
+      .select("id, email, role, full_name, created_at")
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("[getClinicAccountsAction DB Error]:", error)
+      return { error: error.message, operators: [] }
+    }
+
+    return { error: null, operators: (data || []) as StaffAccountDTO[] }
+  } catch (err: any) {
+    console.error("[getClinicAccountsAction Exception]:", err)
+    return { error: err?.message || "Failed to load staff accounts", operators: [] }
+  }
+}

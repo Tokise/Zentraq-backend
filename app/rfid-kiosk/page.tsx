@@ -5,21 +5,19 @@ import Image from "next/image"
 import { TypeAnimation } from "react-type-animation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { createConsultation as createConsultationAction } from "./actions"
+import { createConsultation as createConsultationAction, getKioskStudentProfile } from "./actions"
 
 type KioskMode = "IDLE" | "DISPLAY" | "UNREGISTERED"
 
 interface PatientProfile {
   id: string
-  rfid_uid: string
-  first_name: string
-  last_name: string
-  clinic_photo_url: string | null
-  student_number: string | null
-  employee_number: string | null
+  firstName: string
+  lastName: string
+  studentNumber: string | null
+  employeeNumber: string | null
   department: string | null
+  clinicPhotoUrl: string | null
 }
 
 export default function RfidKioskPage() {
@@ -30,8 +28,6 @@ export default function RfidKioskPage() {
   const [loading, setLoading] = useState(false)
   const clearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  const supabase = createClient()
 
   // Always keep the scan input focused so the kiosk is ready for the next tap
   useEffect(() => {
@@ -85,24 +81,26 @@ export default function RfidKioskPage() {
     setRfidInput("")
 
     try {
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .select("*")
-        .eq("rfid_uid", uid)
-        .maybeSingle()
+      // Server Action handles: input validation, authorization, admin client lookup, data minimization
+      const result = await getKioskStudentProfile(uid)
 
-      if (error) throw error
+      if (result.error) {
+        toast.error(result.error)
+        resetScanner()
+        return
+      }
 
-      if (data) {
-        const fullName = `${data.first_name} ${data.last_name}`
-        const result = await createConsultationAction(data.id, fullName, "Routine Check-in (RFID Kiosk)")
-        if (result.error) {
-          toast.error(result.error)
+      if (result.profile) {
+        const p = result.profile
+        const fullName = `${p.firstName} ${p.lastName}`
+        const consultResult = await createConsultationAction(p.id, fullName, "Routine Check-in (RFID Kiosk)")
+        if (consultResult.error) {
+          toast.error(consultResult.error)
           resetScanner()
           return
         }
 
-        setProfile(data as PatientProfile)
+        setProfile(p as unknown as PatientProfile)
         setKioskState("DISPLAY")
         scheduleAutoClear()
       } else {
@@ -168,15 +166,15 @@ export default function RfidKioskPage() {
           {/* Photo — always the same size, regardless of state — now a large box instead of a circle */}
           <div className="relative">
             <div className="size-50 rounded-2xl overflow-hidden border-4 border-white shadow-lg bg-zinc-100 flex items-center justify-center">
-              {profile?.clinic_photo_url ? (
+              {profile?.clinicPhotoUrl ? (
                 <img
-                  src={profile.clinic_photo_url}
+                  src={profile.clinicPhotoUrl}
                   alt="Student Profile"
                   className="size-full object-cover"
                 />
               ) : profile ? (
                 <span className="text-3xl font-bold bg-zinc-200 text-zinc-400 size-full flex items-center justify-center">
-                  {profile.first_name[0]}{profile.last_name[0]}
+                  {profile.firstName[0]}{profile.lastName[0]}
                 </span>
               ) : (
                 <img
@@ -192,7 +190,7 @@ export default function RfidKioskPage() {
           <div className="min-h-[20px] flex items-center justify-center">
             {kioskState === "DISPLAY" && profile && (
               <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-2xl text-zinc-600 font-semibold tracking-wide">
-                {profile.student_number || profile.employee_number || "—"}
+                {profile.studentNumber || profile.employeeNumber || "—"}
               </code>
             )}
             {kioskState === "UNREGISTERED" && (
@@ -203,12 +201,11 @@ export default function RfidKioskPage() {
 
           </div>
 
-          {/* Name field — actual Input component (read-only) so it matches the scan input exactly */}
-          {/* ID — directly under the picture */}
+          {/* Name — directly under the picture */}
           <div className="min-h-[20px] flex items-center justify-center">
             {kioskState === "DISPLAY" && profile && (
               <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-2xl text-zinc-600 font-semibold tracking-wide">
-                {profile.first_name} {profile.last_name}
+                {profile.firstName} {profile.lastName}
               </code>
             )}
           </div>

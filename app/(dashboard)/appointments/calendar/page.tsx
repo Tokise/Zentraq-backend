@@ -9,9 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/status-badge"
 import { Pagination } from "@/components/pagination"
-import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { updateAppointmentStatus, cancelAppointment, rescheduleAppointment } from "../actions"
+import { updateAppointmentStatus, cancelAppointment, rescheduleAppointment, getStaffAppointmentsAction } from "../actions"
 import { CalendarDays, Loader2, Check, X, Search, List, Users } from "lucide-react"
 import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
 import {
@@ -46,7 +45,6 @@ function statusVariant(status: string) {
 }
 
 export default function AppointmentsCalendarPage() {
-  const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
   const dateParam = searchParams.get("date")
@@ -68,35 +66,28 @@ export default function AppointmentsCalendarPage() {
 
   const fetchAppointments = useCallback(async () => {
     try {
-      const { data } = await supabase
-        .from("student_appointments")
-        .select("*, student_accounts(first_name, last_name, student_number, employee_number, department)")
-        .order("appointment_date", { ascending: false })
-
-      setAppointments(data || [])
+      // Authorized server action handles the privileged query
+      const result = await getStaffAppointmentsAction()
+      if (!result.error) {
+        setAppointments(result.appointments || [])
+      }
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchAppointments()
 
-    const channel = supabase
-      .channel("appointments-calendar-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "student_appointments" },
-        () => fetchAppointments()
-      )
-      .subscribe()
+    // Lightweight polling — server actions replace realtime subscriptions
+    const pollInterval = setInterval(fetchAppointments, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [supabase, fetchAppointments])
+  }, [fetchAppointments])
 
   // Auto-pop up targeted appointment when ?id= parameter is present
   useEffect(() => {
@@ -143,9 +134,8 @@ export default function AppointmentsCalendarPage() {
   // Filtered appointments for main table
   const filteredAppointments = useMemo(() => {
     return appointments.filter((apt) => {
-      const sa = apt.student_accounts
-      const name = sa ? `${sa.first_name} ${sa.last_name}` : "Unknown"
-      const studentNo = sa ? (sa.student_number || sa.employee_number || "") : ""
+      const name = apt.patient_name || "Unknown"
+      const studentNo = apt.student_number || apt.employee_number || ""
 
       const matchesSearch =
         !searchQuery ||
@@ -259,8 +249,7 @@ export default function AppointmentsCalendarPage() {
                       </TableHeader>
                       <TableBody>
                         {paginatedAppointments.map((apt) => {
-                          const sa = apt.student_accounts
-                          const name = sa ? `${sa.first_name} ${sa.last_name}` : "Unknown"
+                          const name = apt.patient_name || "Unknown"
 
                           return (
                             <TableRow
@@ -272,7 +261,7 @@ export default function AppointmentsCalendarPage() {
                                 <div>
                                   <p className="text-sm font-semibold">{name}</p>
                                   <p className="text-xs text-muted-foreground">
-                                    {sa?.student_number || sa?.employee_number || "—"} {sa?.department ? `• ${sa.department}` : ""}
+                                    {apt.student_number || apt.employee_number || "—"} {apt.department ? `• ${apt.department}` : ""}
                                   </p>
                                 </div>
                               </TableCell>
@@ -356,15 +345,13 @@ export default function AppointmentsCalendarPage() {
                   <div className="flex items-center justify-between border-b pb-2">
                     <span className="text-xs text-muted-foreground">Student / Patient</span>
                     <span className="text-sm font-semibold">
-                      {selectedAptModal.student_accounts
-                        ? `${selectedAptModal.student_accounts.first_name} ${selectedAptModal.student_accounts.last_name}`
-                        : "Unknown"}
+                      {selectedAptModal.patient_name || "Unknown"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-b pb-2">
                     <span className="text-xs text-muted-foreground">ID Number</span>
                     <span className="text-sm font-medium">
-                      {selectedAptModal.student_accounts?.student_number || selectedAptModal.student_accounts?.employee_number || "—"}
+                      {selectedAptModal.student_number || selectedAptModal.employee_number || "—"}
                     </span>
                   </div>
                   <div className="flex items-center justify-between border-b pb-2">

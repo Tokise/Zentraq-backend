@@ -59,9 +59,8 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div
-        className={`w-full max-w-md space-y-6 transition-all duration-300 ${
-          isSuccess ? "scale-[0.99] opacity-90" : "scale-100 opacity-100"
-        }`}
+        className={`w-full max-w-md space-y-6 transition-all duration-300 ${isSuccess ? "scale-[0.99] opacity-90" : "scale-100 opacity-100"
+          }`}
       >
         <Card className="rounded-xl border-slate-200 bg-white shadow-lg">
           <div className="flex flex-col items-center space-y-3 text-center pt-6">

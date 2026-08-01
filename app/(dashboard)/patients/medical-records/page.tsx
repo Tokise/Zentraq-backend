@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { Loader2, Search, HeartPulse, AlertTriangle } from "lucide-react"
-import { createClient } from "@/utils/supabase/client"
 
 import { PageHeader } from "@/components/page-header"
 import { SectionHeader } from "@/components/section-header"
@@ -28,17 +27,18 @@ import {
 } from "@/components/ui/dialog"
 
 import { Pagination } from "@/components/pagination"
+import { getMedicalRecordsAction } from "./actions"
 
 type MedicalRecord = {
   id: string
-  student_number: string
+  student_number: string | null
   first_name: string
   last_name: string
-  blood_type: string
-  allergies: string
-  medical_conditions: string
-  emergency_contact_name: string
-  emergency_contact_phone: string
+  blood_type: string | null
+  allergies: string | null
+  medical_conditions: string | null
+  emergency_contact_name: string | null
+  emergency_contact_phone: string | null
   updated_at: string
 }
 
@@ -47,7 +47,6 @@ const PAGE_SIZE = 8
 import { useSearchParams } from "next/navigation"
 
 export default function MedicalRecordsPage() {
-  const supabase = useMemo(() => createClient(), [])
   const searchParams = useSearchParams()
   const targetId = searchParams.get("id") || searchParams.get("patient")
 
@@ -60,40 +59,25 @@ export default function MedicalRecordsPage() {
   const fetchRecords = useCallback(async () => {
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from("medical_records")
-      .select("*")
-      .order("last_name")
-
-    if (!error && data) {
-      setRecords(data as MedicalRecord[])
+    // Authorized server action handles the privileged query
+    const result = await getMedicalRecordsAction()
+    if (!result.error && result.records) {
+      setRecords(result.records as MedicalRecord[])
     }
 
     setLoading(false)
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchRecords()
 
-    const channel = supabase
-      .channel("medical_records_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "medical_records",
-        },
-        () => {
-          fetchRecords()
-        }
-      )
-      .subscribe()
+    // Lightweight polling — server actions replace realtime subscriptions
+    const pollInterval = setInterval(fetchRecords, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [fetchRecords, supabase])
+  }, [fetchRecords])
 
   // Auto-pop up targeted medical record detail modal when ?id= or ?patient= parameter is present
   useEffect(() => {

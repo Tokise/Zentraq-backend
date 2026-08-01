@@ -17,6 +17,70 @@ async function requireClinicStaff() {
     return { error: null, user }
 }
 
+export interface KioskStudentDTO {
+    id: string
+    firstName: string
+    lastName: string
+    studentNumber: string | null
+    employeeNumber: string | null
+    department: string | null
+    clinicPhotoUrl: string | null
+}
+
+/**
+ * Server Action: Look up a student profile by RFID UID for the kiosk.
+ * Uses Service Role via createAdminClient() — NEVER exposes full student records.
+ * Requires clinic staff authentication.
+ */
+export async function getKioskStudentProfile(rfidUid: string) {
+    try {
+        // 1. Validate input length/shape before any DB query (defense in depth)
+        if (!rfidUid || rfidUid.trim().length < 4 || rfidUid.trim().length > 64) {
+            return { error: "Invalid RFID UID format", profile: null }
+        }
+
+        // 2. Require a valid authenticated session (kiosk is behind proxy.ts auth)
+        const auth = await requireClinicStaff()
+        if (auth.error || !auth.user) {
+            return { error: auth.error, profile: null }
+        }
+
+        // 3. Authorized admin client lookup with MINIMUM fields the kiosk UI needs
+        const admin = createAdminClient()
+        const { data, error } = await admin
+            .from("student_accounts")
+            .select("id, first_name, last_name, student_number, employee_number, department, clinic_photo_url")
+            .eq("rfid_uid", rfidUid.trim())
+            .maybeSingle()
+
+        if (error) {
+            console.error("[getKioskStudentProfile DB Error]:", error)
+            return { error: error.message, profile: null }
+        }
+
+        if (!data) {
+            // Not found is NOT an error — the kiosk shows the UNREGISTERED state
+            return { error: null, profile: null }
+        }
+
+        // 4. Return ONLY the fields the kiosk UI renders (data minimization)
+        const profile: KioskStudentDTO = {
+            id: data.id,
+            firstName: data.first_name || "",
+            lastName: data.last_name || "",
+            studentNumber: data.student_number || null,
+            employeeNumber: data.employee_number || null,
+            department: data.department || null,
+            clinicPhotoUrl: data.clinic_photo_url || null,
+        }
+
+        return { error: null, profile }
+    } catch (err: any) {
+        console.error("[getKioskStudentProfile Exception]:", err)
+        return { error: err?.message || "Failed to look up student", profile: null }
+    }
+}
+
 export async function createConsultation(profileId: string, patientName: string, complaint: string) {
     try {
         const auth = await requireClinicStaff()

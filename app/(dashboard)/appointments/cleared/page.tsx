@@ -39,8 +39,8 @@ import {
 } from "@/components/ui/dialog"
 
 import { Pagination } from "@/components/pagination"
-import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
+import { getClearedRecordsAction } from "../actions"
 
 type RecordStatus = "Cleared" | "Completed" | "Cancelled" | "No-Show"
 
@@ -106,44 +106,25 @@ export default function ClearedPage() {
 
     useEffect(() => {
         async function loadRecords() {
-            const supabase = createClient()
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            // Fetch completed consultations and student accounts
-            const [consultationsRes, studentsRes] = await Promise.all([
-                supabase.from("consultations").select("*").in("status", ["completed", "cancelled", "dismissed"]).order("created_at", { ascending: false }),
-                supabase.from("student_accounts").select("id, user_id, student_number, employee_number, department"),
-            ])
-
-            if (consultationsRes.error) {
-                toast.error("Failed to load records")
+            // Authorized server action handles the privileged query
+            const result = await getClearedRecordsAction()
+            if (result.error) {
+                toast.error(result.error)
                 setLoading(false)
                 return
             }
 
-            const studentMap = new Map<string, { student_number: string; department: string }>()
-            studentsRes.data?.forEach((s: any) => {
-                const num = s.student_number || s.employee_number || ""
-                const dept = s.department || "General"
-                if (s.id) studentMap.set(s.id, { student_number: num, department: dept })
-                if (s.user_id) studentMap.set(s.user_id, { student_number: num, department: dept })
-            })
-
-            const consultations = consultationsRes.data || []
-            const records: ClearedRecord[] = consultations.map((c, idx) => {
-                const studMeta = c.profile_id ? studentMap.get(c.profile_id) : null
-                const realStudentNum = studMeta?.student_number || c.student_number || "Walk-In"
-                const realDept = studMeta?.department || c.department || "General"
+            const consultations = result.records || []
+            const records: ClearedRecord[] = consultations.map((c: any, idx: number) => {
                 const qNum = c.queue_number || `Q-${String(consultations.length - idx).padStart(3, "0")}`
 
                 return {
                     id: c.id,
                     queue_number: qNum,
                     clearance_code: `CLR-2026-${String(consultations.length - idx).padStart(3, "0")}`,
-                    student_number: realStudentNum,
+                    student_number: c.student_number || "Walk-In",
                     patient_name: c.patient_name || "Unknown",
-                    department: realDept,
+                    department: c.department || "General",
                     purpose: c.student_complaint || c.consultation_reason || "Consultation",
                     cleared_date: c.created_at ? c.created_at.split("T")[0] : "",
                     cleared_time: c.created_at ? new Date(c.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "",

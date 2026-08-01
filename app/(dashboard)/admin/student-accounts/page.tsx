@@ -8,9 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { toggleStudentActiveStatus, archiveStudentProfile, saveStudentProfileEdit } from "./actions"
+import { toggleStudentActiveStatus, archiveStudentProfile, saveStudentProfileEdit, getStudentAccountsAction } from "./actions"
 import { Pagination } from "@/components/pagination"
 import {
   Search,
@@ -73,26 +72,20 @@ export default function StudentAccountsPage() {
     course: "", yearLevel: "", position: "", idSuffix: "", employeeId: "",
   })
 
-  const supabase = createClient()
-
   const fetchPatients = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     else setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from("student_accounts")
-        .select("*")
-        .order("last_name", { ascending: true })
-
-      if (error) throw error
-      setPatients((data as PatientProfile[]) || [])
+      const res = await getStudentAccountsAction()
+      if (res.error) throw new Error(res.error)
+      setPatients((res.patients as PatientProfile[]) || [])
     } catch (err: any) {
       toast.error(err.message || "Failed to load patients")
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchPatients()

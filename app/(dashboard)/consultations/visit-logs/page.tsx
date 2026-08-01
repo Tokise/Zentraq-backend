@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Search } from "lucide-react"
-import { createClient } from "@/utils/supabase/client"
 import { PageHeader } from "@/components/page-header"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { EmptyState } from "@/components/empty-state"
 import { toast } from "sonner"
+import { getVisitLogsAction } from "./actions"
 
 type VisitLogRecord = {
   id: string
@@ -109,7 +109,6 @@ export default function VisitLogsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const targetId = searchParams.get("id")
-  const supabase = createClient()
 
   const [records, setRecords] = useState<VisitLogRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -119,39 +118,27 @@ export default function VisitLogsPage() {
 
   const fetchRecords = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("visit_logs")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(100)
-
-      if (error) throw error
-      if (data) setRecords(data as VisitLogRecord[])
+      // Authorized server action handles the privileged query
+      const result = await getVisitLogsAction()
+      if (result.error) throw new Error(result.error)
+      if (result.records) setRecords(result.records as VisitLogRecord[])
     } catch (err) {
       console.error("Error fetching visit logs:", err)
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchRecords()
 
-    const channel = supabase
-      .channel("visit-logs-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "visit_logs" },
-        () => {
-          fetchRecords()
-        }
-      )
-      .subscribe()
+    // Lightweight polling — server actions replace realtime subscriptions
+    const pollInterval = setInterval(fetchRecords, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [fetchRecords, supabase])
+  }, [fetchRecords])
 
   // Auto-pop up exact visit log record dialog when ?id= parameter is present
   useEffect(() => {

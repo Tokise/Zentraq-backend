@@ -171,3 +171,28 @@ export async function archiveStudentProfile(profileId: string, isArchived: boole
         return { error: err?.message || "Server error occurred" }
     }
 }
+
+export async function getStudentAccountsAction() {
+    try {
+        const auth = await requireAdmin()
+        if (auth.error || !auth.user) {
+            return { error: auth.error, patients: [] }
+        }
+
+        const admin = createAdminClient()
+        const { data, error } = await admin
+            .from("student_accounts")
+            .select("id, rfid_uid, first_name, last_name, email, department, course, year_level, position, student_number, employee_number, clinic_photo_url, active_status, archived_at, created_at")
+            .order("last_name", { ascending: true })
+
+        if (error) {
+            console.error("[getStudentAccountsAction DB Error]:", error)
+            return { error: error.message, patients: [] }
+        }
+
+        return { error: null, patients: data || [] }
+    } catch (err: any) {
+        console.error("[getStudentAccountsAction Exception]:", err)
+        return { error: err?.message || "Failed to fetch student accounts", patients: [] }
+    }
+}

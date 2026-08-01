@@ -197,3 +197,74 @@ export async function addComplaintType(name: string) {
         return { error: err?.message || "Server error occurred" }
     }
 }
+
+export interface ConsultationDTO {
+    id: string
+    patient_name: string
+    student_complaint: string
+    status: string
+    created_at: string
+    handled_at: string | null
+    notes: string | null
+}
+
+/**
+ * Server Action: Fetch active consultations for the clinic staff queue.
+ * Uses Service Role via createAdminClient() with explicit field selection.
+ * Requires clinic staff authentication.
+ */
+export async function getConsultationsAction() {
+    try {
+        const auth = await requireClinicStaff()
+        if (auth.error || !auth.user) {
+            return { error: auth.error, consultations: [] }
+        }
+
+        const admin = createAdminClient()
+        const { data, error } = await admin
+            .from("consultations")
+            .select("id, patient_name, student_complaint, status, created_at, handled_at, notes")
+            .order("created_at", { ascending: false })
+            .limit(50)
+
+        if (error) {
+            console.error("[getConsultationsAction DB Error]:", error)
+            return { error: error.message, consultations: [] }
+        }
+
+        return { error: null, consultations: (data || []) as ConsultationDTO[] }
+    } catch (err: any) {
+        console.error("[getConsultationsAction Exception]:", err)
+        return { error: err?.message || "Failed to fetch consultations", consultations: [] }
+    }
+}
+
+/**
+ * Server Action: Fetch complaint types for the consultation wizard.
+ * Requires clinic staff authentication.
+ */
+export async function getComplaintsAction() {
+    try {
+        const auth = await requireClinicStaff()
+        if (auth.error || !auth.user) {
+            return { error: auth.error, complaints: [] }
+        }
+
+        const admin = createAdminClient()
+        const { data, error } = await admin
+            .from("complaints")
+            .select("name")
+            .order("created_at", { ascending: false })
+
+        if (error) {
+            console.error("[getComplaintsAction DB Error]:", error)
+            return { error: error.message, complaints: [] }
+        }
+
+        const complaints: string[] = (data || []).map((c: { name: string }) => c.name)
+        return { error: null, complaints }
+    } catch (err: any) {
+        console.error("[getComplaintsAction Exception]:", err)
+        return { error: err?.message || "Failed to fetch complaints", complaints: [] }
+    }
+}

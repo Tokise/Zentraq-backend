@@ -10,9 +10,11 @@ import { Loader2, ShieldCheck } from "lucide-react"
 import { PasswordStrengthInput } from "@/components/password-strength-input"
 import { checkPassword } from "@/lib/validation/password"
 
+import { getStudentProfileDTO, type StudentProfileDTO } from "@/app/student/actions"
+
 export default function StudentSettingsPage() {
     const supabase = createClient()
-    const [profile, setProfile] = useState<any>(null)
+    const [profile, setProfile] = useState<StudentProfileDTO | null>(null)
     const [loading, setLoading] = useState(true)
     const [changingPassword, setChangingPassword] = useState(false)
     const [password, setPassword] = useState("")
@@ -20,20 +22,19 @@ export default function StudentSettingsPage() {
 
     useEffect(() => {
         async function load() {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            const { data } = await supabase
-                .from("student_accounts")
-                .select("*")
-                .eq("user_id", user.id)
-                .maybeSingle()
-
-            setProfile(data)
-            setLoading(false)
+            try {
+                const res = await getStudentProfileDTO()
+                if (res.profile) {
+                    setProfile(res.profile)
+                }
+            } catch (err) {
+                console.error("Error loading student settings profile:", err)
+            } finally {
+                setLoading(false)
+            }
         }
         load()
-    }, [supabase])
+    }, [])
 
     async function handleChangePassword(e: React.FormEvent) {
         e.preventDefault()
@@ -84,16 +85,16 @@ export default function StudentSettingsPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <p className="text-xs text-muted-foreground">First Name</p>
-                                    <p className="font-medium">{profile.first_name}</p>
+                                    <p className="font-medium">{profile.firstName}</p>
                                 </div>
                                 <div>
                                     <p className="text-xs text-muted-foreground">Last Name</p>
-                                    <p className="font-medium">{profile.last_name}</p>
+                                    <p className="font-medium">{profile.lastName}</p>
                                 </div>
                             </div>
                             <div>
                                 <p className="text-xs text-muted-foreground">Student / Employee ID</p>
-                                <p className="font-medium">{profile.student_number || profile.employee_number || "N/A"}</p>
+                                <p className="font-medium">{profile.studentNumber || profile.employeeNumber || "N/A"}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-muted-foreground">Email</p>
