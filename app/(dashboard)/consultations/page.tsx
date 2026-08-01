@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
-import { createClient } from "@/utils/supabase/client"
 import { PageHeader } from "@/components/page-header"
 import { SectionHeader } from "@/components/section-header"
 import { StatusBadge } from "@/components/status-badge"
@@ -29,7 +28,7 @@ import { EmptyState } from "@/components/empty-state"
 import { Pagination } from "@/components/pagination"
 import { ConsultationWizard, type CompletionReport, type DispositionStatus } from "@/components/consultation-wizard"
 import { toast } from "sonner"
-import { updateConsultationStatus, escalateToEmergency, completeConsultation, addComplaintType } from "./actions"
+import { updateConsultationStatus, escalateToEmergency, completeConsultation, addComplaintType, getConsultationsAction, getComplaintsAction } from "./actions"
 
 type ConsultationRecord = {
   id: string
@@ -72,7 +71,6 @@ export default function ConsultationsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const targetId = searchParams.get("id")
-  const supabase = createClient()
 
   const [consultations, setConsultations] = useState<ConsultationRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,42 +86,29 @@ export default function ConsultationsPage() {
 
   const fetchConsultations = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("consultations")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(50)
-
-      if (error) throw error
-
-      if (data) {
-        setConsultations(data as ConsultationRecord[])
+      // Authorized server action handles the privileged query
+      const result = await getConsultationsAction()
+      if (result.error) throw new Error(result.error)
+      if (result.consultations) {
+        setConsultations(result.consultations as ConsultationRecord[])
       }
     } catch (err) {
       console.error("Error fetching consultations:", err)
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchConsultations()
 
-    const channel = supabase
-      .channel("consultations-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "consultations" },
-        () => {
-          fetchConsultations()
-        }
-      )
-      .subscribe()
+    // Lightweight polling — server actions replace realtime subscriptions
+    const pollInterval = setInterval(fetchConsultations, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [supabase, fetchConsultations])
+  }, [fetchConsultations])
 
   // Auto-pop up the exact consultation detail when ?id= parameter is present
   useEffect(() => {
@@ -137,39 +122,19 @@ export default function ConsultationsPage() {
 
   const fetchComplaints = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("complaints")
-        .select("name")
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-
-      if (data) {
-        setComplaintTypes(data.map((c: { name: string }) => c.name))
+      const result = await getComplaintsAction()
+      if (result.error) throw new Error(result.error)
+      if (result.complaints) {
+        setComplaintTypes(result.complaints)
       }
     } catch (err) {
       console.error("Error fetching complaints:", err)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchComplaints()
-
-    const channel = supabase
-      .channel("complaints-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "complaints" },
-        () => {
-          fetchComplaints()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [fetchComplaints, supabase])
+  }, [fetchComplaints])
 
   // Open wizard for a consultation
   function openWizard(consult: ConsultationRecord) {

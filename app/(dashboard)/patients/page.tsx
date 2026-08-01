@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { Loader2, Search, Users } from "lucide-react"
-import { createClient } from "@/utils/supabase/client"
 
 import { PageHeader } from "@/components/page-header"
 import { SectionHeader } from "@/components/section-header"
@@ -27,15 +26,17 @@ import {
 } from "@/components/ui/dialog"
 
 import { Pagination } from "@/components/pagination"
+import { getPatientsAction } from "./actions"
 
 type Patient = {
   id: string
-  student_number: string
+  student_number: string | null
+  employee_number: string | null
   first_name: string
   last_name: string
-  email: string
-  department: string
-  rfid_uid: string
+  email: string | null
+  department: string | null
+  rfid_uid: string | null
   active_status: boolean
 }
 
@@ -44,8 +45,6 @@ const PAGE_SIZE = 8
 import { useSearchParams } from "next/navigation"
 
 export default function PatientsPage() {
-  // Memoize client to prevent recreation on every re-render
-  const supabase = useMemo(() => createClient(), [])
   const searchParams = useSearchParams()
   const targetId = searchParams.get("id") || searchParams.get("patient")
 
@@ -58,40 +57,25 @@ export default function PatientsPage() {
   const fetchPatients = useCallback(async () => {
     setLoading(true)
 
-    const { data, error } = await supabase
-      .from("student_accounts")
-      .select("*")
-      .order("last_name")
-
-    if (!error && data) {
-      setPatients(data as Patient[])
+    // Authorized server action handles the privileged query
+    const result = await getPatientsAction()
+    if (!result.error && result.patients) {
+      setPatients(result.patients as Patient[])
     }
 
     setLoading(false)
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchPatients()
 
-    const channel = supabase
-      .channel("student_accounts_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "student_accounts",
-        },
-        () => {
-          fetchPatients()
-        }
-      )
-      .subscribe()
+    // Lightweight polling — server actions replace realtime subscriptions
+    const pollInterval = setInterval(fetchPatients, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [fetchPatients, supabase])
+  }, [fetchPatients])
 
   // Auto-pop up targeted patient profile modal when ?id= or ?patient= parameter is present
   useEffect(() => {

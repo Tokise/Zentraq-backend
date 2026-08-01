@@ -5,49 +5,43 @@ import Link from "next/link"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { createClient } from "@/utils/supabase/client"
-import { fetchAnnouncementsWithPosters } from "@/lib/announcements"
+import { getStudentProfileDTO, getStudentAnnouncementsAction, type StudentProfileDTO, type StudentAnnouncementDTO } from "./actions"
 import { Bell, ArrowRight, ImageOff } from "lucide-react"
 
 export default function StudentDashboard() {
-    const supabase = createClient()
-    const [profile, setProfile] = useState<any>(null)
-    const [announcements, setAnnouncements] = useState<any[]>([])
+    const [profile, setProfile] = useState<StudentProfileDTO | null>(null)
+    const [announcements, setAnnouncements] = useState<StudentAnnouncementDTO[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         async function loadData() {
             try {
-                const { data: { user } } = await supabase.auth.getUser()
-                if (!user) return
+                const [profRes, annRes] = await Promise.all([
+                    getStudentProfileDTO(),
+                    getStudentAnnouncementsAction(5),
+                ])
 
-                // Load student profile
-                const { data: studentData } = await supabase
-                    .from("student_accounts")
-                    .select("*")
-                    .eq("user_id", user.id)
-                    .maybeSingle()
+                if (profRes.profile) {
+                    setProfile(profRes.profile)
+                }
 
-                setProfile(studentData)
-
-                // Load recent announcements (latest 5)
-                const announcementData = await fetchAnnouncementsWithPosters(supabase, { limit: 5 })
-
-                setAnnouncements(announcementData)
+                if (annRes.announcements) {
+                    setAnnouncements(annRes.announcements)
+                }
             } catch (err) {
-                console.error(err)
+                console.error("Error loading student dashboard data:", err)
             } finally {
                 setLoading(false)
             }
         }
         loadData()
-    }, [supabase])
+    }, [])
 
     return (
         <div className="space-y-6 max-w-3xl mx-auto">
             <PageHeader
                 title="Student Dashboard"
-                description={profile ? `Welcome, ${profile.first_name} ${profile.last_name}` : "Welcome to the student portal"}
+                description={profile ? `Welcome, ${profile.firstName} ${profile.lastName}` : "Welcome to the student portal"}
             />
 
             {/* Profile card */}
@@ -64,26 +58,26 @@ export default function StudentDashboard() {
                     ) : profile ? (
                         <div className="flex items-center gap-4">
                             <div className="size-16 rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50 shrink-0 flex items-center justify-center">
-                                {profile.clinic_photo_url ? (
-                                    <img src={profile.clinic_photo_url} alt="Profile" className="size-full object-cover" />
+                                {profile.clinicPhotoUrl ? (
+                                    <img src={profile.clinicPhotoUrl} alt="Profile" className="size-full object-cover" />
                                 ) : (
                                     <span className="text-lg font-bold text-zinc-500">
-                                        {profile.first_name?.[0]}{profile.last_name?.[0]}
+                                        {profile.firstName?.[0]}{profile.lastName?.[0]}
                                     </span>
                                 )}
                             </div>
                             <div className="min-w-0 flex-1 space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <h2 className="font-semibold text-base text-zinc-900 truncate">
-                                        {profile.first_name} {profile.last_name}
+                                        {profile.firstName} {profile.lastName}
                                     </h2>
                                     <Badge variant="outline" className="text-[10px] font-mono">
-                                        {profile.student_number || profile.employee_number || "N/A"}
+                                        {profile.studentNumber || profile.employeeNumber || "N/A"}
                                     </Badge>
                                 </div>
                                 <p className="text-sm text-zinc-400">{profile.department || "No department on file"}</p>
                                 {profile.course && (
-                                    <p className="text-xs text-zinc-400">{profile.course}{profile.year_level ? ` • ${profile.year_level}` : ""}</p>
+                                    <p className="text-xs text-zinc-400">{profile.course}{profile.yearLevel ? ` • ${profile.yearLevel}` : ""}</p>
                                 )}
                             </div>
                         </div>
@@ -135,8 +129,8 @@ export default function StudentDashboard() {
                                     <CardHeader className="pb-1.5">
                                         <CardTitle className="text-sm font-semibold">{ann.title}</CardTitle>
                                         <p className="text-[11px] text-muted-foreground">
-                                            {ann.created_at ? new Date(ann.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
-                                            {ann.poster?.full_name ? ` • ${ann.poster.full_name}` : ""}
+                                            {ann.createdAt ? new Date(ann.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                                            {ann.posterName ? ` • ${ann.posterName}` : ""}
                                         </p>
                                     </CardHeader>
                                     <CardContent>
@@ -145,10 +139,10 @@ export default function StudentDashboard() {
                                 </Card>
 
                                 {/* Full-length picture standalone below the text card */}
-                                {ann.image_url && (
+                                {ann.imageUrl && (
                                     <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-muted/20 p-1 shadow-sm">
                                         <img
-                                            src={ann.image_url}
+                                            src={ann.imageUrl}
                                             alt={ann.title}
                                             className="w-full h-auto object-contain rounded-lg"
                                         />

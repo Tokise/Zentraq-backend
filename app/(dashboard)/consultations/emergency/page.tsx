@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, HeartPulse, Loader2, Search } from "lucide-react"
-import { createClient } from "@/utils/supabase/client"
 import { PageHeader } from "@/components/page-header"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
@@ -28,8 +27,8 @@ import { EmptyState } from "@/components/empty-state"
 import { Pagination } from "@/components/pagination"
 import { ConsultationWizard, type CompletionReport, type DispositionStatus } from "@/components/consultation-wizard"
 import { toast } from "sonner"
-import { updateEmergencyComplaint, updateEmergencyStatus, completeEmergencyCase } from "./actions"
-import { addComplaintType } from "../actions"
+import { updateEmergencyComplaint, updateEmergencyStatus, completeEmergencyCase, getEmergencyCasesAction } from "./actions"
+import { addComplaintType, getComplaintsAction } from "../actions"
 
 type ConsultationRecord = {
   id: string
@@ -60,7 +59,6 @@ function statusVariant(status: string) {
 export default function EmergencyCasesPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = createClient()
 
   const [records, setRecords] = useState<ConsultationRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,62 +77,39 @@ export default function EmergencyCasesPage() {
 
   const fetchRecords = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("consultations")
-        .select("*")
-        .eq("status", "in_emergency")
-        .order("created_at", { ascending: false })
-        .limit(100)
-
-      if (error) throw error
-      if (data) setRecords(data as ConsultationRecord[])
+      // Authorized server action handles the privileged query
+      const result = await getEmergencyCasesAction()
+      if (result.error) throw new Error(result.error)
+      if (result.records) setRecords(result.records as ConsultationRecord[])
     } catch (err) {
       console.error("Error fetching emergency cases:", err)
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [])
 
   const fetchComplaints = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("complaints")
-        .select("name")
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-
-      if (data) {
-        setComplaintTypes(data.map((c: { name: string }) => c.name))
+      const result = await getComplaintsAction()
+      if (result.error) throw new Error(result.error)
+      if (result.complaints) {
+        setComplaintTypes(result.complaints)
       }
     } catch (err) {
       console.error("Error fetching complaints:", err)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchRecords()
 
-    const channel = supabase
-      .channel("emergency-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "consultations",
-          filter: "status=eq.in_emergency",
-        },
-        () => {
-          fetchRecords()
-        }
-      )
-      .subscribe()
+    // Lightweight polling — server actions replace realtime subscriptions
+    const pollInterval = setInterval(fetchRecords, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [fetchRecords, supabase])
+  }, [fetchRecords])
 
   const targetId = searchParams.get("id")
 
@@ -150,22 +125,7 @@ export default function EmergencyCasesPage() {
 
   useEffect(() => {
     fetchComplaints()
-
-    const channel = supabase
-      .channel("emergency-complaints-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "complaints" },
-        () => {
-          fetchComplaints()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [fetchComplaints, supabase])
+  }, [fetchComplaints])
 
   useEffect(() => {
     const id = searchParams.get("id")
@@ -180,20 +140,17 @@ export default function EmergencyCasesPage() {
     }
 
     ; (async () => {
-      const { data } = await supabase
-        .from("consultations")
-        .select("*")
-        .eq("id", id)
-        .single()
-
-      if (data && (data.status === "in_emergency" || data.status === "waiting" || data.status === "in_consultation")) {
-        setHandlingRecord(data as ConsultationRecord)
-        setEditedEmergencyComplaint(data.student_complaint)
+      // Authorized server action handles targeted lookup
+      const result = await getEmergencyCasesAction()
+      const found = result.records?.find((r) => r.id === id)
+      if (found && (found.status === "in_emergency" || found.status === "waiting" || found.status === "in_consultation")) {
+        setHandlingRecord(found as ConsultationRecord)
+        setEditedEmergencyComplaint(found.student_complaint)
         setHandlingDialogOpen(true)
         router.replace("/consultations/emergency")
       }
     })()
-  }, [searchParams, records, supabase, router])
+  }, [searchParams, records, router])
 
   async function handleAddComplaint(complaint: string) {
     const result = await addComplaintType(complaint)

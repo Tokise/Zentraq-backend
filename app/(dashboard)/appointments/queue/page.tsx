@@ -75,13 +75,11 @@ const DEFAULT_TIME_SLOTS: TimeSlot[] = [
   { time: "04:00 PM", bookedCount: 4, maxCapacity: 4 },
 ]
 
-import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
-import { updateAppointmentStatus, cancelAppointment, rescheduleAppointment } from "../actions"
+import { updateAppointmentStatus, cancelAppointment, rescheduleAppointment, getStaffAppointmentsAction } from "../actions"
 import { useSearchParams } from "next/navigation"
 
 export default function QueuePage() {
-  const supabase = createClient()
   const searchParams = useSearchParams()
   const targetId = searchParams.get("id") || searchParams.get("queue")
 
@@ -102,38 +100,28 @@ export default function QueuePage() {
 
   const [dbAppointments, setDbAppointments] = useState<any[]>([])
 
-  // Fetch Real Student Appointments from Supabase
+  // Fetch Real Student Appointments via authorized server action
   const fetchRealQueue = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("student_appointments")
-        .select("*, student_accounts(first_name, last_name, student_number, employee_number, department)")
-        .order("appointment_date", { ascending: true })
-
-      if (!error && data) {
-        setDbAppointments(data)
+      const result = await getStaffAppointmentsAction()
+      if (!result.error && result.appointments) {
+        setDbAppointments(result.appointments)
       }
     } catch (err) {
-      console.error("Error fetching live student appointments queue from Supabase:", err)
+      console.error("Error fetching live student appointments queue:", err)
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchRealQueue()
 
-    const channel = supabase
-      .channel("student-appointments-queue-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "student_appointments" },
-        () => fetchRealQueue()
-      )
-      .subscribe()
+    // Lightweight polling — server actions replace realtime subscriptions
+    const pollInterval = setInterval(fetchRealQueue, 30000)
 
     return () => {
-      supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
-  }, [supabase, fetchRealQueue])
+  }, [fetchRealQueue])
 
   // Load any locally added walk-ins from localStorage
   useEffect(() => {
@@ -151,15 +139,14 @@ export default function QueuePage() {
   // EXCLUDES Completed and Cancelled/Skipped appointments (which belong on the Cleared page)
   const queueList = useMemo(() => {
     const mappedDb: QueueItem[] = dbAppointments.map((apt: any, index: number) => {
-      const sa = apt.student_accounts
       let status: QueueItem["status"] = "Waiting"
       if (apt.status === "confirmed") status = "In Consultation"
       else if (apt.status === "completed") status = "Completed"
       else if (apt.status === "cancelled") status = "Skipped"
 
-      const name = sa ? `${sa.first_name} ${sa.last_name}` : "Student Patient"
-      const studentNum = sa ? (sa.student_number || sa.employee_number || "Walk-In") : "Walk-In"
-      const dept = sa?.department || "General"
+      const name = apt.patient_name || "Student Patient"
+      const studentNum = apt.student_number || apt.employee_number || "Walk-In"
+      const dept = apt.department || "General"
 
       return {
         id: apt.id,

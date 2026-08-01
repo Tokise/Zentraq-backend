@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { createClient } from "@/utils/supabase/client"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -20,17 +19,9 @@ import { EmptyState } from "@/components/empty-state"
 import { Loader2, Shield, Search, RefreshCw, Filter } from "lucide-react"
 import { toast } from "sonner"
 
-type AuditLogEntry = {
-  id: string
-  action: string
-  user_id: string | null
-  email: string | null
-  resource: string | null
-  details: Record<string, any> | null
-  ip_address: string | null
-  user_agent: string | null
-  timestamp: string
-}
+import { getAuditLogsAction, type AuditLogDTO } from "./actions"
+
+type AuditLogEntry = AuditLogDTO
 
 const ACTION_VARIANTS: Record<string, string> = {
   AUTH_LOGIN_SUCCESS: "secondary",
@@ -86,7 +77,6 @@ function actionLabel(action: string) {
 }
 
 export default function AuditLogsPage() {
-  const supabase = createClient()
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -99,43 +89,30 @@ export default function AuditLogsPage() {
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
-      let query = supabase
-        .from("audit_logs")
-        .select("*", { count: "exact" })
-        .order("timestamp", { ascending: false })
-        .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
+      const res = await getAuditLogsAction({
+        page,
+        pageSize: PAGE_SIZE,
+        actionFilter,
+        searchQuery,
+        dateFrom,
+        dateTo,
+      })
 
-      if (actionFilter) {
-        query = query.eq("action", actionFilter)
+      if (res.error) {
+        toast.error(res.error || "Failed to load audit logs. Ensure you have admin access.")
+        setLogs([])
+        setTotalCount(0)
+      } else {
+        setLogs(res.logs)
+        setTotalCount(res.totalCount)
       }
-
-      if (searchQuery) {
-        query = query.or(`email.ilike.%${searchQuery}%,user_id.ilike.%${searchQuery}%,ip_address.ilike.%${searchQuery}%`)
-      }
-
-      if (dateFrom) {
-        query = query.gte("timestamp", new Date(dateFrom).toISOString())
-      }
-
-      if (dateTo) {
-        const endDate = new Date(dateTo)
-        endDate.setDate(endDate.getDate() + 1)
-        query = query.lt("timestamp", endDate.toISOString())
-      }
-
-      const { data, error, count } = await query
-
-      if (error) throw error
-
-      setLogs((data || []) as AuditLogEntry[])
-      setTotalCount(count || 0)
     } catch (err: any) {
       console.error("Error fetching audit logs:", err)
       toast.error("Failed to load audit logs. Ensure you have admin access.")
     } finally {
       setLoading(false)
     }
-  }, [supabase, page, actionFilter, searchQuery, dateFrom, dateTo])
+  }, [page, actionFilter, searchQuery, dateFrom, dateTo])
 
   useEffect(() => {
     fetchLogs()

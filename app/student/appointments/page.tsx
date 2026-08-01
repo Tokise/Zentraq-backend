@@ -1,29 +1,22 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { StatusBadge } from "@/components/status-badge"
-import { createClient } from "@/utils/supabase/client"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { MonthCalendar, type CalendarMarker } from "@/components/month-calendar"
 import { toast } from "sonner"
-import { createAppointment, cancelAppointment } from "./actions"
-import { CalendarDays, Loader2, X } from "lucide-react"
-import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
-
-import { useSearchParams } from "next/navigation"
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
+import { Loader2, CalendarDays, X } from "lucide-react"
+import { createAppointment, cancelAppointment, getStudentAppointmentsAction, type StudentAppointmentDTO } from "./actions"
 
 const TIME_SLOTS = [
-    "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM",
-    "11:00 AM", "11:30 AM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-    "3:00 PM", "3:30 PM", "4:00 PM",
+    "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM",
+    "10:30 AM", "11:00 AM", "11:30 AM", "1:00 PM", "1:30 PM",
+    "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM", "4:00 PM",
 ]
 
 function todayKey() {
@@ -31,60 +24,49 @@ function todayKey() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-function statusVariant(status: string) {
+function statusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
     switch (status) {
-        case "confirmed": return "info" as const
-        case "completed": return "success" as const
-        case "cancelled": return "danger" as const
-        default: return "warning" as const
+        case "confirmed": return "info"
+        case "completed": return "success"
+        case "cancelled": return "danger"
+        case "pending": return "warning"
+        default: return "default"
     }
 }
 
 export default function StudentAppointmentsPage() {
-    const supabase = createClient()
     const searchParams = useSearchParams()
     const targetId = searchParams.get("id")
     const dateParam = searchParams.get("date")
 
-    const [appointments, setAppointments] = useState<any[]>([])
+    const [appointments, setAppointments] = useState<StudentAppointmentDTO[]>([])
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
     const [showForm, setShowForm] = useState(false)
     const [form, setForm] = useState({ date: "", time_slot: "", reason: "" })
-    const [studentAccountId, setStudentAccountId] = useState<string | null>(null)
-    const [userId, setUserId] = useState<string | null>(null)
     const [selectedDay, setSelectedDay] = useState<string>(dateParam || todayKey())
-    const [selectedAptModal, setSelectedAptModal] = useState<any | null>(null)
+    const [selectedAptModal, setSelectedAptModal] = useState<StudentAppointmentDTO | null>(null)
+
+
+    async function refreshAppointments() {
+        try {
+            const res = await getStudentAppointmentsAction()
+            if (res.appointments) {
+                setAppointments(res.appointments)
+            }
+        } catch (err) {
+            console.error("Error fetching appointments:", err)
+        }
+    }
 
     useEffect(() => {
         async function load() {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-            setUserId(user.id)
-
-            // Get student account
-            const { data: studentData } = await supabase
-                .from("student_accounts")
-                .select("id")
-                .eq("user_id", user.id)
-                .maybeSingle()
-
-            if (studentData) {
-                setStudentAccountId(studentData.id)
-            }
-
-            // Load appointments
-            const { data } = await supabase
-                .from("student_appointments")
-                .select("*")
-                .eq("student_user_id", user.id)
-                .order("appointment_date", { ascending: true })
-
-            setAppointments(data || [])
+            setLoading(true)
+            await refreshAppointments()
             setLoading(false)
         }
         load()
-    }, [supabase])
+    }, [])
 
     // Auto-pop up targeted appointment details modal when redirected with ?id=
     useEffect(() => {
@@ -97,33 +79,19 @@ export default function StudentAppointmentsPage() {
         }
     }, [targetId, appointments])
 
-    async function refreshAppointments() {
-        if (!userId) return
-        const { data } = await supabase
-            .from("student_appointments")
-            .select("*")
-            .eq("student_user_id", userId)
-            .order("appointment_date", { ascending: true })
-        setAppointments(data || [])
-    }
-
     async function handleBook(e: React.FormEvent) {
         e.preventDefault()
         if (!form.date || !form.time_slot) {
             toast.error("Please select a date and time slot")
             return
         }
-        if (!userId) return
 
         setSubmitting(true)
         try {
             const result = await createAppointment({
-                studentUserId: userId,
                 appointmentDate: form.date,
                 timeSlot: form.time_slot,
-                complaint: form.reason || "Student appointment",
-                patientName: "Student",
-                department: "Student",
+                reason: form.reason || "Student appointment",
             })
 
             if (result.error) {

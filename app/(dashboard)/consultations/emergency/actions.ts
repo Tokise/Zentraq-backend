@@ -58,3 +58,45 @@ export async function completeEmergencyCase(id: string, complaint: string, notes
         return { success: true }
     } catch (err: any) { return { error: err?.message || "Server error" } }
 }
+
+export interface EmergencyCaseDTO {
+    id: string
+    patient_name: string
+    student_complaint: string
+    status: string
+    created_at: string
+    handled_at: string | null
+    notes: string | null
+}
+
+/**
+ * Server Action: Fetch emergency consultations for the emergency queue.
+ * Uses Service Role via createAdminClient() with explicit field selection.
+ * Requires clinic staff authentication.
+ */
+export async function getEmergencyCasesAction() {
+    try {
+        const auth = await requireClinicStaff()
+        if (auth.error || !auth.user) {
+            return { error: auth.error, records: [] }
+        }
+
+        const admin = createAdminClient()
+        const { data, error } = await admin
+            .from("consultations")
+            .select("id, patient_name, student_complaint, status, created_at, handled_at, notes")
+            .eq("status", "in_emergency")
+            .order("created_at", { ascending: false })
+            .limit(100)
+
+        if (error) {
+            console.error("[getEmergencyCasesAction DB Error]:", error)
+            return { error: error.message, records: [] }
+        }
+
+        return { error: null, records: (data || []) as EmergencyCaseDTO[] }
+    } catch (err: any) {
+        console.error("[getEmergencyCasesAction Exception]:", err)
+        return { error: err?.message || "Failed to fetch emergency cases", records: [] }
+    }
+}

@@ -38,8 +38,8 @@ import {
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/utils/supabase/client"
 import { MonthCalendar, CalendarMarker } from "@/components/month-calendar"
+import { getDashboardDataAction } from "./dashboard-actions"
 
 const CONSULT_PAGE_SIZE = 5
 const APPT_PAGE_SIZE = 5
@@ -116,7 +116,6 @@ export default function DashboardPage() {
     emergencyCases: 0,
     lowStockAlerts: 0,
   })
-  const supabase = createClient()
   const pollRef = useRef<NodeJS.Timeout | null>(null)
 
   // Separate in-flight guards + debounce timers per concern, so a burst of
@@ -128,175 +127,61 @@ export default function DashboardPage() {
   const apptDebounce = useRef<NodeJS.Timeout | null>(null)
   const statsDebounce = useRef<NodeJS.Timeout | null>(null)
 
-  const fetchConsultations = useCallback(async () => {
+  // Single authorized server action for all dashboard data (reduces round-trips and auth checks)
+  const fetchDashboardData = useCallback(async () => {
     if (consultInFlight.current) return
     consultInFlight.current = true
     try {
-      const { data } = await supabase
-        .from("consultations")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(50)
-      if (data) setDbConsultations(data)
+      const result = await getDashboardDataAction()
+      if (result.error) {
+        console.error("fetchDashboardData error:", result.error)
+        return
+      }
+      if (result.data) {
+        const d = result.data
+        // Map flat DTO consultations to the display shape
+        setDbConsultations(d.consultations.map((c: any) => ({
+          ...c,
+          time: new Date(c.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+        })))
+        // Map DTO appointments to the display shape
+        setDbAppointments(d.appointments.map((a: any) => ({
+          ...a,
+          student_accounts: {
+            first_name: a.patient_name?.split(" ")[0] || "",
+            last_name: a.patient_name?.split(" ").slice(1).join(" ") || "",
+            student_number: a.student_number,
+            employee_number: a.employee_number,
+          },
+        })))
+        setLiveStats({
+          patientsToday: d.stats.patientsToday,
+          consultations: d.stats.consultations,
+          emergencyCases: d.stats.emergencyCases,
+          lowStockAlerts: inventoryAlerts.length,
+        })
+      }
     } catch (err) {
-      console.error("fetchConsultations error:", err)
+      console.error("fetchDashboardData error:", err)
     } finally {
       consultInFlight.current = false
     }
-  }, [supabase])
+  }, [])
 
-  const fetchAppointments = useCallback(async () => {
-    if (apptInFlight.current) return
-    apptInFlight.current = true
-    try {
-      // First try with the join to student_accounts
-      const { data, error } = await supabase
-        .from("student_appointments")
-        .select("*, student_accounts(first_name, last_name, student_number, employee_number)")
-        .order("appointment_date", { ascending: true })
-        .limit(50)
-
-      if (error) {
-        console.error("fetchAppointments supabase error (trying without join):", error.message)
-        // If RLS blocks the join, fall back to fetching appointments without the join
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from("student_appointments")
-          .select("*")
-          .order("appointment_date", { ascending: true })
-          .limit(50)
-
-        if (fallbackError) {
-          console.error("fetchAppointments fallback error:", fallbackError.message)
-        } else if (fallbackData) {
-          setDbAppointments(fallbackData)
-        }
-        return
-      }
-
-      if (data) setDbAppointments(data)
-    } catch (err) {
-      console.error("fetchAppointments error:", err)
-    } finally {
-      apptInFlight.current = false
-    }
-  }, [supabase])
-
-  // Stats now use filtered, head-only count queries — Postgres does the
-  // counting, so we transfer almost no data instead of pulling every
-  // consultation row just to filter it client-side.
-  const fetchStats = useCallback(async () => {
-    if (statsInFlight.current) return
-    statsInFlight.current = true
-    try {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      const [patientsToday, emergencyCases, visitLogsCount] = await Promise.all([
-        supabase
-          .from("consultations")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "in_consultation")
-          .gte("created_at", today.toISOString()),
-        supabase
-          .from("consultations")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "in_emergency"),
-        supabase
-          .from("visit_logs")
-          .select("*", { count: "exact", head: true }),
-      ])
-
-      setLiveStats({
-        patientsToday: patientsToday.count ?? 0,
-        consultations: visitLogsCount.count ?? 0,
-        emergencyCases: emergencyCases.count ?? 0,
-        lowStockAlerts: inventoryAlerts.length,
-      })
-    } catch (err) {
-      console.error("fetchStats error:", err)
-    } finally {
-      statsInFlight.current = false
-    }
-  }, [supabase])
-
-  // Fetch everything once, e.g. on initial mount or realtime reconnect.
-  const fetchLiveQueue = useCallback(() => {
-    fetchConsultations()
-    fetchAppointments()
-    fetchStats()
-  }, [fetchConsultations, fetchAppointments, fetchStats])
-
-  // Debounce helper — coalesces a burst of realtime events on the same
-  // table into a single fetch instead of one per event.
-  function makeScheduler(
-    ref: { current: NodeJS.Timeout | null },
-    fn: () => void
-  ) {
-    return () => {
-      if (ref.current) clearTimeout(ref.current)
-      ref.current = setTimeout(fn, REALTIME_DEBOUNCE)
-    }
-  }
-
-  const scheduleConsultations = useCallback(
-    makeScheduler(consultDebounce, () => {
-      fetchConsultations()
-      fetchStats() // consultation changes affect stats too
-    }),
-    [fetchConsultations, fetchStats]
-  )
-  const scheduleAppointments = useCallback(
-    makeScheduler(apptDebounce, fetchAppointments),
-    [fetchAppointments]
-  )
-  const scheduleStats = useCallback(
-    makeScheduler(statsDebounce, fetchStats),
-    [fetchStats]
-  )
-
+  // Fetch everything once, then poll as lightweight fallback (server actions replace realtime)
   useEffect(() => {
-    fetchLiveQueue()
+    fetchDashboardData()
 
-    // Start polling as fallback to ensure data stays in sync
-    pollRef.current = setInterval(fetchLiveQueue, POLL_INTERVAL)
-
-    const channel = supabase
-      .channel("dashboard-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "consultations" },
-        () => scheduleConsultations()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "student_appointments" },
-        () => scheduleAppointments()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "visit_logs" },
-        () => scheduleStats()
-      )
-      .subscribe((status) => {
-        // If the realtime channel drops and reconnects, catch up on
-        // anything missed while it was down.
-        if (status === "SUBSCRIBED") fetchLiveQueue()
-      })
+    // Start polling
+    pollRef.current = setInterval(fetchDashboardData, POLL_INTERVAL)
 
     return () => {
-      supabase.removeChannel(channel)
       if (pollRef.current) {
         clearInterval(pollRef.current)
         pollRef.current = null
       }
-      ;[consultDebounce, apptDebounce, statsDebounce].forEach((ref) => {
-        if (ref.current) {
-          clearTimeout(ref.current)
-          ref.current = null
-        }
-      })
     }
-  }, [fetchLiveQueue, scheduleConsultations, scheduleAppointments, scheduleStats, supabase])
+  }, [fetchDashboardData])
 
   // Build display data for consultations — deduplicate by id using a Map
   const rawConsultations = dbConsultations.length > 0
@@ -308,7 +193,7 @@ export default function DashboardPage() {
             id: c.id,
             patient_name: c.patient_name,
             student_complaint: c.student_complaint || "None",
-            time: new Date(c.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+            time: c.time || new Date(c.created_at).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
             status: c.status,
             created_at: c.created_at,
             handled_at: c.handled_at,

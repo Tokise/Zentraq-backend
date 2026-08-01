@@ -5,8 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Pagination } from "@/components/pagination"
-import { createClient } from "@/utils/supabase/client"
-import { fetchAnnouncementsWithPosters } from "@/lib/announcements"
+import { getStudentAnnouncementsAction, type StudentAnnouncementDTO } from "@/app/student/actions"
 import { Bell, ImageOff } from "lucide-react"
 import {
     Dialog,
@@ -18,19 +17,20 @@ import {
 const PAGE_SIZE = 5
 
 export default function StudentAnnouncementsPage() {
-    const supabase = createClient()
     const searchParams = useSearchParams()
     const targetId = searchParams.get("id")
 
-    const [announcements, setAnnouncements] = useState<any[]>([])
+    const [announcements, setAnnouncements] = useState<StudentAnnouncementDTO[]>([])
     const [loading, setLoading] = useState(true)
     const [page, setPage] = useState(1)
-    const [selectedAnnModal, setSelectedAnnModal] = useState<any | null>(null)
+    const [selectedAnnModal, setSelectedAnnModal] = useState<StudentAnnouncementDTO | null>(null)
 
     async function fetchAnnouncements() {
         try {
-            const data = await fetchAnnouncementsWithPosters(supabase)
-            setAnnouncements(data || [])
+            const res = await getStudentAnnouncementsAction()
+            if (res.announcements) {
+                setAnnouncements(res.announcements)
+            }
         } catch (err) {
             console.error(err)
         } finally {
@@ -40,7 +40,7 @@ export default function StudentAnnouncementsPage() {
 
     useEffect(() => {
         fetchAnnouncements()
-    }, [supabase])
+    }, [])
 
     // Auto-pop up targeted announcement detail modal when ?id= parameter is present
     useEffect(() => {
@@ -97,8 +97,8 @@ export default function StudentAnnouncementsPage() {
                                             <CardTitle className="text-base font-semibold text-zinc-900">{ann.title}</CardTitle>
                                             <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                                                 <Bell className="size-3 text-zinc-400 shrink-0" />
-                                                Posted {ann.created_at ? new Date(ann.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
-                                                {ann.poster?.full_name ? ` by ${ann.poster.full_name}` : ""}
+                                                Posted {ann.createdAt ? new Date(ann.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
+                                                {ann.posterName ? ` by ${ann.posterName}` : ""}
                                             </p>
                                         </div>
                                     </div>
@@ -108,10 +108,10 @@ export default function StudentAnnouncementsPage() {
                                 </CardContent>
                             </Card>
 
-                            {ann.image_url && (
+                            {ann.imageUrl && (
                                 <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-muted/20 p-1 shadow-sm">
                                     <img
-                                        src={ann.image_url}
+                                        src={ann.imageUrl}
                                         alt={ann.title}
                                         className="w-full h-auto object-contain rounded-lg"
                                     />
@@ -141,14 +141,14 @@ export default function StudentAnnouncementsPage() {
                         </DialogHeader>
                         <div className="space-y-3 py-2">
                             <p className="text-xs text-muted-foreground">
-                                Posted {selectedAnnModal.created_at ? new Date(selectedAnnModal.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
-                                {selectedAnnModal.poster?.full_name ? ` by ${selectedAnnModal.poster.full_name}` : ""}
+                                Posted {selectedAnnModal.createdAt ? new Date(selectedAnnModal.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
+                                {selectedAnnModal.posterName ? ` by ${selectedAnnModal.posterName}` : ""}
                             </p>
                             <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground">{selectedAnnModal.content}</p>
-                            {selectedAnnModal.image_url && (
+                            {selectedAnnModal.imageUrl && (
                                 <div className="w-full overflow-hidden rounded-xl border border-border/80 bg-muted/20 p-1 mt-2">
                                     <img
-                                        src={selectedAnnModal.image_url}
+                                        src={selectedAnnModal.imageUrl}
                                         alt={selectedAnnModal.title}
                                         className="w-full h-auto object-contain rounded-lg"
                                     />
