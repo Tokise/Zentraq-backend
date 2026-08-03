@@ -86,6 +86,21 @@ export async function login(formData: FormData) {
         .from("student_accounts")
         .update({ current_session_token: sessionToken })
         .eq("user_id", data.user.id)
+    } else {
+      // Check faculty_accounts
+      const { data: facultyAccountData } = await admin
+        .from("faculty_accounts")
+        .select("id")
+        .eq("user_id", data.user.id)
+        .maybeSingle()
+
+      if (facultyAccountData) {
+        userRole = "faculty"
+        await admin
+          .from("faculty_accounts")
+          .update({ current_session_token: sessionToken })
+          .eq("user_id", data.user.id)
+      }
     }
   }
 
@@ -110,8 +125,14 @@ export async function login(formData: FormData) {
   let redirectTo = "/"
   if (userRole === "admin") {
     redirectTo = "/admin/rfid-registration"
+  } else if (userRole === "nurse") {
+    redirectTo = "/nurse"
+  } else if (userRole === "doctor") {
+    redirectTo = "/doctor"
   } else if (userRole === "student") {
     redirectTo = "/student"
+  } else if (userRole === "faculty") {
+    redirectTo = "/faculty"
   }
 
   revalidatePath("/", "layout")
@@ -129,7 +150,7 @@ export async function logout() {
   if (user) {
     const admin = createAdminClient()
 
-    // Clear session token from both tables in DB
+    // Clear session token from all account tables in DB
     await admin
       .from("clinic_accounts")
       .update({ current_session_token: null })
@@ -137,6 +158,11 @@ export async function logout() {
 
     await admin
       .from("student_accounts")
+      .update({ current_session_token: null })
+      .eq("user_id", user.id)
+
+    await admin
+      .from("faculty_accounts")
       .update({ current_session_token: null })
       .eq("user_id", user.id)
 

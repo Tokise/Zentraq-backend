@@ -24,6 +24,13 @@ import {
   UserPlus,
   Users,
   GraduationCap,
+  History,
+  AlertTriangle,
+  Syringe,
+  BookOpen,
+  ScrollText,
+  ClipboardCheck,
+  Stethoscope as StethoscopeAlt,
 } from "lucide-react"
 
 export type NavItem = {
@@ -39,28 +46,22 @@ export type NavGroup = {
   items: NavItem[]
 }
 
-// Admin navigation structure
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin navigation (SAD §4.2)
+// ─────────────────────────────────────────────────────────────────────────────
 export const adminNavigation: NavGroup[] = [
   {
-    label: "RFID",
+    label: "Dashboard",
     items: [
-      { title: "RFID Registration", href: "/admin/rfid-registration", icon: UserPlus, roles: ["admin"] },
+      { title: "Dashboard", href: "/admin", icon: LayoutDashboard, roles: ["admin"] },
     ],
   },
   {
-    label: "Administration",
+    label: "User Management",
     items: [
-      { title: "Student Accounts", href: "/admin/student-accounts", icon: GraduationCap, roles: ["admin"] },
-      { title: "Clinic Accounts", href: "/admin/clinic-accounts", icon: Users, roles: ["admin"] },
-      { title: "Faculty Accounts", href: "/admin/faculty-accounts", icon: Users, roles: ["admin"] },
-    ],
-  },
-  {
-    label: "Account Creations",
-    items: [
-      { title: "Create Clinic Account", href: "/admin/clinic-accounts/create", icon: UserCog, roles: ["admin"] },
-      { title: "Create Faculty Accounts", href: "/admin/faculty-accounts/create", icon: UserCog, roles: ["admin"] },
-
+      { title: "Students", href: "/admin/student-accounts", icon: GraduationCap, roles: ["admin"] },
+      { title: "Faculty", href: "/admin/faculty-accounts", icon: Users, roles: ["admin"] },
+      { title: "Clinic Accounts", href: "/admin/clinic-accounts", icon: UserCog, roles: ["admin"] },
     ],
   },
   {
@@ -68,13 +69,7 @@ export const adminNavigation: NavGroup[] = [
     items: [
       { title: "Announcements", href: "/admin/clinic-announcements", icon: Megaphone, roles: ["admin"] },
       { title: "Audit Logs", href: "/admin/audit-logs", icon: ShieldAlert, roles: ["admin"] },
-    ],
-  },
-  {
-    label: "Access Control",
-    items: [
       { title: "Roles & Permissions", href: "/admin/roles", icon: Shield, roles: ["admin"] },
-      { title: "Admin Settings", href: "/admin/settings", icon: Settings, roles: ["admin"] },
     ],
   },
   {
@@ -86,72 +81,186 @@ export const adminNavigation: NavGroup[] = [
     ],
   },
   {
-    label: "Reports",
+    label: "RFID",
     items: [
-      { title: "Analytics", href: "/reports/analytics", icon: BarChart3 },
-      { title: "Compliance", href: "/reports/compliance", icon: ShieldCheck },
+      { title: "RFID Registration", href: "/admin/rfid-registration", icon: UserPlus, roles: ["admin"] },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { title: "System Settings", href: "/admin/settings", icon: Settings, roles: ["admin"] },
     ],
   },
 ]
 
-// Nurse/Doctor navigation structure
-export const staffNavigation: NavGroup[] = [
+// ─────────────────────────────────────────────────────────────────────────────
+// Doctor navigation (SAD §4.3)
+// ─────────────────────────────────────────────────────────────────────────────
+export const doctorNavigation: NavGroup[] = [
   {
     label: "Dashboard",
     items: [
-      { title: "Dashboard", href: "/", icon: LayoutDashboard },
+      { title: "Dashboard", href: "/doctor", icon: LayoutDashboard, roles: ["doctor"] },
     ],
   },
   {
     label: "Patients",
     items: [
-      { title: "Patients", href: "/patients", icon: Users },
-      { title: "Medical Records", href: "/patients/medical-records", icon: FileText },
-      { title: "RFID Kiosk Mode", href: "/rfid-kiosk", icon: CreditCard, target: "_blank" },
+      { title: "Student Records", href: "/doctor/patients", icon: GraduationCap, roles: ["doctor"] },
+      { title: "Faculty Records", href: "/doctor/patients/faculty", icon: Users, roles: ["doctor"] },
     ],
   },
   {
     label: "Consultations",
     items: [
-      { title: "Consultations", href: "/consultations", icon: Stethoscope },
-      { title: "Visit Logs", href: "/consultations/visit-logs", icon: ClipboardList },
-      { title: "Emergency Cases", href: "/consultations/emergency", icon: HeartPulse },
+      { title: "Pending Review", href: "/doctor/consultations/pending", icon: ClipboardCheck, roles: ["doctor"] },
+      { title: "Active Consultations", href: "/doctor/consultations", icon: Stethoscope, roles: ["doctor"] },
+      { title: "Completed", href: "/doctor/consultations/completed", icon: ClipboardList, roles: ["doctor"] },
+    ],
+  },
+  {
+    label: "Prescriptions",
+    items: [
+      { title: "Write Prescription", href: "/doctor/prescriptions/new", icon: Pill, roles: ["doctor"] },
+      { title: "Prescription History", href: "/doctor/prescriptions", icon: Pill, roles: ["doctor"] },
     ],
   },
   {
     label: "Appointments",
     items: [
-      { title: "Calendar", href: "/appointments/calendar", icon: CalendarDays },
-      { title: "Queue", href: "/appointments/queue", icon: ListOrdered },
-      { title: "Cleared", href: "/appointments/cleared", icon: FileCheck },
+      { title: "My Schedule", href: "/doctor/appointments", icon: CalendarDays, roles: ["doctor"] },
+      { title: "Appointment Requests", href: "/doctor/appointments/requests", icon: ListOrdered, roles: ["doctor"] },
+    ],
+  },
+  {
+    label: "Incidents",
+    items: [
+      { title: "Active Cases", href: "/doctor/incidents", icon: AlertTriangle, roles: ["doctor"] },
+      { title: "Case History", href: "/doctor/incidents/history", icon: History, roles: ["doctor"] },
+    ],
+  },
+  {
+    label: "Health Clearances",
+    items: [
+      { title: "Medical Evaluation", href: "/doctor/clearances", icon: FileCheck, roles: ["doctor"] },
+      { title: "Clearance Requests", href: "/doctor/clearances/requests", icon: FileText, roles: ["doctor"] },
+    ],
+  },
+  {
+    label: "Analytics",
+    items: [
+      { title: "My Statistics", href: "/doctor/analytics", icon: BarChart3, roles: ["doctor"] },
+      { title: "Clinic Overview", href: "/doctor/analytics/overview", icon: Activity, roles: ["doctor"] },
+    ],
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Nurse navigation (SAD §4.4)
+// ─────────────────────────────────────────────────────────────────────────────
+export const nurseNavigation: NavGroup[] = [
+  {
+    label: "Dashboard",
+    items: [
+      { title: "Dashboard", href: "/nurse", icon: LayoutDashboard, roles: ["nurse"] },
+    ],
+  },
+  {
+    label: "Patients",
+    items: [
+      { title: "Student Records", href: "/nurse/patients", icon: GraduationCap, roles: ["nurse"] },
+      { title: "Faculty Records", href: "/nurse/patients/faculty", icon: Users, roles: ["nurse"] },
+    ],
+  },
+  {
+    label: "Consultations",
+    items: [
+      { title: "New Walk-in", href: "/nurse/consultations/new", icon: UserPlus, roles: ["nurse"] },
+      { title: "Triage", href: "/nurse/consultations/triage", icon: ClipboardCheck, roles: ["nurse"] },
+      { title: "Active", href: "/nurse/consultations", icon: StethoscopeAlt, roles: ["nurse"] },
+      { title: "Completed", href: "/nurse/consultations/completed", icon: ClipboardList, roles: ["nurse"] },
     ],
   },
   {
     label: "Pharmacy",
     items: [
-      { title: "Medicines", href: "/pharmacy/medicines", icon: Pill },
-      { title: "Dispensing", href: "/pharmacy/dispensing", icon: Package },
-      { title: "Inventory", href: "/pharmacy/inventory", icon: Package },
+      { title: "Dispense Medicine", href: "/nurse/pharmacy/dispense", icon: Pill, roles: ["nurse"] },
+      { title: "Inventory Status", href: "/nurse/pharmacy/stock", icon: Package, roles: ["nurse"] },
+      { title: "Low Stock Alerts", href: "/nurse/pharmacy/alerts", icon: AlertTriangle, roles: ["nurse"] },
     ],
   },
   {
-    label: "Reports",
+    label: "Appointments",
     items: [
-      { title: "Analytics", href: "/reports/analytics", icon: BarChart3 },
-      { title: "Compliance", href: "/reports/compliance", icon: ShieldCheck },
+      { title: "Requests", href: "/nurse/appointments/requests", icon: ListOrdered, roles: ["nurse"] },
+      { title: "Today's Schedule", href: "/nurse/appointments/today", icon: CalendarDays, roles: ["nurse"] },
+      { title: "Manage Appointments", href: "/nurse/appointments", icon: CalendarDays, roles: ["nurse"] },
+    ],
+  },
+  {
+    label: "Incidents",
+    items: [
+      { title: "Report Incident", href: "/nurse/incidents/new", icon: AlertTriangle, roles: ["nurse"] },
+      { title: "Case Management", href: "/nurse/incidents", icon: HeartPulse, roles: ["nurse"] },
+    ],
+  },
+  {
+    label: "Health Clearances",
+    items: [
+      { title: "Process Requests", href: "/nurse/clearances", icon: FileCheck, roles: ["nurse"] },
+      { title: "Issued Certificates", href: "/nurse/clearances/issued", icon: ScrollText, roles: ["nurse"] },
+    ],
+  },
+  {
+    label: "RFID Check-in",
+    items: [
+      { title: "Kiosk Status", href: "/nurse/rfid", icon: CreditCard, roles: ["nurse"] },
+      { title: "Check-in Log", href: "/nurse/rfid/log", icon: ClipboardList, roles: ["nurse"] },
     ],
   },
 ]
 
-// Student navigation structure
+// ─────────────────────────────────────────────────────────────────────────────
+// Student navigation (SAD §4.5)
+// ─────────────────────────────────────────────────────────────────────────────
 export const studentNavigation: NavGroup[] = [
   {
     label: "STUDENT",
     items: [
-      { title: "Dashboard", href: "/student", icon: LayoutDashboard },
+      { title: "My Dashboard", href: "/student", icon: LayoutDashboard },
+      { title: "Request Appointment", href: "/student/appointments/new", icon: CalendarDays },
+      { title: "My Appointments", href: "/student/appointments", icon: CalendarDays },
+      { title: "Appointment History", href: "/student/appointments/history", icon: History },
+      { title: "My Health Records", href: "/student/records", icon: HeartPulse },
+      { title: "Consultations", href: "/student/records/consultations", icon: Stethoscope },
+      { title: "Prescriptions", href: "/student/records/prescriptions", icon: Pill },
+      { title: "My Clearances", href: "/student/clearances", icon: FileCheck },
+      { title: "Request Clearance", href: "/student/clearances/request", icon: FileText },
       { title: "Announcements", href: "/student/announcements", icon: Megaphone },
-      { title: "Book Appointment", href: "/student/appointments", icon: CalendarDays },
-      { title: "Settings", href: "/student/settings", icon: Settings },
+      { title: "Settings", href: "/settings", icon: Settings },
+    ],
+  },
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Faculty navigation (SAD §4.6)
+// ─────────────────────────────────────────────────────────────────────────────
+export const facultyNavigation: NavGroup[] = [
+  {
+    label: "STUDENT",
+    items: [
+      { title: "My Dashboard", href: "/faculty", icon: LayoutDashboard },
+      { title: "Request Appointment", href: "/faculty/appointments/new", icon: CalendarDays },
+      { title: "My Appointments", href: "/faculty/appointments", icon: CalendarDays },
+      { title: "Appointment History", href: "/faculty/appointments/history", icon: History },
+      { title: "My Health Records", href: "/faculty/records", icon: HeartPulse },
+      { title: "Consultations", href: "/faculty/records/consultations", icon: Stethoscope },
+      { title: "Prescriptions", href: "/faculty/records/prescriptions", icon: Pill },
+      { title: "My Clearances", href: "/faculty/clearances", icon: FileCheck },
+      { title: "Request Clearance", href: "/faculty/clearances/request", icon: FileText },
+      { title: "Announcements", href: "/faculty/announcements", icon: Megaphone },
+      { title: "Settings", href: "/settings", icon: Settings },
     ],
   },
 ]
@@ -161,9 +270,21 @@ export function getNavigationForRole(role: string | null | undefined) {
   if (role === "admin") {
     return adminNavigation
   }
-  // nurse, doctor, and any other staff roles
-  return staffNavigation
+  if (role === "doctor") {
+    return doctorNavigation
+  }
+  if (role === "nurse") {
+    return nurseNavigation
+  }
+  if (role === "faculty") {
+    return facultyNavigation
+  }
+  // Default: student navigation for student, staff fallback to nurse
+  return studentNavigation
 }
+
+// For backward compatibility with imports that reference staffNavigation
+export const staffNavigation: NavGroup[] = nurseNavigation
 
 // Keep backward compatibility with existing code
 export const navigation = [...adminNavigation, ...staffNavigation]

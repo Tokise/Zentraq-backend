@@ -79,7 +79,7 @@ export function DashboardShell({
     }
   }
 
-  const roleLabel = userRole === "admin" ? "Admin" : userRole === "nurse" ? "Nurse" : userRole === "doctor" ? "Doctor" : userRole || "User"
+  const roleLabel = userRole === "admin" ? "Admin" : userRole === "nurse" ? "Nurse" : userRole === "doctor" ? "Doctor" : userRole === "faculty" ? "Faculty" : userRole === "student" ? "Student" : userRole || "User"
   const roleIcon = userRole === "admin" ? Shield : User
 
   return (
@@ -178,7 +178,9 @@ export function DashboardShell({
                             "size-1.5 rounded-full",
                             userRole === "admin" ? "bg-purple-500" :
                               userRole === "nurse" ? "bg-blue-500" :
-                                userRole === "doctor" ? "bg-emerald-500" : "bg-zinc-400"
+                                userRole === "doctor" ? "bg-emerald-500" :
+                                  userRole === "faculty" ? "bg-orange-500" :
+                                    userRole === "student" ? "bg-cyan-500" : "bg-zinc-400"
                           )} />
                           {roleLabel}
                         </p>
@@ -190,7 +192,7 @@ export function DashboardShell({
 
                   <DropdownMenuItem
                     className="cursor-pointer px-3 py-2 text-sm"
-                    onClick={() => router.push("/admin/settings")}
+                    onClick={() => router.push("/settings")}
                   >
                     <User className="mr-2 size-4" />
                     <span>Profile Settings</span>

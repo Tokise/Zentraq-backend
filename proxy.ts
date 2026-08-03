@@ -10,6 +10,9 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0")
   response.headers.set("Pragma", "no-cache")
   response.headers.set("Expires", "0")
+  response.headers.set("X-Content-Type-Options", "nosniff")
+  response.headers.set("X-Frame-Options", "DENY")
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
   return response
 }
 
@@ -55,10 +58,14 @@ export async function proxy(request: NextRequest) {
 
   const isAuthPage = pathname === "/login"
   const isKioskPage = pathname.startsWith("/rfid-kiosk")
+  const isUnauthorizedPage = pathname === "/unauthorized"
+  const isSettingsPage = pathname.startsWith("/settings")
+  // Routes accessible by ALL authenticated roles (SAD §5.2)
+  const isSharedRoute = isKioskPage || isUnauthorizedPage || isSettingsPage || isAuthPage
 
   // Unauthenticated access check
   if (!user || error) {
-    if (!isAuthPage && !isKioskPage) {
+    if (!isAuthPage && !isKioskPage && !isUnauthorizedPage) {
       const loginUrl = new URL("/login", request.url)
       const redirectResponse = NextResponse.redirect(loginUrl)
       return setSecurityHeaders(redirectResponse)
@@ -76,7 +83,7 @@ export async function proxy(request: NextRequest) {
   try {
     const { createClient } = await import("@supabase/supabase-js")
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY
-    
+
     if (supabaseUrl && serviceKey) {
       const admin = createClient(supabaseUrl, serviceKey, {
         auth: { autoRefreshToken: false, persistSession: false },
@@ -103,6 +110,18 @@ export async function proxy(request: NextRequest) {
         if (studentData) {
           userRole = "student"
           isValidSessionToken = !!clientSessionToken && studentData.current_session_token === clientSessionToken
+        } else {
+          // Check faculty_accounts
+          const { data: facultyData } = await admin
+            .from("faculty_accounts")
+            .select("id, current_session_token")
+            .eq("user_id", user.id)
+            .maybeSingle()
+
+          if (facultyData) {
+            userRole = "faculty"
+            isValidSessionToken = !!clientSessionToken && facultyData.current_session_token === clientSessionToken
+          }
         }
       }
     }
@@ -112,7 +131,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // 3. Handle One-Device Session Invalidation
-  if (!isValidSessionToken && !isAuthPage && !isKioskPage) {
+  if (!isValidSessionToken && !isAuthPage && !isKioskPage && !isUnauthorizedPage) {
     // Session token mismatched or cleared elsewhere -> force logout and redirect to login
     const loginUrl = new URL("/login?reason=session_invalidated", request.url)
     const redirectResponse = NextResponse.redirect(loginUrl)
@@ -122,26 +141,60 @@ export async function proxy(request: NextRequest) {
 
   // If user is authenticated and trying to access /login, redirect to their role dashboard
   if (isAuthPage) {
-    const defaultRoute = userRole === "student" ? "/student" : userRole === "admin" ? "/admin/rfid-registration" : "/"
+    let defaultRoute = "/nurse"
+    if (userRole === "student") defaultRoute = "/student"
+    else if (userRole === "faculty") defaultRoute = "/faculty"
+    else if (userRole === "admin") defaultRoute = "/admin"
+    else if (userRole === "doctor") defaultRoute = "/doctor"
     return setSecurityHeaders(NextResponse.redirect(new URL(defaultRoute, request.url)))
   }
 
-  // 4. Role-Based Access Control (RBAC) Enforcement
+  // 4. Role-Based Access Control (RBAC) Enforcement per SAD §5.2
+  // Each role can only access its own top-level route tree
+
+  // Shared routes (settings, kiosk, unauthorized) are allowed for all authenticated users
+  if (isSharedRoute) {
+    return setSecurityHeaders(supabaseResponse)
+  }
+
+  // Students can ONLY access /student routes
   if (userRole === "student") {
-    // Students can ONLY access /student routes
     if (!pathname.startsWith("/student")) {
       return setSecurityHeaders(NextResponse.redirect(new URL("/student", request.url)))
     }
-  } else {
-    // Staff/Doctors/Nurses trying to access student portal -> redirect to main dashboard
-    if (pathname.startsWith("/student")) {
-      return setSecurityHeaders(NextResponse.redirect(new URL("/", request.url)))
-    }
+    return setSecurityHeaders(supabaseResponse)
+  }
 
-    // Non-admin staff trying to access /admin routes -> redirect to main dashboard
-    if (pathname.startsWith("/admin") && userRole !== "admin") {
-      return setSecurityHeaders(NextResponse.redirect(new URL("/", request.url)))
+  // Faculty can ONLY access /faculty routes
+  if (userRole === "faculty") {
+    if (!pathname.startsWith("/faculty")) {
+      return setSecurityHeaders(NextResponse.redirect(new URL("/faculty", request.url)))
     }
+    return setSecurityHeaders(supabaseResponse)
+  }
+
+  // Doctors can ONLY access /doctor routes
+  if (userRole === "doctor") {
+    if (!pathname.startsWith("/doctor")) {
+      return setSecurityHeaders(NextResponse.redirect(new URL("/doctor", request.url)))
+    }
+    return setSecurityHeaders(supabaseResponse)
+  }
+
+  // Nurses can ONLY access /nurse routes
+  if (userRole === "nurse") {
+    if (!pathname.startsWith("/nurse")) {
+      return setSecurityHeaders(NextResponse.redirect(new URL("/nurse", request.url)))
+    }
+    return setSecurityHeaders(supabaseResponse)
+  }
+
+  // Admin can access /admin routes
+  if (userRole === "admin") {
+    if (pathname.startsWith("/admin")) {
+      return setSecurityHeaders(supabaseResponse)
+    }
+    return setSecurityHeaders(NextResponse.redirect(new URL("/admin/rfid-registration", request.url)))
   }
 
   return setSecurityHeaders(supabaseResponse)

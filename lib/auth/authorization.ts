@@ -82,6 +82,21 @@ export async function requireStudent() {
 }
 
 /**
+ * Require the caller to be a faculty member.
+ * Returns the current user.
+ */
+export async function requireFaculty() {
+    const user = await requireAuth()
+    const role = await getUserRole(user.id)
+
+    if (role !== "faculty") {
+        throw new Error("Access Denied: Only faculty members can perform this action")
+    }
+
+    return user
+}
+
+/**
  * Get the admin Supabase client (Service Role).
  * Must only be called after authorization checks.
  */
