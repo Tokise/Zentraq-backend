@@ -1,5 +1,60 @@
-import { PlaceholderPage } from "@/components/placeholder-page"
+import { PageHeader } from "@/components/page-header"
+import { ClearanceRequestForm } from "@/components/clearance/clearance-request-form"
+import { submitClearanceRequest } from "@/app/actions/clearances"
+import { getActionActor } from "@/lib/security/action-guard"
+import { createAdminClient } from "@/utils/supabase/admin"
+import { toast } from "sonner"
+import { redirect } from "next/navigation"
 
-export default function StudentClearancesRequestPage() {
-    return <PlaceholderPage title="Request Clearance" description="Request a new health clearance." />
+export default async function StudentClearancesRequestPage() {
+  const actor = await getActionActor()
+  if (!actor) {
+    redirect("/login")
+  }
+
+  const { data: student } = await createAdminClient()
+    .from("students")
+    .select("id")
+    .eq("user_id", actor.id)
+    .single()
+
+  if (!student) {
+    return (
+      <main className="space-y-6">
+        <PageHeader
+          title="Request Clearance"
+          description="Submit a health clearance request."
+        />
+        <div className="text-center text-muted-foreground">
+          Student record not found.
+        </div>
+      </main>
+    )
+  }
+
+  return (
+    <main className="space-y-6">
+      <PageHeader
+        title="Request Health Clearance"
+        description="Submit a request for medical health clearance."
+      />
+      <ClearanceRequestForm
+        requesterType="student"
+        requesterId={student.id}
+        onSubmit={async (data) => {
+          /* use server */
+          const result = await submitClearanceRequest({
+            requester_type: "student",
+            requester_id: student.id,
+            purpose: data.purpose
+          })
+          if (result.error) {
+            toast.error(result.error)
+            throw new Error(result.error)
+          }
+          redirect("/student/clearances")
+        }}
+      />
+    </main>
+  )
 }

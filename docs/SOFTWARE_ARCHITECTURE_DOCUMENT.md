@@ -1,4 +1,4 @@
-928# ZenTraq — Master Software Architecture Document (SAD)
+# ZenTraq — Master Software Architecture Document (SAD)
 
 **Version:** 2.0  
 **Status:** Master Blueprint  
