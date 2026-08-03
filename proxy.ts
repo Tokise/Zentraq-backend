@@ -13,6 +13,8 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set("X-Content-Type-Options", "nosniff")
   response.headers.set("X-Frame-Options", "DENY")
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin")
   return response
 }
 
@@ -76,8 +78,8 @@ export async function proxy(request: NextRequest) {
   // Extract HttpOnly session token cookie
   const clientSessionToken = request.cookies.get(COOKIE_NAME)?.value
 
-  // 2. Validate one-device login session token & determine role via database
-  let userRole = "nurse"
+  // 2. Validate one-device login session token & determine role via SAD tables.
+  let userRole: "admin" | "doctor" | "nurse" | "student" | "faculty" | null = null
   let isValidSessionToken = false
 
   try {
@@ -89,41 +91,15 @@ export async function proxy(request: NextRequest) {
         auth: { autoRefreshToken: false, persistSession: false },
       })
 
-      // Check clinic_accounts
-      const { data: clinicData } = await admin
-        .from("clinic_accounts")
-        .select("role, current_session_token")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (clinicData) {
-        userRole = String(clinicData.role).toLowerCase()
-        isValidSessionToken = !!clientSessionToken && clinicData.current_session_token === clientSessionToken
-      } else {
-        // Check student_accounts
-        const { data: studentData } = await admin
-          .from("student_accounts")
-          .select("id, current_session_token")
-          .eq("user_id", user.id)
-          .maybeSingle()
-
-        if (studentData) {
-          userRole = "student"
-          isValidSessionToken = !!clientSessionToken && studentData.current_session_token === clientSessionToken
-        } else {
-          // Check faculty_accounts
-          const { data: facultyData } = await admin
-            .from("faculty_accounts")
-            .select("id, current_session_token")
-            .eq("user_id", user.id)
-            .maybeSingle()
-
-          if (facultyData) {
-            userRole = "faculty"
-            isValidSessionToken = !!clientSessionToken && facultyData.current_session_token === clientSessionToken
-          }
-        }
-      }
+      const [{ data: session }, { data: assignments }] = await Promise.all([
+        admin.from("user_sessions").select("id").eq("user_id", user.id).eq("session_token", clientSessionToken ?? "").is("revoked_at", null).gt("expires_at", new Date().toISOString()).maybeSingle(),
+        admin.from("user_roles").select("role:roles(name)").eq("user_id", user.id).limit(1),
+      ])
+      isValidSessionToken = Boolean(session)
+      const relation = assignments?.[0]?.role as unknown
+      const role = Array.isArray(relation) ? relation[0] : relation
+      const name = typeof role === "object" && role !== null && "name" in role ? (role as { name?: unknown }).name : null
+      if (name === "admin" || name === "doctor" || name === "nurse" || name === "student" || name === "faculty") userRole = name
     }
   } catch {
     // If DB check fails due to connectivity, allow basic session check to proceed
@@ -131,7 +107,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // 3. Handle One-Device Session Invalidation
-  if (!isValidSessionToken && !isAuthPage && !isKioskPage && !isUnauthorizedPage) {
+  if ((!isValidSessionToken || !userRole) && !isAuthPage && !isKioskPage && !isUnauthorizedPage) {
     // Session token mismatched or cleared elsewhere -> force logout and redirect to login
     const loginUrl = new URL("/login?reason=session_invalidated", request.url)
     const redirectResponse = NextResponse.redirect(loginUrl)

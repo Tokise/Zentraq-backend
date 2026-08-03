@@ -44,11 +44,11 @@ export async function fetchAnnouncementsWithPosters(
     if (posterIds.length > 0) {
         const { data: posters } = await supabase
             .from("clinic_accounts")
-            .select("id, email, full_name")
-            .in("id", posterIds)
+            .select("user_id, display_name")
+            .in("user_id", posterIds)
 
         postersById = Object.fromEntries(
-            (posters || []).map((p) => [p.id, { email: p.email, full_name: p.full_name }])
+            (posters || []).map((p) => [p.user_id, { email: null, full_name: p.display_name }])
         )
     }
 

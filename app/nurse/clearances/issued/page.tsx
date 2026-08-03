@@ -1,5 +1,2 @@
-import { PlaceholderPage } from "@/components/placeholder-page"
-
-export default function NurseClearancesIssuedPage() {
-    return <PlaceholderPage title="Issued Certificates" description="View issued health clearance certificates." />
-}
+import { ClearanceQueuePage } from "@/components/workflow/queue-pages"
+export default function IssuedClearancesPage() { return <ClearanceQueuePage title="Issued Certificates" description="Health clearance certificates and their status." /> }

@@ -1,5 +1,2 @@
-import { PlaceholderPage } from "@/components/placeholder-page"
-
-export default function DoctorConsultationsPage() {
-    return <PlaceholderPage title="Active Consultations" description="View and manage active medical consultations." />
-}
+import { ConsultationQueuePage } from "@/components/workflow/queue-pages"
+export default function DoctorConsultationsPage() { return <ConsultationQueuePage title="Active Consultations" description="Consultations currently in progress." statuses={["in-progress"]} /> }

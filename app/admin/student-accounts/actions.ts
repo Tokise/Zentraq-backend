@@ -43,8 +43,8 @@ export async function toggleStudentActiveStatus(profileId: string, currentStatus
         const admin = createAdminClient()
 
         const { error } = await admin
-            .from("student_accounts")
-            .update({ active_status: !currentStatus })
+            .from("students")
+            .update({ status: currentStatus ? "inactive" : "active" })
             .eq("id", profileId)
 
         if (error) {
@@ -88,8 +88,6 @@ export async function saveStudentProfileEdit(profileId: string, formData: {
             return { error: auth.error }
         }
 
-        const isStudent = !!formData.studentNumber
-
         const admin = createAdminClient()
 
         const payload = {
@@ -97,15 +95,13 @@ export async function saveStudentProfileEdit(profileId: string, formData: {
             last_name: formData.lastName,
             email: formData.email || null,
             department: formData.department || null,
-            course: isStudent ? (formData.course || null) : null,
-            year_level: isStudent ? (formData.yearLevel || null) : null,
-            position: !isStudent ? (formData.position || null) : null,
-            student_number: isStudent ? formData.studentNumber : null,
-            employee_number: !isStudent ? formData.employeeNumber : null,
+            course: formData.course || null,
+            year_level: formData.yearLevel ? Number(formData.yearLevel) : null,
+            student_number: formData.studentNumber || null,
         }
 
         const { data, error } = await admin
-            .from("student_accounts")
+            .from("students")
             .update(payload)
             .eq("id", profileId)
             .select()
@@ -143,11 +139,9 @@ export async function archiveStudentProfile(profileId: string, isArchived: boole
 
         const admin = createAdminClient()
 
-        const nextArchivedAt = isArchived ? null : new Date().toISOString()
-
         const { error } = await admin
-            .from("student_accounts")
-            .update({ archived_at: nextArchivedAt })
+            .from("students")
+            .update({ status: isArchived ? "active" : "inactive" })
             .eq("id", profileId)
 
         if (error) {
@@ -181,8 +175,8 @@ export async function getStudentAccountsAction() {
 
         const admin = createAdminClient()
         const { data, error } = await admin
-            .from("student_accounts")
-            .select("id, rfid_uid, first_name, last_name, email, department, course, year_level, position, student_number, employee_number, clinic_photo_url, active_status, archived_at, created_at")
+            .from("students")
+            .select("id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status, created_at, updated_at")
             .order("last_name", { ascending: true })
 
         if (error) {
@@ -190,7 +184,7 @@ export async function getStudentAccountsAction() {
             return { error: error.message, patients: [] }
         }
 
-        return { error: null, patients: data || [] }
+        return { error: null, patients: (data || []).map((student) => ({ ...student, position: null, employee_number: null, clinic_photo_url: student.profile_photo_url, active_status: student.status === "active", archived_at: student.status === "inactive" ? student.updated_at ?? student.created_at : null })) }
     } catch (err: any) {
         console.error("[getStudentAccountsAction Exception]:", err)
         return { error: err?.message || "Failed to fetch student accounts", patients: [] }

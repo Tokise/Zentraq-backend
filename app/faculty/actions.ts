@@ -45,7 +45,7 @@ export async function getFacultyProfileDTO() {
 
         const admin = createAdminClient()
         const { data, error } = await admin
-            .from("faculty_accounts")
+            .from("faculty")
             .select("first_name, last_name, employee_number, department, position, email, phone")
             .eq("user_id", auth.user.id)
             .maybeSingle()

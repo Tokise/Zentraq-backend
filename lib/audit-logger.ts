@@ -42,7 +42,7 @@ export interface AuditLogOptions {
   userId?: string | null
   email?: string | null
   resource?: string
-  details?: Record<string, any>
+  details?: Record<string, unknown>
 }
 
 /**
@@ -60,13 +60,12 @@ export async function logAuditEvent(options: AuditLogOptions): Promise<void> {
 
     await admin.from("audit_logs").insert({
       user_id: options.userId || null,
-      email: options.email || null,
       action: options.action,
-      resource: options.resource || null,
-      details: options.details || {},
+      entity_type: "application",
+      entity_id: options.resource || null,
+      metadata: { ...options.details, actor_email: options.email || null },
       ip_address: ipAddress,
       user_agent: userAgent,
-      timestamp: new Date().toISOString(),
     })
   } catch (err) {
     // Audit logging failure should not crash main workflow, but must be logged to stdout

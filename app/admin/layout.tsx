@@ -25,7 +25,7 @@ export default async function AdminLayout({
   }
 
   return (
-    <DashboardShell userEmail={user?.email} userRole={role}>
+    <DashboardShell userEmail={user?.email} userRole={role ?? undefined}>
       {children}
     </DashboardShell>
   )

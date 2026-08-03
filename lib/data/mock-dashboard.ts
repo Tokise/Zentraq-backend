@@ -1,13 +1,13 @@
 import type {
   Activity,
-  Appointment,
-  Consultation,
+  DashboardAppointment,
+  DashboardConsultation,
   ConsultationTrend,
   DashboardStats,
   EmergencyCase,
   InventoryAlert,
-  Notification,
-} from "@/lib/types/clinic"
+  DashboardNotification,
+} from "@/types"
 
 export const dashboardStats: DashboardStats = {
   patientsToday: 124,
@@ -20,7 +20,7 @@ export const dashboardStats: DashboardStats = {
   lowStockAlertsChange: 2,
 }
 
-export const todaysAppointments: Appointment[] = [
+export const todaysAppointments: DashboardAppointment[] = [
   { id: "1", patient_name: "Maria Santos", time: "08:30 AM", type: "General Checkup", status: "completed" },
   { id: "2", patient_name: "Juan Dela Cruz", time: "09:00 AM", type: "Follow-up", status: "in_progress" },
   { id: "3", patient_name: "Ana Reyes", time: "09:30 AM", type: "Health Clearance", status: "scheduled" },
@@ -28,7 +28,7 @@ export const todaysAppointments: Appointment[] = [
   { id: "5", patient_name: "Sofia Garcia", time: "10:30 AM", type: "Consultation", status: "scheduled" },
 ]
 
-export const recentConsultations: Consultation[] = [
+export const recentConsultations: DashboardConsultation[] = [
   { id: "1", patient_name: "Maria Santos", student_complaint: "Headache, mild fever", time: "08:45 AM", status: "completed" },
   { id: "2", patient_name: "Juan Dela Cruz", student_complaint: "Sprained ankle", time: "09:15 AM", status: "active" },
   { id: "3", patient_name: "Pedro Lim", student_complaint: "Allergic reaction", time: "08:00 AM", status: "emergency" },
@@ -47,7 +47,7 @@ export const emergencyCases: EmergencyCase[] = [
   { id: "3", patient_name: "Miguel Torres", complaint: "High fever (40°C)", time: "07:20 AM", priority: "high" },
 ]
 
-export const notifications: Notification[] = [
+export const notifications: DashboardNotification[] = [
   { id: "1", title: "Low Stock Alert", message: "Paracetamol 500mg is critically low (12 units remaining)", type: "warning", time: "10 min ago" },
   { id: "2", title: "Emergency Case", message: "Pedro Lim admitted for allergic reaction", type: "danger", time: "1 hour ago" },
   { id: "3", title: "Appointment Reminder", message: "5 appointments scheduled for this afternoon", type: "info", time: "2 hours ago" },

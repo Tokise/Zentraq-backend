@@ -1,5 +1,2 @@
-import { PlaceholderPage } from "@/components/placeholder-page"
-
-export default function DoctorConsultationsCompletedPage() {
-    return <PlaceholderPage title="Completed Consultations" description="View completed medical consultations." />
-}
+import { ConsultationQueuePage } from "@/components/workflow/queue-pages"
+export default function CompletedConsultationsPage() { return <ConsultationQueuePage title="Completed Consultations" description="Completed clinic consultations." statuses={["completed"]} /> }

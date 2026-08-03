@@ -68,8 +68,8 @@ export async function getAuditLogsAction(params: GetAuditLogsParams) {
 
     let query = admin
       .from("audit_logs")
-      .select("id, action, user_id, email, resource, details, ip_address, user_agent, timestamp", { count: "exact" })
-      .order("timestamp", { ascending: false })
+      .select("id, action, user_id, entity_id, metadata, ip_address, user_agent, created_at", { count: "exact" })
+      .order("created_at", { ascending: false })
       .range(fromIndex, toIndex)
 
     if (params.actionFilter) {
@@ -78,17 +78,17 @@ export async function getAuditLogsAction(params: GetAuditLogsParams) {
 
     if (params.searchQuery && params.searchQuery.trim()) {
       const q = params.searchQuery.trim()
-      query = query.or(`email.ilike.%${q}%,user_id.ilike.%${q}%,ip_address.ilike.%${q}%`)
+      query = query.or(`user_id.ilike.%${q}%,ip_address.ilike.%${q}%`)
     }
 
     if (params.dateFrom) {
-      query = query.gte("timestamp", new Date(params.dateFrom).toISOString())
+      query = query.gte("created_at", new Date(params.dateFrom).toISOString())
     }
 
     if (params.dateTo) {
       const endDate = new Date(params.dateTo)
       endDate.setDate(endDate.getDate() + 1)
-      query = query.lt("timestamp", endDate.toISOString())
+      query = query.lt("created_at", endDate.toISOString())
     }
 
     const { data, error, count } = await query
@@ -100,7 +100,17 @@ export async function getAuditLogsAction(params: GetAuditLogsParams) {
 
     return {
       error: null,
-      logs: (data || []) as AuditLogDTO[],
+      logs: (data || []).map((entry) => ({
+        id: entry.id,
+        action: entry.action,
+        user_id: entry.user_id,
+        email: typeof entry.metadata?.actor_email === "string" ? entry.metadata.actor_email : null,
+        resource: entry.entity_id,
+        details: entry.metadata ?? {},
+        ip_address: entry.ip_address,
+        user_agent: entry.user_agent,
+        timestamp: entry.created_at,
+      })) as AuditLogDTO[],
       totalCount: count || 0,
     }
   } catch (err: any) {

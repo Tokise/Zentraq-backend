@@ -13,7 +13,7 @@ async function requireClinicStaff() {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return { error: "Not authenticated", user: null }
     const role = await getUserRole(user.id)
-    if (!["admin", "doctor", "nurse"].includes(role)) return { error: "Access Denied", user: null }
+    if (!role || !["admin", "doctor", "nurse"].includes(role)) return { error: "Access Denied", user: null }
     return { error: null, user }
 }
 
@@ -48,8 +48,8 @@ export async function getKioskStudentProfile(rfidUid: string) {
         // 3. Authorized admin client lookup with MINIMUM fields the kiosk UI needs
         const admin = createAdminClient()
         const { data, error } = await admin
-            .from("student_accounts")
-            .select("id, first_name, last_name, student_number, employee_number, department, clinic_photo_url")
+            .from("students")
+            .select("id, first_name, last_name, student_number, department, profile_photo_url")
             .eq("rfid_uid", rfidUid.trim())
             .maybeSingle()
 
@@ -69,9 +69,9 @@ export async function getKioskStudentProfile(rfidUid: string) {
             firstName: data.first_name || "",
             lastName: data.last_name || "",
             studentNumber: data.student_number || null,
-            employeeNumber: data.employee_number || null,
+            employeeNumber: null,
             department: data.department || null,
-            clinicPhotoUrl: data.clinic_photo_url || null,
+            clinicPhotoUrl: data.profile_photo_url || null,
         }
 
         return { error: null, profile }
@@ -86,12 +86,16 @@ export async function createConsultation(profileId: string, patientName: string,
         const auth = await requireClinicStaff()
         if (auth.error || !auth.user) return { error: auth.error }
         const admin = createAdminClient()
+        const { data: visit, error: visitError } = await admin.from("clinic_visits").insert({ patient_type: "student", student_id: profileId, visit_type: "rfid", created_by: auth.user.id }).select("id").single()
+        if (visitError || !visit) return { error: visitError?.message || "Unable to create clinic visit" }
+        const { data: account } = await admin.from("clinic_accounts").select("id, role").eq("user_id", auth.user.id).maybeSingle()
         const { data, error } = await admin.from("consultations").insert({
-            profile_id: profileId,
-            patient_name: patientName,
-            student_complaint: complaint,
-            status: "waiting",
-        }).select().single()
+            visit_id: visit.id,
+            chief_complaint: complaint,
+            doctor_id: account?.role === "doctor" ? account.id : null,
+            nurse_id: account?.role === "nurse" ? account.id : null,
+            status: "in-progress",
+        }).select("id").single()
         if (error) return { error: error.message }
         await logAuditEvent({ action: "RFID_SCAN", userId: auth.user.id, email: auth.user.email, resource: data?.id, details: { patientName, complaint } })
         revalidatePath("/consultations")

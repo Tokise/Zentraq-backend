@@ -1,5 +1,2 @@
-import { PlaceholderPage } from "@/components/placeholder-page"
-
-export default function DoctorClearancesRequestsPage() {
-    return <PlaceholderPage title="Clearance Requests" description="Review health clearance requests." />
-}
+import { ClearanceQueuePage } from "@/components/workflow/queue-pages"
+export default function DoctorClearanceRequestsPage() { return <ClearanceQueuePage title="Clearance Requests" description="Review submitted health clearance requests." /> }

@@ -1,490 +1,122 @@
 "use server"
 
+import { cookies } from "next/headers"
+import { revalidatePath } from "next/cache"
 import { createClient } from "@/utils/supabase/server"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { getUserRole } from "@/lib/auth/get-user-role"
-import { isAdmin } from "@/lib/auth/roles"
-import { cookies } from "next/headers"
-import { revalidatePath } from "next/cache"
 import { logAuditEvent } from "@/lib/audit-logger"
 
 const MIN_PASSWORD_LENGTH = 12
 const STUDENT_ID_PREFIX = "23011"
+type ProfileRole = "student" | "faculty"
+type Profile = {
+  id: string; role: ProfileRole; user_id: string | null; rfid_uid: string; first_name: string; last_name: string; email: string | null;
+  department: string | null; course: string | null; year_level: string | null; position: string | null; student_number: string | null;
+  employee_number: string | null; clinic_photo_url: string | null; active_status: boolean
+}
 
 async function requireAdmin() {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return { error: "Not authenticated", user: null }
-  }
-
-  const role = await getUserRole(user.id)
-
-  if (!isAdmin(role)) {
-    return {
-      error: "Access Denied: Only administrators can execute student registration & password resets",
-      user: null,
-    }
-  }
-
-  return { error: null, user }
+  const cookieStore = await cookies(); const supabase = createClient(cookieStore)
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user || await getUserRole(user.id) !== "admin") return null
+  return user
 }
 
-export type CreateStudentAccountResult =
-  | { success: true; userId: string; email: string; password: string; error?: undefined }
-  | { success?: false; error: string; userId?: undefined; email?: undefined; password?: undefined }
-
-export type ResetStudentPasswordResult =
-  | { success: true; email: string | null; password: string; error?: undefined }
-  | { success?: false; error: string; email?: undefined; password?: undefined }
-
-export type RegisterStudentProfileResult =
-  | { success: true; data: any; error?: undefined }
-  | { success?: false; error: string; data?: undefined }
-
-export type UpdateStudentProfileResult =
-  | { success: true; data: any; error?: undefined }
-  | { success?: false; error: string; data?: undefined }
-
-export type GenerateStudentIdResult =
-  | { success: true; suffix: string; error?: undefined }
-  | { success?: false; error: string; suffix?: undefined }
-
-/**
- * Server Action: Register a new student profile.
- * Uses Service Role via createAdminClient() to bypass RLS.
- * Requires admin authentication.
- */
-export async function registerStudentProfile(formData: FormData): Promise<RegisterStudentProfileResult> {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error }
-    }
-
-    const rfidUid = (formData.get("rfidUid") as string)?.trim()
-    const firstName = (formData.get("firstName") as string)?.trim()
-    const lastName = (formData.get("lastName") as string)?.trim()
-    const email = (formData.get("email") as string)?.trim().toLowerCase() || null
-    const department = (formData.get("department") as string)?.trim() || null
-    const course = (formData.get("course") as string)?.trim() || null
-    const yearLevel = (formData.get("yearLevel") as string)?.trim() || null
-    const position = (formData.get("position") as string)?.trim() || null
-    const studentNumber = (formData.get("studentNumber") as string)?.trim() || null
-    const employeeNumber = (formData.get("employeeNumber") as string)?.trim() || null
-    const clinicPhotoUrl = (formData.get("clinicPhotoUrl") as string)?.trim() || null
-    const role = (formData.get("role") as string)?.trim() || "student"
-
-    // Validate required fields
-    if (!rfidUid || !firstName || !lastName) {
-      return { error: "Missing required fields: RFID UID, first name, and last name are required" }
-    }
-
-    if (role === "student" && !studentNumber) {
-      return { error: "Student number is required for student role" }
-    }
-
-    if (role !== "student" && !employeeNumber) {
-      return { error: "Employee number is required for faculty/staff role" }
-    }
-
-    const admin = createAdminClient()
-
-    // Check if RFID UID is already registered
-    const { data: existingRfid, error: rfidError } = await admin
-      .from("student_accounts")
-      .select("id, first_name, last_name")
-      .eq("rfid_uid", rfidUid)
-      .maybeSingle()
-
-    if (rfidError) {
-      return { error: rfidError.message }
-    }
-
-    if (existingRfid) {
-      return { error: `RFID card is already registered to ${existingRfid.first_name} ${existingRfid.last_name}` }
-    }
-
-    // Insert the new student profile
-    const { data, error } = await admin
-      .from("student_accounts")
-      .insert({
-        rfid_uid: rfidUid,
-        first_name: firstName,
-        last_name: lastName,
-        email: email,
-        department: department,
-        course: role === "student" ? course : null,
-        year_level: role === "student" ? yearLevel : null,
-        position: role !== "student" ? position : null,
-        student_number: role === "student" ? studentNumber : null,
-        employee_number: role !== "student" ? employeeNumber : null,
-        clinic_photo_url: clinicPhotoUrl,
-        active_status: true,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      return { error: error.message }
-    }
-
-    // Log Audit Event
-    await logAuditEvent({
-      action: "STUDENT_ACCOUNT_CREATED",
-      userId: auth.user.id,
-      email: auth.user.email,
-      resource: data.id,
-      details: {
-        firstName,
-        lastName,
-        role,
-        studentNumber: studentNumber,
-        rfidUid,
-      },
-    })
-
-    revalidatePath("/admin/rfid-registration")
-    return { success: true, data }
-  } catch (err: any) {
-    console.error("[registerStudentProfile Exception]:", err)
-    return { error: err?.message || "Server error occurred during profile registration" }
+function normalizeProfile(row: Record<string, unknown>, role: ProfileRole): Profile {
+  return {
+    id: String(row.id), role, user_id: (row.user_id as string | null) ?? null, rfid_uid: String(row.rfid_uid ?? ""), first_name: String(row.first_name ?? ""), last_name: String(row.last_name ?? ""), email: (row.email as string | null) ?? null,
+    department: (row.department as string | null) ?? null, course: role === "student" ? (row.course as string | null) ?? null : null, year_level: role === "student" && row.year_level != null ? String(row.year_level) : null,
+    position: role === "faculty" ? (row.position as string | null) ?? null : null, student_number: role === "student" ? (row.student_number as string | null) ?? null : null, employee_number: role === "faculty" ? (row.employee_number as string | null) ?? null : null,
+    clinic_photo_url: role === "student" ? (row.profile_photo_url as string | null) ?? null : null, active_status: row.status === "active",
   }
 }
 
-/**
- * Server Action: Update an existing student profile.
- * Uses Service Role via createAdminClient() to bypass RLS.
- * Requires admin authentication.
- */
-export async function updateStudentProfile(formData: FormData): Promise<UpdateStudentProfileResult> {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error }
-    }
-
-    const profileId = (formData.get("profileId") as string)?.trim()
-    const firstName = (formData.get("firstName") as string)?.trim()
-    const lastName = (formData.get("lastName") as string)?.trim()
-    const email = (formData.get("email") as string)?.trim().toLowerCase() || null
-    const department = (formData.get("department") as string)?.trim() || null
-    const course = (formData.get("course") as string)?.trim() || null
-    const yearLevel = (formData.get("yearLevel") as string)?.trim() || null
-    const position = (formData.get("position") as string)?.trim() || null
-    const studentNumber = (formData.get("studentNumber") as string)?.trim() || null
-    const employeeNumber = (formData.get("employeeNumber") as string)?.trim() || null
-    const clinicPhotoUrl = (formData.get("clinicPhotoUrl") as string)?.trim() || null
-    const role = (formData.get("role") as string)?.trim() || "student"
-
-    if (!profileId || !firstName || !lastName) {
-      return { error: "Missing required fields: profile ID, first name, and last name are required" }
-    }
-
-    if (role === "student" && !studentNumber) {
-      return { error: "Student number is required for student role" }
-    }
-
-    if (role !== "student" && !employeeNumber) {
-      return { error: "Employee number is required for faculty/staff role" }
-    }
-
-    const admin = createAdminClient()
-
-    const { data, error } = await admin
-      .from("student_accounts")
-      .update({
-        first_name: firstName,
-        last_name: lastName,
-        email: email,
-        department: department,
-        course: role === "student" ? course : null,
-        year_level: role === "student" ? yearLevel : null,
-        position: role !== "student" ? position : null,
-        student_number: role === "student" ? studentNumber : null,
-        employee_number: role !== "student" ? employeeNumber : null,
-        clinic_photo_url: clinicPhotoUrl,
-      })
-      .eq("id", profileId)
-      .select()
-      .single()
-
-    if (error) {
-      return { error: error.message }
-    }
-
-    // Log Audit Event
-    await logAuditEvent({
-      action: "STUDENT_ACCOUNT_CREATED",
-      userId: auth.user.id,
-      email: auth.user.email,
-      resource: profileId,
-      details: {
-        action: "PROFILE_UPDATED",
-        firstName,
-        lastName,
-        role,
-      },
-    })
-
-    revalidatePath("/admin/rfid-registration")
-    return { success: true, data }
-  } catch (err: any) {
-    console.error("[updateStudentProfile Exception]:", err)
-    return { error: err?.message || "Server error occurred during profile update" }
-  }
+async function findProfile(admin: ReturnType<typeof createAdminClient>, id: string): Promise<Profile | null> {
+  const { data: student } = await admin.from("students").select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").eq("id", id).maybeSingle()
+  if (student) return normalizeProfile(student, "student")
+  const { data: faculty } = await admin.from("faculty").select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, status").eq("id", id).maybeSingle()
+  return faculty ? normalizeProfile(faculty, "faculty") : null
 }
 
-/**
- * Server Action: Look up a student profile by RFID UID.
- * Uses Service Role via createAdminClient() for consistent reads.
- */
+export async function registerStudentProfile(formData: FormData) {
+  const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized" }
+  const role = String(formData.get("role") ?? "student") === "student" ? "student" : "faculty" as ProfileRole
+  const rfidUid = String(formData.get("rfidUid") ?? "").trim(); const firstName = String(formData.get("firstName") ?? "").trim(); const lastName = String(formData.get("lastName") ?? "").trim()
+  const identifier = String(formData.get(role === "student" ? "studentNumber" : "employeeNumber") ?? "").trim()
+  if (!rfidUid || !firstName || !lastName || !identifier) return { error: "RFID UID, name, and ID number are required" }
+  const admin = createAdminClient()
+  const [{ data: studentRfid }, { data: facultyRfid }] = await Promise.all([admin.from("students").select("id").eq("rfid_uid", rfidUid).maybeSingle(), admin.from("faculty").select("id").eq("rfid_uid", rfidUid).maybeSingle()])
+  if (studentRfid || facultyRfid) return { error: "RFID card is already registered" }
+  const email = String(formData.get("email") ?? "").trim().toLowerCase() || null
+  const shared = { rfid_uid: rfidUid, first_name: firstName, last_name: lastName, email, department: String(formData.get("department") ?? "").trim() || null, status: "active" }
+  const result = role === "student"
+    ? await admin.from("students").insert({ ...shared, student_number: identifier, course: String(formData.get("course") ?? "").trim() || null, year_level: Number(formData.get("yearLevel")) || null, profile_photo_url: String(formData.get("clinicPhotoUrl") ?? "").trim() || null }).select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").single()
+    : await admin.from("faculty").insert({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null }).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, status").single()
+  if (result.error || !result.data) return { error: result.error?.message ?? "Unable to register profile" }
+  await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: result.data.id, details: { role } })
+  revalidatePath("/admin/rfid-registration")
+  return { success: true, data: normalizeProfile(result.data, role) }
+}
+
+export async function updateStudentProfile(formData: FormData) {
+  const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized" }
+  const id = String(formData.get("profileId") ?? "").trim(); const role = String(formData.get("role") ?? "student") === "student" ? "student" : "faculty" as ProfileRole
+  const firstName = String(formData.get("firstName") ?? "").trim(); const lastName = String(formData.get("lastName") ?? "").trim(); const identifier = String(formData.get(role === "student" ? "studentNumber" : "employeeNumber") ?? "").trim()
+  if (!id || !firstName || !lastName || !identifier) return { error: "Name and ID number are required" }
+  const admin = createAdminClient(); const shared = { first_name: firstName, last_name: lastName, email: String(formData.get("email") ?? "").trim().toLowerCase() || null, department: String(formData.get("department") ?? "").trim() || null }
+  const result = role === "student"
+    ? await admin.from("students").update({ ...shared, student_number: identifier, course: String(formData.get("course") ?? "").trim() || null, year_level: Number(formData.get("yearLevel")) || null, profile_photo_url: String(formData.get("clinicPhotoUrl") ?? "").trim() || null }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").single()
+    : await admin.from("faculty").update({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, status").single()
+  if (result.error || !result.data) return { error: result.error?.message ?? "Unable to update profile" }
+  await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: id, details: { action: "PROFILE_UPDATED", role } })
+  return { success: true, data: normalizeProfile(result.data, role) }
+}
+
 export async function lookupStudentByRfid(formData: FormData) {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error, data: null }
-    }
-
-    const rfidUid = (formData.get("rfidUid") as string)?.trim()
-    if (!rfidUid) {
-      return { error: "RFID UID is required", data: null }
-    }
-
-    const admin = createAdminClient()
-
-    const { data, error } = await admin
-      .from("student_accounts")
-      .select("*")
-      .eq("rfid_uid", rfidUid)
-      .maybeSingle()
-
-    if (error) {
-      return { error: error.message, data: null }
-    }
-
-    return { data, error: null }
-  } catch (err: any) {
-    console.error("[lookupStudentByRfid Exception]:", err)
-    return { error: err?.message || "Server error occurred during lookup", data: null }
-  }
+  const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized", data: null }
+  const uid = String(formData.get("rfidUid") ?? "").trim(); if (!uid) return { error: "RFID UID is required", data: null }
+  const admin = createAdminClient()
+  const { data: student } = await admin.from("students").select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").eq("rfid_uid", uid).maybeSingle()
+  if (student) return { error: null, data: normalizeProfile(student, "student") }
+  const { data: faculty } = await admin.from("faculty").select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, status").eq("rfid_uid", uid).maybeSingle()
+  return { error: null, data: faculty ? normalizeProfile(faculty, "faculty") : null }
 }
 
-/**
- * Server Action: Generate the next available student ID suffix.
- * Uses Service Role via createAdminClient() to ensure consistent reads.
- */
-export async function generateStudentId(): Promise<GenerateStudentIdResult> {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error }
-    }
-
-    const admin = createAdminClient()
-
-    const { data: lastRecords, error: lastError } = await admin
-      .from("student_accounts")
-      .select("student_number")
-      .not("student_number", "is", null)
-      .like("student_number", `${STUDENT_ID_PREFIX}%`)
-      .order("student_number", { ascending: false })
-      .limit(1)
-
-    if (lastError) {
-      return { error: lastError.message }
-    }
-
-    let nextNumber = 1
-    if (lastRecords && lastRecords.length > 0) {
-      const lastSuffix = lastRecords[0].student_number?.slice(STUDENT_ID_PREFIX.length) || "0000"
-      const lastNum = parseInt(lastSuffix, 10)
-      if (!isNaN(lastNum)) nextNumber = lastNum + 1
-    }
-
-    let suffix = String(nextNumber).padStart(4, "0")
-    let attempts = 0
-    while (attempts < 50) {
-      const candidate = `${STUDENT_ID_PREFIX}${suffix}`
-      const { data: existing, error: checkError } = await admin
-        .from("student_accounts")
-        .select("id")
-        .eq("student_number", candidate)
-        .maybeSingle()
-      if (checkError) {
-        return { error: checkError.message }
-      }
-      if (!existing) break
-      nextNumber++
-      suffix = String(nextNumber).padStart(4, "0")
-      attempts++
-    }
-
-    if (nextNumber > 9999) {
-      return { error: "All student IDs in the 23011-0001 to 23011-9999 range are taken." }
-    }
-
-    return { success: true, suffix }
-  } catch (err: any) {
-    console.error("[generateStudentId Exception]:", err)
-    return { error: err?.message || "Server error occurred during ID generation" }
-  }
+export async function generateStudentId() {
+  const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized" }
+  const { data, error } = await createAdminClient().from("students").select("student_number").like("student_number", `${STUDENT_ID_PREFIX}%`).order("student_number", { ascending: false }).limit(1)
+  if (error) return { error: error.message }
+  const last = data?.[0]?.student_number?.slice(STUDENT_ID_PREFIX.length) ?? "0"; const next = Number(last) + 1
+  if (next > 9999) return { error: "All student IDs in the configured range are taken." }
+  return { success: true, suffix: String(next).padStart(4, "0") }
 }
 
-export async function createStudentAccount(formData: FormData): Promise<CreateStudentAccountResult> {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error }
-    }
-
-    const email = (formData.get("email") as string)?.trim().toLowerCase()
-    const password = formData.get("password") as string
-    const studentAccountId = (formData.get("studentAccountId") as string)?.trim()
-
-    if (!email || !password || !studentAccountId) {
-      return { error: "Missing required fields: email, password, or student profile ID" }
-    }
-
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }
-    }
-
-    const admin = createAdminClient()
-
-    // Verify student account exists and does not already have a user linked
-    const { data: studentAccount, error: fetchError } = await admin
-      .from("student_accounts")
-      .select("id, user_id, email")
-      .eq("id", studentAccountId)
-      .maybeSingle()
-
-    if (fetchError || !studentAccount) {
-      return { error: fetchError?.message || "Student record not found" }
-    }
-
-    if (studentAccount.user_id) {
-      return { error: "This student profile already has an active portal account linked." }
-    }
-
-    // Create Auth User
-    const { data: created, error: createError } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    })
-
-    if (createError || !created.user) {
-      return { error: createError?.message || "Failed to create authentication user" }
-    }
-
-    // Link user_id and email in student_accounts
-    const { error: linkError } = await admin
-      .from("student_accounts")
-      .update({
-        user_id: created.user.id,
-        email: email,
-      })
-      .eq("id", studentAccountId)
-
-    if (linkError) {
-      // Clean up Auth user if linking fails
-      await admin.auth.admin.deleteUser(created.user.id)
-      return { error: linkError.message }
-    }
-
-    // Log Audit Event
-    await logAuditEvent({
-      action: "STUDENT_ACCOUNT_CREATED",
-      userId: auth.user.id,
-      email: auth.user.email,
-      resource: created.user.id,
-      details: { studentAccountId, studentEmail: email },
-    })
-
-    return {
-      success: true,
-      userId: created.user.id,
-      email,
-      password,
-    }
-  } catch (err: any) {
-    console.error("[createStudentAccount Exception]:", err)
-    return { error: err?.message || "Server error occurred during student account creation" }
-  }
+export async function createStudentAccount(formData: FormData) {
+  const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized" }
+  const email = String(formData.get("email") ?? "").trim().toLowerCase(); const password = String(formData.get("password") ?? ""); const profileId = String(formData.get("studentAccountId") ?? "").trim()
+  if (!email || !profileId || password.length < MIN_PASSWORD_LENGTH) return { error: "Valid email, profile, and a 12-character password are required" }
+  const admin = createAdminClient(); const profile = await findProfile(admin, profileId)
+  if (!profile) return { error: "Patient profile not found" }; if (profile.user_id) return { error: "This profile already has a portal account" }
+  const { data: created, error: authError } = await admin.auth.admin.createUser({ email, password, email_confirm: true }); if (authError || !created.user) return { error: authError?.message ?? "Unable to create login" }
+  const { data: roleRow } = await admin.from("roles").select("id").eq("name", profile.role).maybeSingle()
+  if (!roleRow) { await admin.auth.admin.deleteUser(created.user.id); return { error: `The ${profile.role} role has not been seeded` } }
+  const { error: userError } = await admin.from("users").insert({ id: created.user.id, email })
+  if (!userError) await admin.from("user_roles").insert({ user_id: created.user.id, role_id: roleRow.id })
+  const table = profile.role === "student" ? "students" : "faculty"; const { error: linkError } = await admin.from(table).update({ user_id: created.user.id, email }).eq("id", profile.id)
+  if (userError || linkError) { await admin.auth.admin.deleteUser(created.user.id); return { error: userError?.message ?? linkError?.message ?? "Unable to link account" } }
+  await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: created.user.id, details: { profile_id: profile.id, role: profile.role } })
+  return { success: true, userId: created.user.id, email, password }
 }
 
-export async function resetStudentPassword(formData: FormData): Promise<ResetStudentPasswordResult> {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error }
-    }
-
-    const studentAccountId = (formData.get("studentAccountId") as string)?.trim()
-    const newPassword = formData.get("newPassword") as string
-
-    if (!studentAccountId || !newPassword) {
-      return { error: "Missing required fields" }
-    }
-
-    if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }
-    }
-
-    const admin = createAdminClient()
-
-    const { data: studentAccount, error: fetchError } = await admin
-      .from("student_accounts")
-      .select("user_id, email")
-      .eq("id", studentAccountId)
-      .maybeSingle()
-
-    if (fetchError || !studentAccount) {
-      return { error: fetchError?.message || "Student account record not found" }
-    }
-
-    if (!studentAccount.user_id) {
-      return { error: "This student account has no linked portal login" }
-    }
-
-    const { error: updateError } = await admin.auth.admin.updateUserById(
-      studentAccount.user_id,
-      { password: newPassword }
-    )
-
-    if (updateError) {
-      return { error: updateError.message }
-    }
-
-    // Clear session token to invalidate existing active logins for this student
-    await admin
-      .from("student_accounts")
-      .update({ current_session_token: null })
-      .eq("id", studentAccountId)
-
-    // Log Audit Event
-    await logAuditEvent({
-      action: "AUTH_PASSWORD_RESET",
-      userId: auth.user.id,
-      email: auth.user.email,
-      resource: studentAccount.user_id,
-      details: { studentAccountId },
-    })
-
-    return {
-      success: true,
-      email: studentAccount.email,
-      password: newPassword,
-    }
-  } catch (err: any) {
-    console.error("[resetStudentPassword Exception]:", err)
-    return { error: err?.message || "Server error occurred during password reset" }
-  }
+export async function resetStudentPassword(formData: FormData) {
+  const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized" }
+  const profileId = String(formData.get("studentAccountId") ?? "").trim(); const password = String(formData.get("newPassword") ?? "")
+  if (!profileId || password.length < MIN_PASSWORD_LENGTH) return { error: "A profile and a 12-character password are required" }
+  const admin = createAdminClient(); const profile = await findProfile(admin, profileId)
+  if (!profile?.user_id) return { error: "This profile has no portal login" }
+  const { error } = await admin.auth.admin.updateUserById(profile.user_id, { password }); if (error) return { error: error.message }
+  await admin.from("user_sessions").update({ revoked_at: new Date().toISOString() }).eq("user_id", profile.user_id).is("revoked_at", null)
+  await logAuditEvent({ action: "AUTH_PASSWORD_RESET", userId: actor.id, email: actor.email, resource: profile.user_id })
+  return { success: true, email: profile.email, password }
 }

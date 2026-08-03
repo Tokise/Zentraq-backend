@@ -1,182 +1,67 @@
 "use server"
 
-import { createClient } from "@/utils/supabase/server"
-import { createAdminClient } from "@/utils/supabase/admin"
-import { getUserRole } from "@/lib/auth/get-user-role"
-import { isAdmin } from "@/lib/auth/roles"
-import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
+import { getActionActor, hasAnyRole } from "@/lib/security/action-guard"
+import { createAdminClient } from "@/utils/supabase/admin"
 import { logAuditEvent } from "@/lib/audit-logger"
 
 const MIN_PASSWORD_LENGTH = 12
+const CLINIC_ROLES = ["admin", "doctor", "nurse"] as const
 
 async function requireAdmin() {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return { error: "Not authenticated", user: null }
-  }
-
-  const role = await getUserRole(user.id)
-
-  if (!isAdmin(role)) {
-    return {
-      error: "Access Denied: Only administrators can manage clinic operator accounts",
-      user: null,
-    }
-  }
-
-  return { error: null, user }
+  const actor = await getActionActor()
+  return actor && hasAnyRole(actor, ["admin"]) ? actor : null
 }
 
 export async function createOperator(formData: FormData) {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error ?? "Unauthorized" }
-    }
+  const actor = await requireAdmin()
+  if (!actor) return { error: "Unauthorized" }
+  const email = String(formData.get("email") ?? "").trim().toLowerCase()
+  const password = String(formData.get("password") ?? "")
+  const displayName = String(formData.get("fullName") ?? "").trim()
+  const role = String(formData.get("role") ?? "nurse")
+  if (!email || !displayName || !CLINIC_ROLES.includes(role as typeof CLINIC_ROLES[number])) return { error: "Valid name, email, and clinic role are required" }
+  if (password.length < MIN_PASSWORD_LENGTH) return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }
 
-    const email = (formData.get("email") as string)?.trim().toLowerCase()
-    const password = formData.get("password") as string
-    const fullName = (formData.get("fullName") as string)?.trim()
-    const role = (formData.get("role") as string)?.trim() || "nurse"
-
-    if (!email || !password) {
-      return { error: "Email and password are required" }
-    }
-
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }
-    }
-
-    const admin = createAdminClient()
-
-    // 1. Create Auth User
-    const { data: created, error: createError } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    })
-
-    if (createError || !created.user) {
-      return { error: createError?.message || "Failed to create operator account" }
-    }
-
-    // 2. Insert into clinic_accounts table (Target table correctly updated from legacy profiles)
-    const accountPayload = {
-      id: created.user.id,
-      email,
-      role,
-      full_name: fullName || null,
-    }
-
-    const { error: profileError } = await admin
-      .from("clinic_accounts")
-      .upsert(accountPayload)
-
-    if (profileError) {
-      // Clean up Auth user if DB insert fails
-      await admin.auth.admin.deleteUser(created.user.id)
-      return { error: profileError.message }
-    }
-
-    // 3. Log Audit Event
-    await logAuditEvent({
-      action: "OPERATOR_CREATED",
-      userId: auth.user.id,
-      email: auth.user.email,
-      resource: created.user.id,
-      details: { createdEmail: email, role, fullName },
-    })
-
-    revalidatePath("/admin/clinic-accounts")
-    return { success: true }
-  } catch (err: any) {
-    console.error("[createOperator Exception]:", err)
-    return { error: err?.message || "Unknown server error occurred." }
-  }
+  const admin = createAdminClient()
+  const { data: created, error: authError } = await admin.auth.admin.createUser({ email, password, email_confirm: true })
+  if (authError || !created.user) return { error: authError?.message ?? "Failed to create user" }
+  const { data: roleRow } = await admin.from("roles").select("id").eq("name", role).maybeSingle()
+  if (!roleRow) { await admin.auth.admin.deleteUser(created.user.id); return { error: `The ${role} role has not been seeded` } }
+  const { error } = await admin.from("users").insert({ id: created.user.id, email }).then(async (result) => {
+    if (result.error) return result
+    const roleResult = await admin.from("user_roles").insert({ user_id: created.user.id, role_id: roleRow.id })
+    if (roleResult.error) return roleResult
+    return admin.from("clinic_accounts").insert({ user_id: created.user.id, role, display_name: displayName })
+  })
+  if (error) { await admin.auth.admin.deleteUser(created.user.id); return { error: error.message } }
+  await logAuditEvent({ action: "OPERATOR_CREATED", userId: actor.id, email: actor.email, resource: created.user.id, details: { role } })
+  revalidatePath("/admin/clinic-accounts")
+  return { success: true }
 }
 
 export async function removeOperator(targetUserId: string) {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error ?? "Unauthorized" }
-    }
-
-    if (targetUserId === auth.user.id) {
-      return { error: "Security Violation: You cannot remove your own administrator account" }
-    }
-
-    const admin = createAdminClient()
-
-    // Delete clinic_accounts record
-    const { error: dbDeleteError } = await admin
-      .from("clinic_accounts")
-      .delete()
-      .eq("id", targetUserId)
-
-    if (dbDeleteError) {
-      return { error: dbDeleteError.message }
-    }
-
-    // Delete auth user
-    const { error: deleteAuthError } = await admin.auth.admin.deleteUser(targetUserId)
-    if (deleteAuthError) {
-      return { error: deleteAuthError.message }
-    }
-
-    // Log Audit Event
-    await logAuditEvent({
-      action: "OPERATOR_REMOVED",
-      userId: auth.user.id,
-      email: auth.user.email,
-      resource: targetUserId,
-    })
-
-    revalidatePath("/admin/clinic-accounts")
-    return { success: true }
-  } catch (err: any) {
-    console.error("[removeOperator Exception]:", err)
-    return { error: err?.message || "Unknown server error occurred." }
-  }
+  const actor = await requireAdmin()
+  if (!actor) return { error: "Unauthorized" }
+  if (targetUserId === actor.id) return { error: "You cannot remove your own administrator account" }
+  const admin = createAdminClient()
+  const { error } = await admin.auth.admin.deleteUser(targetUserId)
+  if (error) return { error: error.message }
+  await logAuditEvent({ action: "OPERATOR_REMOVED", userId: actor.id, email: actor.email, resource: targetUserId })
+  revalidatePath("/admin/clinic-accounts")
+  return { success: true }
 }
 
-export interface StaffAccountDTO {
-  id: string
-  email: string
-  role: "admin" | "nurse" | "doctor"
-  full_name: string | null
-  created_at: string
-}
+export interface StaffAccountDTO { id: string; email: string; role: "admin" | "nurse" | "doctor"; full_name: string | null; created_at: string }
 
 export async function getClinicAccountsAction() {
-  try {
-    const auth = await requireAdmin()
-    if (auth.error || !auth.user) {
-      return { error: auth.error, operators: [] }
-    }
-
-    const admin = createAdminClient()
-    const { data, error } = await admin
-      .from("clinic_accounts")
-      .select("id, email, role, full_name, created_at")
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("[getClinicAccountsAction DB Error]:", error)
-      return { error: error.message, operators: [] }
-    }
-
-    return { error: null, operators: (data || []) as StaffAccountDTO[] }
-  } catch (err: any) {
-    console.error("[getClinicAccountsAction Exception]:", err)
-    return { error: err?.message || "Failed to load staff accounts", operators: [] }
-  }
+  const actor = await requireAdmin()
+  if (!actor) return { error: "Unauthorized", operators: [] as StaffAccountDTO[] }
+  const { data, error } = await createAdminClient().from("clinic_accounts").select("user_id, role, display_name, created_at, user:users(email)").order("created_at", { ascending: false })
+  if (error) return { error: error.message, operators: [] as StaffAccountDTO[] }
+  const operators = (data ?? []).map((row) => {
+    const user = Array.isArray(row.user) ? row.user[0] : row.user
+    return { id: row.user_id, email: user?.email ?? "", role: row.role as StaffAccountDTO["role"], full_name: row.display_name, created_at: row.created_at }
+  })
+  return { error: null, operators }
 }

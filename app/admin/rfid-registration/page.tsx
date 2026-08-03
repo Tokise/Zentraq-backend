@@ -348,7 +348,7 @@ export default function RfidRegistrationPage() {
     reader.readAsDataURL(file)
   }
 
-  // Step 4 → Create student_accounts record via Server Action, then go to Step 5 (Account Setup)
+  // Step 4 → Create the student or faculty profile via Server Action, then go to Account Setup.
   async function handleRegister() {
     if (!rfidUid) return
     setLoading(true)
@@ -393,7 +393,7 @@ export default function RfidRegistrationPage() {
     }
   }
 
-  // Step 5 → Create auth user + link to student_accounts via server action
+  // Step 5 → Create an auth user and link it to the new patient profile.
   async function handleCreateAccount() {
     if (!accountEmail || !accountPassword) {
       toast.error("Please enter an email and password.")
