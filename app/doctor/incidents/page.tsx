@@ -1,5 +1,2 @@
-import { PlaceholderPage } from "@/components/placeholder-page"
-
-export default function DoctorIncidentsPage() {
-    return <PlaceholderPage title="Active Cases" description="View and manage active incident cases." />
-}
+import { IncidentQueuePage } from "@/components/workflow/queue-pages"
+export default function DoctorIncidentsPage() { return <IncidentQueuePage title="Active Cases" /> }

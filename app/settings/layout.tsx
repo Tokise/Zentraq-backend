@@ -20,7 +20,7 @@ export default async function SettingsLayout({
     const userRole = await getUserRole(user.id)
 
     return (
-        <DashboardShell userEmail={user?.email} userRole={userRole}>
+        <DashboardShell userEmail={user?.email} userRole={userRole ?? undefined}>
             {children}
         </DashboardShell>
     )

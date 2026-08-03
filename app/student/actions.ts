@@ -47,8 +47,8 @@ export async function getStudentProfileDTO() {
 
     const admin = createAdminClient()
     const { data, error } = await admin
-      .from("student_accounts")
-      .select("first_name, last_name, student_number, employee_number, department, course, year_level, clinic_photo_url, email")
+      .from("students")
+      .select("first_name, last_name, student_number, department, course, year_level, profile_photo_url, email")
       .eq("user_id", auth.user.id)
       .maybeSingle()
 
@@ -65,11 +65,11 @@ export async function getStudentProfileDTO() {
       firstName: data.first_name || "",
       lastName: data.last_name || "",
       studentNumber: data.student_number || null,
-      employeeNumber: data.employee_number || null,
+      employeeNumber: null,
       department: data.department || null,
       course: data.course || null,
       yearLevel: data.year_level || null,
-      clinicPhotoUrl: data.clinic_photo_url || null,
+      clinicPhotoUrl: data.profile_photo_url || null,
       email: data.email || auth.user.email || null,
     }
 
@@ -117,11 +117,11 @@ export async function getStudentAnnouncementsAction(limit?: number) {
     if (posterIds.length > 0) {
       const { data: posters } = await admin
         .from("clinic_accounts")
-        .select("id, full_name")
+        .select("id, display_name")
         .in("id", posterIds)
 
       if (posters) {
-        posterMap = Object.fromEntries(posters.map((p) => [p.id, p.full_name || "Clinic Staff"]))
+        posterMap = Object.fromEntries(posters.map((p) => [p.id, p.display_name || "Clinic Staff"]))
       }
     }
 

@@ -23,7 +23,7 @@ export async function createAnnouncement(title: string, content: string) {
         const auth = await requireAdmin()
         if (auth.error || !auth.user) return { error: auth.error }
         const admin = createAdminClient()
-        const { data, error } = await admin.from("announcements").insert({ title, content }).select().single()
+        const { data, error } = await admin.from("announcements").insert({ title, content, posted_by: auth.user.id }).select("id").single()
         if (error) return { error: error.message }
         await logAuditEvent({ action: "INVENTORY_MODIFICATION", userId: auth.user.id, email: auth.user.email, resource: data?.id, details: { action: "ANNOUNCEMENT_CREATED", title } })
         revalidatePath("/admin/clinic-announcements")

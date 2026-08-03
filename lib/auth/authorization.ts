@@ -34,7 +34,7 @@ export async function requireRole(allowedRoles: string[]) {
     const user = await requireAuth()
     const role = await getUserRole(user.id)
 
-    if (!allowedRoles.includes(role)) {
+    if (!role || !allowedRoles.includes(role)) {
         throw new Error(
             `Access Denied: Required role(s): ${allowedRoles.join(", ")}. Your role: ${role}`
         )

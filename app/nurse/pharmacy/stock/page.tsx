@@ -1,5 +1,2 @@
-import { PlaceholderPage } from "@/components/placeholder-page"
-
-export default function NursePharmacyStockPage() {
-    return <PlaceholderPage title="Inventory Status" description="View current medicine inventory status." />
-}
+import { InventoryQueuePage } from "@/components/workflow/queue-pages"
+export default function PharmacyStockPage() { return <InventoryQueuePage /> }

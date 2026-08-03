@@ -1,10 +1,10 @@
 "use server"
 
-import { createAdminClient } from "@/utils/supabase/admin"
 import { cookies } from "next/headers"
-import { createClient } from "@/utils/supabase/server"
-import { getUserRole } from "@/lib/auth/get-user-role"
 import { revalidatePath } from "next/cache"
+import { createClient } from "@/utils/supabase/server"
+import { createAdminClient } from "@/utils/supabase/admin"
+import { getUserRole } from "@/lib/auth/get-user-role"
 import { logAuditEvent } from "@/lib/audit-logger"
 
 export interface StudentAppointmentDTO {
@@ -18,144 +18,45 @@ export interface StudentAppointmentDTO {
   created_at: string
 }
 
-async function requireStudent() {
+async function requireStudentProfile() {
   const cookieStore = await cookies()
   const supabase = createClient(cookieStore)
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return { error: "Not authenticated", user: null }
-  }
-
-  const role = await getUserRole(user.id)
-  if (role !== "student") {
-    return { error: "Access Denied: Only students can access student appointments", user: null }
-  }
-
-  return { error: null, user }
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user || await getUserRole(user.id) !== "student") return { error: "Access denied", user: null, profile: null }
+  const { data: profile } = await createAdminClient().from("students").select("id, first_name, last_name, department").eq("user_id", user.id).maybeSingle()
+  if (!profile) return { error: "Student profile not found", user: null, profile: null }
+  return { error: null, user, profile }
 }
 
 export async function getStudentAppointmentsAction() {
-  try {
-    const auth = await requireStudent()
-    if (auth.error || !auth.user) {
-      return { error: auth.error, appointments: [] }
-    }
-
-    const admin = createAdminClient()
-    const { data, error } = await admin
-      .from("student_appointments")
-      .select("id, appointment_date, time_slot, complaint, status, patient_name, department, created_at")
-      .eq("student_user_id", auth.user.id)
-      .order("appointment_date", { ascending: true })
-
-    if (error) {
-      console.error("[getStudentAppointmentsAction DB Error]:", error)
-      return { error: error.message, appointments: [] }
-    }
-
-    const appointments: StudentAppointmentDTO[] = (data || []).map((a) => ({
-      id: a.id,
-      appointment_date: a.appointment_date,
-      time_slot: a.time_slot,
-      reason: a.complaint || null,
-      status: a.status,
-      patient_name: a.patient_name || null,
-      department: a.department || null,
-      created_at: a.created_at,
-    }))
-
-    return { error: null, appointments }
-  } catch (err: any) {
-    console.error("[getStudentAppointmentsAction Exception]:", err)
-    return { error: err?.message || "Failed to fetch appointments", appointments: [] }
-  }
+  const auth = await requireStudentProfile()
+  if (auth.error || !auth.profile) return { error: auth.error, appointments: [] as StudentAppointmentDTO[] }
+  const { data, error } = await createAdminClient().from("appointments")
+    .select("id, scheduled_date, scheduled_time, reason, status, created_at")
+    .eq("student_id", auth.profile.id).order("scheduled_date", { ascending: true })
+  if (error) return { error: error.message, appointments: [] as StudentAppointmentDTO[] }
+  const patientName = `${auth.profile.first_name} ${auth.profile.last_name}`
+  return { error: null, appointments: (data ?? []).map((item) => ({ id: item.id, appointment_date: item.scheduled_date ?? "", time_slot: item.scheduled_time ?? "", reason: item.reason, status: item.status, patient_name: patientName, department: auth.profile.department, created_at: item.created_at })) }
 }
 
-export async function createAppointment(data: {
-  appointmentDate: string
-  timeSlot: string
-  reason?: string
-}) {
-  try {
-    const auth = await requireStudent()
-    if (auth.error || !auth.user) return { error: auth.error }
-
-    if (!data.appointmentDate || !data.timeSlot) {
-      return { error: "Appointment date and time slot are required." }
-    }
-
-    const admin = createAdminClient()
-
-    // Retrieve real student profile details on server side
-    const { data: studentData } = await admin
-      .from("student_accounts")
-      .select("first_name, last_name, department")
-      .eq("user_id", auth.user.id)
-      .maybeSingle()
-
-    const patientName = studentData
-      ? `${studentData.first_name || ""} ${studentData.last_name || ""}`.trim()
-      : "Student"
-    const department = studentData?.department || "Student"
-
-    const { error } = await admin.from("student_appointments").insert({
-      student_user_id: auth.user.id, // Strictly bind to authenticated user session ID (Fixes IDOR)
-      appointment_date: data.appointmentDate,
-      time_slot: data.timeSlot,
-      complaint: data.reason || "Student appointment",
-      patient_name: patientName,
-      department: department,
-      status: "pending",
-    })
-
-    if (error) return { error: error.message }
-
-    await logAuditEvent({
-      action: "APPOINTMENT_CHANGE",
-      userId: auth.user.id,
-      email: auth.user.email,
-      details: { action: "STUDENT_CREATED", appointmentDate: data.appointmentDate, timeSlot: data.timeSlot },
-    })
-
-    revalidatePath("/student/appointments")
-    return { success: true }
-  } catch (err: any) {
-    return { error: err?.message || "Server error" }
-  }
+export async function createAppointment(data: { appointmentDate: string; timeSlot: string; reason?: string }) {
+  const auth = await requireStudentProfile()
+  if (auth.error || !auth.user || !auth.profile) return { error: auth.error }
+  if (!data.appointmentDate || !data.timeSlot || !data.reason?.trim()) return { error: "Date, time, and reason are required." }
+  const { error } = await createAdminClient().from("appointments").insert({ patient_type: "student", student_id: auth.profile.id, reason: data.reason.trim(), scheduled_date: data.appointmentDate, scheduled_time: data.timeSlot, status: "pending" })
+  if (error) return { error: error.message }
+  await logAuditEvent({ action: "APPOINTMENT_CHANGE", userId: auth.user.id, email: auth.user.email, details: { action: "STUDENT_REQUESTED" } })
+  revalidatePath("/student/appointments")
+  return { success: true }
 }
 
 export async function cancelAppointment(id: string) {
-  try {
-    const auth = await requireStudent()
-    if (auth.error || !auth.user) return { error: auth.error }
-
-    const admin = createAdminClient()
-
-    // Strictly match id AND student_user_id to prevent canceling other users' appointments (Fixes IDOR)
-    const { error } = await admin
-      .from("student_appointments")
-      .update({ status: "cancelled" })
-      .eq("id", id)
-      .eq("student_user_id", auth.user.id)
-
-    if (error) return { error: error.message }
-
-    await logAuditEvent({
-      action: "APPOINTMENT_CHANGE",
-      userId: auth.user.id,
-      email: auth.user.email,
-      resource: id,
-      details: { action: "STUDENT_CANCELLED" },
-    })
-
-    revalidatePath("/student/appointments")
-    return { success: true }
-  } catch (err: any) {
-    return { error: err?.message || "Server error" }
-  }
+  const auth = await requireStudentProfile()
+  if (auth.error || !auth.user || !auth.profile) return { error: auth.error }
+  const { data, error } = await createAdminClient().from("appointments").update({ status: "cancelled" }).eq("id", id).eq("student_id", auth.profile.id).in("status", ["pending", "ai_evaluated", "recommended", "scheduled"]).select("id").maybeSingle()
+  if (error) return { error: error.message }
+  if (!data) return { error: "Appointment cannot be cancelled" }
+  await logAuditEvent({ action: "APPOINTMENT_CHANGE", userId: auth.user.id, email: auth.user.email, resource: id, details: { action: "STUDENT_CANCELLED" } })
+  revalidatePath("/student/appointments")
+  return { success: true }
 }

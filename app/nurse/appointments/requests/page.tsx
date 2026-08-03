@@ -1,5 +1,2 @@
-import { PlaceholderPage } from "@/components/placeholder-page"
-
-export default function NurseAppointmentsRequestsPage() {
-    return <PlaceholderPage title="Appointment Requests" description="Review and approve appointment requests." />
-}
+import { AppointmentQueuePage } from "@/components/workflow/queue-pages"
+export default function NurseAppointmentRequestsPage() { return <AppointmentQueuePage title="Appointment Requests" description="Requests ready for clinic review." statuses={["ai_evaluated", "recommended"]} /> }

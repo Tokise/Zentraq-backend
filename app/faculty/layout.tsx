@@ -25,7 +25,7 @@ export default async function FacultyLayout({
     }
 
     return (
-        <DashboardShell userEmail={user?.email} userRole={userRole}>
+        <DashboardShell userEmail={user?.email} userRole={userRole ?? undefined}>
             {children}
         </DashboardShell>
     )
