@@ -60,7 +60,22 @@ export async function getUserRole(userId: string): Promise<UserRole> {
     // Ignore
   }
 
-  // 4. Auth user fallback metadata/email check
+  // 4. Check if user is a faculty member (has a faculty_accounts entry)
+  try {
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
+    const { data: facultyData } = await supabase
+      .from("faculty_accounts")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle()
+
+    if (facultyData) return "faculty"
+  } catch {
+    // Ignore
+  }
+
+  // 5. Auth user fallback metadata/email check
   try {
     const cookieStore = await cookies()
     const supabase = createClient(cookieStore)

@@ -21,7 +21,7 @@ import {
     deleteNotification,
     type NotificationDTO,
     type NotificationType,
-} from "@/app/(dashboard)/admin/notifications/actions"
+} from "@/app/admin/notifications/actions"
 
 const NOTIFICATION_ICONS: Record<string, any> = {
     appointment: CalendarDays,
