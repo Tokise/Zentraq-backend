@@ -4,13 +4,14 @@ import { getPatientMedicalRecord } from "@/app/actions/medical-records"
 import { notFound } from "next/navigation"
 
 interface NursePatientPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function NursePatientPage({ params }: NursePatientPageProps) {
-  const { record, error } = await getPatientMedicalRecord(params.id, "student")
+  const { id } = await params
+  const { record, error } = await getPatientMedicalRecord(id, "student")
   
   if (error || !record) {
     notFound()

@@ -43,6 +43,17 @@ export interface Prescription {
   prescribed_by: string | null
   status: string
   created_at: string
+  medicines: {
+    generic_name: string
+    brand_name: string | null
+  }
+  consultations: {
+    created_at: string
+    clinic_visits: {
+      students: { student_number: string; first_name: string; last_name: string } | null
+      faculty: { employee_number: string; first_name: string; last_name: string } | null
+    } | null
+  } | null
 }
 
 export async function getMedicineCatalog(filters?: {
@@ -265,7 +276,13 @@ export async function getPrescriptionHistory(patientId: string, patientType: "st
     .select(`
       *,
       medicines!inner(generic_name, brand_name),
-      consultations!inner(created_at)
+      consultations!inner(
+        created_at,
+        clinic_visits!inner(
+          students(student_number, first_name, last_name),
+          faculty(employee_number, first_name, last_name)
+        )
+      )
     `)
     .eq(`consultations.clinic_visits.${idColumn}`, patientId)
     .order("created_at", { ascending: false })

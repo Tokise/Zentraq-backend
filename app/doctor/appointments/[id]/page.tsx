@@ -8,13 +8,14 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 
 interface DoctorAppointmentPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function DoctorAppointmentPage({ params }: DoctorAppointmentPageProps) {
-  const { appointment, error } = await getAppointmentDetail(params.id)
+  const { id } = await params
+  const { appointment, error } = await getAppointmentDetail(id)
   
   if (error || !appointment) {
     notFound()
@@ -121,10 +122,10 @@ export default async function DoctorAppointmentPage({ params }: DoctorAppointmen
         </div>
 
         <RecommendationForm
-          appointmentId={params.id}
+          appointmentId={id}
           onSubmit={async (data) => {
             "use server"
-            const result = await recommendAppointment(params.id, data)
+            const result = await recommendAppointment(id, data)
             if (result.error) {
               toast.error(result.error)
               throw new Error(result.error)

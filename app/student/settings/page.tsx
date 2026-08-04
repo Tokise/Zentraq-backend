@@ -4,19 +4,19 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/utils/supabase/client"
 import { toast } from "sonner"
 import { Loader2, ShieldCheck } from "lucide-react"
 import { PasswordStrengthInput } from "@/components/password-strength-input"
 import { checkPassword } from "@/lib/validation/password"
+import { changePasswordAction } from "@/app/actions/auth"
 
 import { getStudentProfileDTO, type StudentProfileDTO } from "@/app/student/actions"
 
 export default function StudentSettingsPage() {
-    const supabase = createClient()
     const [profile, setProfile] = useState<StudentProfileDTO | null>(null)
     const [loading, setLoading] = useState(true)
     const [changingPassword, setChangingPassword] = useState(false)
+    const [currentPassword, setCurrentPassword] = useState("")
     const [password, setPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
 
@@ -51,11 +51,15 @@ export default function StudentSettingsPage() {
 
         setChangingPassword(true)
         try {
-            const { error } = await supabase.auth.updateUser({ password })
-            if (error) throw error
+            const result = await changePasswordAction(currentPassword, password)
+            if (result.error) {
+                toast.error(result.error)
+                return
+            }
             toast.success("Password updated successfully")
             setPassword("")
             setConfirmPassword("")
+            setCurrentPassword("")
         } catch (err: any) {
             toast.error(err.message || "Failed to update password")
         } finally {
@@ -127,6 +131,22 @@ export default function StudentSettingsPage() {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleChangePassword} className="space-y-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-zinc-700" htmlFor="current-password">
+                                Current Password
+                            </label>
+                            <input
+                                id="current-password"
+                                type="password"
+                                value={currentPassword}
+                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                placeholder="Enter your current password"
+                                autoComplete="current-password"
+                                required
+                                className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                            />
+                        </div>
+
                         <PasswordStrengthInput
                             label="New Password"
                             id="new-password"

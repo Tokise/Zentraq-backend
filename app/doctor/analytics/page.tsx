@@ -2,9 +2,8 @@ import { PageHeader } from "@/components/page-header"
 import { AnalyticsDashboard } from "@/components/analytics/analytics-dashboard"
 import { ConsultationChart } from "@/components/analytics/consultation-chart"
 import { ComplaintChart } from "@/components/analytics/complaint-chart"
-import { getAnalyticsOverview, getDailyConsultations, getComplaintFrequency, getDoctorStats } from "@/app/actions/analytics"
+import { getAnalyticsOverview, getDailyConsultations, getComplaintFrequency, getDoctorStats, getDoctorClinicAccountIdAction } from "@/app/actions/analytics"
 import { getActionActor } from "@/lib/security/action-guard"
-import { createAdminClient } from "@/utils/supabase/admin"
 
 export default async function DoctorAnalyticsPage() {
   const actor = await getActionActor()
@@ -22,16 +21,12 @@ export default async function DoctorAnalyticsPage() {
     )
   }
 
-  const { data: doctor } = await createAdminClient()
-    .from("clinic_accounts")
-    .select("id")
-    .eq("user_id", actor.id)
-    .single()
+  const { clinicAccountId } = await getDoctorClinicAccountIdAction()
 
   const { overview } = await getAnalyticsOverview()
   const { data: consultations } = await getDailyConsultations()
   const { data: complaints } = await getComplaintFrequency()
-  const { stats } = doctor ? await getDoctorStats(doctor.id) : { stats: null }
+  const { stats } = clinicAccountId ? await getDoctorStats(clinicAccountId) : { stats: null }
 
   return (
     <main className="space-y-6">

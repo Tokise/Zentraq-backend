@@ -34,7 +34,7 @@ const StatCard = ({ label, value, icon: Icon, color }: { label: string; value: n
   </Card>
 )
 
-export default function DoctorAnalyticsOverviewPage() {
+export default function AdminReportsPage() {
   const [data, setData] = useState<AnalyticsDTO | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -42,14 +42,14 @@ export default function DoctorAnalyticsOverviewPage() {
     const fetchData = async () => {
       setLoading(true)
       try {
-      const result = await getAnalyticsOverview()
-      if (result.error) {
-        toast.error(result.error)
-      } else {
-        setData(result.overview || null)
-      }
+        const result = await getAnalyticsOverview()
+        if (result.error) {
+          toast.error(result.error)
+        } else {
+          setData(result.overview || null)
+        }
       } catch (err: any) {
-        toast.error(err.message || "Failed to load analytics")
+        toast.error(err.message || "Failed to load reports")
       } finally {
         setLoading(false)
       }
@@ -60,7 +60,7 @@ export default function DoctorAnalyticsOverviewPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Clinic Overview" description="View clinic-wide analytics and insights." />
+        <PageHeader title="Clinic Reports" description="View clinic-wide analytics and insights." />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i} className="border-zinc-200/80 shadow-sm bg-white">
@@ -81,10 +81,10 @@ export default function DoctorAnalyticsOverviewPage() {
   if (!data) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Clinic Overview" description="View clinic-wide analytics and insights." />
+        <PageHeader title="Clinic Reports" description="View clinic-wide analytics and insights." />
         <Card className="border-zinc-200/80 shadow-sm bg-white">
           <CardContent className="py-12 text-center text-muted-foreground">
-            No analytics data available.
+            No reports data available.
           </CardContent>
         </Card>
       </div>
@@ -93,7 +93,7 @@ export default function DoctorAnalyticsOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Clinic Overview" description="View clinic-wide analytics and insights." />
+      <PageHeader title="Clinic Reports" description="View clinic-wide analytics and insights." />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total Consultations" value={data.total_consultations} icon={Activity} color="bg-emerald-50 text-emerald-600" />

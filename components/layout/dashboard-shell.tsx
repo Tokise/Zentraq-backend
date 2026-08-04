@@ -21,10 +21,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { createClient } from "@/utils/supabase/client"
 import type { UserRole } from "@/lib/auth/roles"
 import { NotificationDropdown } from "@/components/layout/notification-dropdown"
 import { getPageTitle } from "@/lib/navigation"
+import { signOutAction } from "@/app/actions/auth"
 
 type DashboardShellProps = {
   children: React.ReactNode
@@ -69,9 +69,7 @@ export function DashboardShell({
     NProgress.start()
 
     try {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-      window.location.href = "/login"
+      await signOutAction()
     } catch (error) {
       console.error(error)
       NProgress.done()

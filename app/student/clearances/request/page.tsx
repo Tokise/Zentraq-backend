@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/page-header"
 import { ClearanceRequestForm } from "@/components/clearance/clearance-request-form"
 import { submitClearanceRequest } from "@/app/actions/clearances"
 import { getActionActor } from "@/lib/security/action-guard"
-import { createAdminClient } from "@/utils/supabase/admin"
+import { getStudentProfileIdAction } from "@/app/student/actions"
 import { toast } from "sonner"
 import { redirect } from "next/navigation"
 
@@ -12,13 +12,9 @@ export default async function StudentClearancesRequestPage() {
     redirect("/login")
   }
 
-  const { data: student } = await createAdminClient()
-    .from("students")
-    .select("id")
-    .eq("user_id", actor.id)
-    .single()
+  const { studentId } = await getStudentProfileIdAction()
 
-  if (!student) {
+  if (!studentId) {
     return (
       <main className="space-y-6">
         <PageHeader
@@ -40,12 +36,12 @@ export default async function StudentClearancesRequestPage() {
       />
       <ClearanceRequestForm
         requesterType="student"
-        requesterId={student.id}
+        requesterId={studentId}
         onSubmit={async (data) => {
           /* use server */
           const result = await submitClearanceRequest({
             requester_type: "student",
-            requester_id: student.id,
+            requester_id: studentId,
             purpose: data.purpose
           })
           if (result.error) {

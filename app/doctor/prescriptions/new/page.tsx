@@ -5,13 +5,13 @@ import { toast } from "sonner"
 import { redirect } from "next/navigation"
 
 interface DoctorPrescriptionNewPageProps {
-  searchParams: {
+  searchParams: Promise<{
     consultationId?: string
-  }
+  }>
 }
 
 export default async function DoctorPrescriptionsNewPage({ searchParams }: DoctorPrescriptionNewPageProps) {
-  const consultationId = searchParams.consultationId
+  const { consultationId } = await searchParams
 
   if (!consultationId) {
     return (

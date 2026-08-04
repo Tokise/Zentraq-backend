@@ -5,13 +5,13 @@ import { toast } from "sonner"
 import { redirect } from "next/navigation"
 
 interface NursePharmacyDispensePageProps {
-  searchParams: {
+  searchParams: Promise<{
     prescriptionId?: string
-  }
+  }>
 }
 
 export default async function NursePharmacyDispensePage({ searchParams }: NursePharmacyDispensePageProps) {
-  const prescriptionId = searchParams.prescriptionId
+  const { prescriptionId } = await searchParams
 
   if (!prescriptionId) {
     const { prescriptions } = await getPendingPrescriptions()

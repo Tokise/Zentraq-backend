@@ -6,10 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createClient } from "@/utils/supabase/client"
-import { fetchAnnouncementsWithPosters } from "@/lib/announcements"
 import { toast } from "sonner"
-import { createAnnouncement, deleteAnnouncement } from "./actions"
+import {
+    getAnnouncementsAction,
+    createAnnouncement,
+    updateAnnouncement,
+    deleteAnnouncement,
+    uploadAnnouncementImageAction,
+    type AnnouncementDTO,
+} from "./actions"
 import { Loader2, Plus, Pencil, Trash2, X, Check, ImagePlus, ImageOff } from "lucide-react"
 
 import { useSearchParams } from "next/navigation"
@@ -20,20 +25,17 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 
-const ANNOUNCEMENT_BUCKET = "announcement-images"
-
 export default function AdminClinicAnnouncementsPage() {
-    const supabase = createClient()
     const searchParams = useSearchParams()
     const targetId = searchParams.get("id")
 
-    const [announcements, setAnnouncements] = useState<any[]>([])
+    const [announcements, setAnnouncements] = useState<AnnouncementDTO[]>([])
     const [loading, setLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [submitting, setSubmitting] = useState(false)
     const [form, setForm] = useState({ title: "", content: "" })
-    const [selectedAnnModal, setSelectedAnnModal] = useState<any | null>(null)
+    const [selectedAnnModal, setSelectedAnnModal] = useState<AnnouncementDTO | null>(null)
 
     // Image handling
     const [imageFile, setImageFile] = useState<File | null>(null)
@@ -44,14 +46,19 @@ export default function AdminClinicAnnouncementsPage() {
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     async function fetchAnnouncements() {
-        const data = await fetchAnnouncementsWithPosters(supabase)
-        setAnnouncements(data)
+        const res = await getAnnouncementsAction()
+        if (res.error) {
+            toast.error(res.error)
+            setAnnouncements([])
+        } else {
+            setAnnouncements(res.announcements)
+        }
         setLoading(false)
     }
 
     useEffect(() => {
         fetchAnnouncements()
-    }, [supabase])
+    }, [])
 
     // Auto-pop up targeted announcement detail modal when ?id= parameter is present
     useEffect(() => {
@@ -73,7 +80,7 @@ export default function AdminClinicAnnouncementsPage() {
         setRemoveExistingImage(false)
     }
 
-    function startEdit(ann: any) {
+    function startEdit(ann: AnnouncementDTO) {
         setForm({ title: ann.title, content: ann.content })
         setEditingId(ann.id)
         setExistingImageUrl(ann.image_url || null)
@@ -113,24 +120,6 @@ export default function AdminClinicAnnouncementsPage() {
         if (fileInputRef.current) fileInputRef.current.value = ""
     }
 
-    async function uploadImageIfNeeded(): Promise<string | null> {
-        if (!imageFile) return null
-
-        const ext = imageFile.name.split(".").pop()
-        const path = `${crypto.randomUUID()}.${ext}`
-
-        const { error: uploadError } = await supabase.storage
-            .from(ANNOUNCEMENT_BUCKET)
-            .upload(path, imageFile, { cacheControl: "3600", upsert: false })
-
-        if (uploadError) {
-            throw new Error(`Image upload failed: ${uploadError.message}`)
-        }
-
-        const { data } = supabase.storage.from(ANNOUNCEMENT_BUCKET).getPublicUrl(path)
-        return data.publicUrl
-    }
-
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (!form.title.trim() || !form.content.trim()) {
@@ -140,26 +129,28 @@ export default function AdminClinicAnnouncementsPage() {
 
         setSubmitting(true)
         try {
-            // Upload image if needed
-            const uploadedUrl = await uploadImageIfNeeded()
+            // Upload image via Server Action if a new file was selected
             let imageUrlToSave: string | null | undefined = undefined
-            if (uploadedUrl) {
-                imageUrlToSave = uploadedUrl
+            if (imageFile && imagePreview) {
+                const uploadRes = await uploadAnnouncementImageAction(imagePreview)
+                if (uploadRes.error) {
+                    toast.error(uploadRes.error)
+                    return
+                }
+                imageUrlToSave = uploadRes.url
             } else if (removeExistingImage) {
                 imageUrlToSave = null
             }
 
             if (editingId) {
-                // For updates, we need to handle image upload separately via server action
-                // For now, update text content via server action
-                const result = await createAnnouncement(form.title.trim(), form.content.trim())
+                const result = await updateAnnouncement(editingId, form.title.trim(), form.content.trim(), imageUrlToSave)
                 if (result.error) {
                     toast.error(result.error)
                     return
                 }
                 toast.success("Announcement updated!")
             } else {
-                const result = await createAnnouncement(form.title.trim(), form.content.trim())
+                const result = await createAnnouncement(form.title.trim(), form.content.trim(), imageUrlToSave)
                 if (result.error) {
                     toast.error(result.error)
                     return
@@ -319,7 +310,7 @@ export default function AdminClinicAnnouncementsPage() {
                                                 <CardTitle className="text-base font-semibold">{ann.title}</CardTitle>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
                                                     Posted {ann.created_at ? new Date(ann.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : ""}
-                                                    {ann.poster?.full_name ? ` by ${ann.poster.full_name}` : ""}
+                                                    {ann.poster_name ? ` by ${ann.poster_name}` : ""}
                                                 </p>
                                             </div>
                                             <div className="flex gap-1 shrink-0 ml-4">
@@ -373,7 +364,7 @@ export default function AdminClinicAnnouncementsPage() {
                         <div className="space-y-3 py-2">
                             <p className="text-xs text-muted-foreground">
                                 Posted {selectedAnnModal.created_at ? new Date(selectedAnnModal.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
-                                {selectedAnnModal.poster?.full_name ? ` by ${selectedAnnModal.poster.full_name}` : ""}
+                                {selectedAnnModal.poster_name ? ` by ${selectedAnnModal.poster_name}` : ""}
                             </p>
                             <p className="text-sm whitespace-pre-wrap leading-relaxed text-foreground">{selectedAnnModal.content}</p>
                             {selectedAnnModal.image_url && (

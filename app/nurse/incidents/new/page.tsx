@@ -4,16 +4,17 @@ import { reportIncident } from "@/app/actions/incidents"
 import { toast } from "sonner"
 import { redirect } from "next/navigation"
 
+export const dynamic = 'force-dynamic'
+
 interface NurseIncidentNewPageProps {
-  searchParams: {
+  searchParams: Promise<{
     patientId?: string
     patientType?: "student" | "faculty"
-  }
+  }>
 }
 
 export default async function NurseIncidentNewPage({ searchParams }: NurseIncidentNewPageProps) {
-  const patientId = searchParams.patientId
-  const patientType = searchParams.patientType || "student"
+  const { patientId, patientType = "student" } = await searchParams
 
   if (!patientId) {
     return (
