@@ -120,6 +120,23 @@ export async function getClearanceStatus(requesterId: string, requesterType: "st
   return { error: null, clearances: data as Clearance[] }
 }
 
+export async function getMyClearances() {
+  const actor = await getActionActor()
+  if (!actor || !hasAnyRole(actor, ["student", "faculty"])) return { error: "Not authenticated", clearances: [] as Clearance[] }
+
+  const tableName = actor.role === "student" ? "students" : "faculty"
+
+  const { data: profile } = await createAdminClient()
+    .from(tableName)
+    .select("id")
+    .eq("user_id", actor.id)
+    .maybeSingle()
+
+  if (!profile) return { error: "Profile not found", clearances: [] as Clearance[] }
+
+  return getClearanceStatus(profile.id, actor.role as "student" | "faculty")
+}
+
 export async function recordClearanceEvaluation(
   clearanceId: string,
   data: {

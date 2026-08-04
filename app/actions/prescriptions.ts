@@ -268,10 +268,9 @@ export async function getPrescriptionHistory(patientId: string, patientType: "st
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", prescriptions: [] as Prescription[] }
 
-  const tableName = patientType === "student" ? "students" : "faculty"
   const idColumn = patientType === "student" ? "student_id" : "faculty_id"
 
-  const { data, error } = await createAdminClient()
+  let query = createAdminClient()
     .from("prescriptions")
     .select(`
       *,
@@ -284,11 +283,16 @@ export async function getPrescriptionHistory(patientId: string, patientType: "st
         )
       )
     `)
-    .eq(`consultations.clinic_visits.${idColumn}`, patientId)
+
+  if (patientId !== "all") {
+    query = query.eq(`consultations.clinic_visits.${idColumn}`, patientId)
+  }
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(50)
 
   if (error) return { error: error.message, prescriptions: [] as Prescription[] }
 
-  return { error: null, prescriptions: data as Prescription[] }
+  return { error: null, prescriptions: (data || []) as Prescription[] }
 }

@@ -85,59 +85,91 @@ export interface PatientMedicalRecord {
 
 export async function getPatientMedicalRecord(patientId: string, patientType: "student" | "faculty") {
   const actor = await staff(["admin", "doctor", "nurse"])
-  if (!actor) return { error: "Access denied", record: null as PatientMedicalRecord | null }
+  if (!actor) return { error: "Access denied", record: null as PatientMedicalRecord | null, records: [] as PatientMedicalRecord[] }
 
-  const tableName = patientType === "student" ? "students" : "faculty"
-  const idColumn = patientType === "student" ? "student_id" : "faculty_id"
+  const adminClient = createAdminClient()
 
-  const { data, error } = await createAdminClient()
+  if (patientId === "all") {
+    const { data, error } = await adminClient
+      .from("v_patient_medical_record")
+      .select("*")
+      .eq("patient_type", patientType)
+
+    if (error) return { error: error.message, record: null, records: [] }
+    return { error: null, record: null, records: (data || []) as PatientMedicalRecord[] }
+  }
+
+  const { data, error } = await adminClient
     .from("v_patient_medical_record")
     .select("*")
     .eq("patient_id", patientId)
     .eq("patient_type", patientType)
-    .single()
+    .maybeSingle()
 
-  if (error) return { error: error.message, record: null }
+  if (error) return { error: error.message, record: null, records: [] }
 
-  await logAuditEvent({
-    userId: actor.id,
-    action: "MEDICAL_RECORD_ACCESS",
-    resource: patientId,
-    details: {
-      patient_id: patientId,
-      patient_type: patientType
-    }
-  })
+  if (data) {
+    await logAuditEvent({
+      userId: actor.id,
+      action: "MEDICAL_RECORD_ACCESS",
+      resource: patientId,
+      details: {
+        patient_id: patientId,
+        patient_type: patientType
+      }
+    })
+  }
 
-  return { error: null, record: data as PatientMedicalRecord }
+  return { error: null, record: data as PatientMedicalRecord | null, records: data ? [data as PatientMedicalRecord] : [] }
 }
 
 export async function getOwnMedicalRecord() {
   const actor = await getActionActor()
   if (!actor) return { error: "Not authenticated", record: null as PatientMedicalRecord | null }
 
-  // Check if actor is a student or faculty
-  const { data: studentData } = await createAdminClient()
-    .from("students")
-    .select("id")
-    .eq("user_id", actor.id)
-    .single()
+  const adminClient = createAdminClient()
 
-  if (studentData) {
-    return getPatientMedicalRecord(studentData.id, "student")
+  if (actor.role === "student") {
+    const { data: studentData } = await adminClient
+      .from("students")
+      .select("id")
+      .eq("user_id", actor.id)
+      .maybeSingle()
+
+    if (!studentData) return { error: "Student profile not found", record: null }
+
+    const { data, error } = await adminClient
+      .from("v_patient_medical_record")
+      .select("*")
+      .eq("patient_id", studentData.id)
+      .eq("patient_type", "student")
+      .maybeSingle()
+
+    if (error) return { error: error.message, record: null }
+    return { error: null, record: data as PatientMedicalRecord | null }
   }
 
-  const { data: facultyData } = await createAdminClient()
-    .from("faculty")
-    .select("id")
-    .eq("user_id", actor.id)
-    .single()
+  if (actor.role === "faculty") {
+    const { data: facultyData } = await adminClient
+      .from("faculty")
+      .select("id")
+      .eq("user_id", actor.id)
+      .maybeSingle()
 
-  if (facultyData) {
-    return getPatientMedicalRecord(facultyData.id, "faculty")
+    if (!facultyData) return { error: "Faculty profile not found", record: null }
+
+    const { data, error } = await adminClient
+      .from("v_patient_medical_record")
+      .select("*")
+      .eq("patient_id", facultyData.id)
+      .eq("patient_type", "faculty")
+      .maybeSingle()
+
+    if (error) return { error: error.message, record: null }
+    return { error: null, record: data as PatientMedicalRecord | null }
   }
 
-  return { error: "Patient record not found", record: null }
+  return { error: "Access denied", record: null }
 }
 
 export async function addPatientAllergy(

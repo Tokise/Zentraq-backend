@@ -226,18 +226,38 @@ export const nurseNavigation: NavGroup[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 export const studentNavigation: NavGroup[] = [
   {
-    label: "STUDENT",
+    label: "Dashboard",
     items: [
       { title: "My Dashboard", href: "/student", icon: LayoutDashboard },
+      { title: "Announcements", href: "/student/announcements", icon: Megaphone },
+    ],
+  },
+  {
+    label: "Appointments",
+    items: [
       { title: "Request Appointment", href: "/student/appointments/new", icon: CalendarDays },
       { title: "My Appointments", href: "/student/appointments", icon: CalendarDays },
       { title: "Appointment History", href: "/student/appointments/history", icon: History },
+    ],
+  },
+  {
+    label: "Health Records",
+    items: [
       { title: "My Health Records", href: "/student/records", icon: HeartPulse },
       { title: "Consultations", href: "/student/records/consultations", icon: Stethoscope },
       { title: "Prescriptions", href: "/student/records/prescriptions", icon: Pill },
+    ],
+  },
+  {
+    label: "Clearances",
+    items: [
       { title: "My Clearances", href: "/student/clearances", icon: FileCheck },
       { title: "Request Clearance", href: "/student/clearances/request", icon: FileText },
-      { title: "Announcements", href: "/student/announcements", icon: Megaphone },
+    ],
+  },
+  {
+    label: "Account",
+    items: [
       { title: "Settings", href: "/settings", icon: Settings },
     ],
   },
@@ -248,18 +268,38 @@ export const studentNavigation: NavGroup[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 export const facultyNavigation: NavGroup[] = [
   {
-    label: "STUDENT",
+    label: "Dashboard",
     items: [
       { title: "My Dashboard", href: "/faculty", icon: LayoutDashboard },
+      { title: "Announcements", href: "/faculty/announcements", icon: Megaphone },
+    ],
+  },
+  {
+    label: "Appointments",
+    items: [
       { title: "Request Appointment", href: "/faculty/appointments/new", icon: CalendarDays },
       { title: "My Appointments", href: "/faculty/appointments", icon: CalendarDays },
       { title: "Appointment History", href: "/faculty/appointments/history", icon: History },
+    ],
+  },
+  {
+    label: "Health Records",
+    items: [
       { title: "My Health Records", href: "/faculty/records", icon: HeartPulse },
       { title: "Consultations", href: "/faculty/records/consultations", icon: Stethoscope },
       { title: "Prescriptions", href: "/faculty/records/prescriptions", icon: Pill },
+    ],
+  },
+  {
+    label: "Clearances",
+    items: [
       { title: "My Clearances", href: "/faculty/clearances", icon: FileCheck },
       { title: "Request Clearance", href: "/faculty/clearances/request", icon: FileText },
-      { title: "Announcements", href: "/faculty/announcements", icon: Megaphone },
+    ],
+  },
+  {
+    label: "Account",
+    items: [
       { title: "Settings", href: "/settings", icon: Settings },
     ],
   },

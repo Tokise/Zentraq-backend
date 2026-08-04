@@ -9,10 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Pagination } from "@/components/pagination"
 import { Search, Users } from "lucide-react"
 import { getPatientMedicalRecord, type PatientMedicalRecord } from "@/app/actions/medical-records"
+import { SensitiveField } from "@/components/sensitive-field"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-
-type PatientType = "student" | "faculty"
 
 const PAGE_SIZE = 10
 
@@ -22,17 +21,16 @@ export default function DoctorPatientsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
-  const [patientType, setPatientType] = useState<PatientType>("student")
 
   const fetchPatients = async () => {
     setLoading(true)
     try {
-      const result = await getPatientMedicalRecord("all", patientType)
+      const result = await getPatientMedicalRecord("all", "student")
       if (result.error) {
         toast.error(result.error)
         setPatients([])
       } else {
-        setPatients(result.record ? [result.record] : [])
+        setPatients(result.records || (result.record ? [result.record] : []))
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to load patients")
@@ -43,7 +41,7 @@ export default function DoctorPatientsPage() {
 
   useEffect(() => {
     fetchPatients()
-  }, [patientType])
+  }, [])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -59,7 +57,7 @@ export default function DoctorPatientsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, patientType])
+  }, [search])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const currentPage = Math.min(page, totalPages)
@@ -75,8 +73,8 @@ export default function DoctorPatientsPage() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto mt-[-25px] px-4 py-4">
       <PageHeader
-        title="Patient Records"
-        description="View and manage patient medical records."
+        title="Student Patient Records"
+        description="View and manage student medical records."
       />
 
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
@@ -85,7 +83,7 @@ export default function DoctorPatientsPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search patients..."
+            placeholder="Search students by name, ID, course..."
             className="h-9 pl-8 text-sm"
           />
           {search && (
@@ -93,18 +91,6 @@ export default function DoctorPatientsPage() {
               <Search className="size-3.5" />
             </button>
           )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {(["student", "faculty"] as PatientType[]).map((type) => (
-            <button
-              key={type}
-              onClick={() => setPatientType(type)}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium border transition-colors capitalize ${patientType === type ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"}`}
-            >
-              {type}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -126,7 +112,7 @@ export default function DoctorPatientsPage() {
             <div className="py-14 px-6 text-center space-y-1.5">
               <Users className="size-7 text-zinc-300 mx-auto" />
               <p className="text-sm font-medium text-zinc-600">No patients found</p>
-              <p className="text-xs text-zinc-400">Registered patients will show up here.</p>
+              <p className="text-xs text-zinc-400">Registered student patients will show up here.</p>
             </div>
           ) : (
             <>
@@ -145,7 +131,7 @@ export default function DoctorPatientsPage() {
                     <TableRow
                       key={p.patient_id}
                       className="hover:bg-zinc-50/50 cursor-pointer"
-                      onClick={() => router.push(`/doctor/patients/${p.patient_id}?type=${p.patient_type}`)}
+                      onClick={() => router.push(`/doctor/patients/${p.patient_id}?type=student`)}
                     >
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -162,8 +148,14 @@ export default function DoctorPatientsPage() {
                       <TableCell className="text-sm text-zinc-600">
                         {p.department || "—"}{p.course ? ` • ${p.course}` : ""}{p.year_level ? ` • Year ${p.year_level}` : ""}
                       </TableCell>
-                      <TableCell className="text-sm text-zinc-600">
-                        {p.phone || p.email || "—"}
+                      <TableCell className="text-sm text-zinc-600" onClick={(e) => e.stopPropagation()}>
+                        {p.email ? (
+                          <SensitiveField value={p.email} fieldType="email" />
+                        ) : p.phone ? (
+                          <SensitiveField value={p.phone} fieldType="phone" />
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">

@@ -29,12 +29,10 @@ export function filterNavigationForRole<T extends { label: string; items?: any[]
   role: UserRole | null | undefined
 ): T[] {
   if (isAdmin(role)) return groups
-  if (isStudent(role) || isFaculty(role)) {
-    return groups.filter((group) => group.label === "STUDENT")
-  }
-  // nurse/doctor: show all groups but filter out items restricted to admin
-  return groups.map((group) => ({
-    ...group,
-    items: group.items?.filter((item: any) => !item.roles || item.roles.includes(role as string)),
-  }))
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items?.filter((item: any) => !item.roles || item.roles.includes(role as string)),
+    }))
+    .filter((group) => group.items && group.items.length > 0)
 }

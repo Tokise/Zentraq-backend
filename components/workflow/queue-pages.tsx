@@ -9,7 +9,20 @@ export async function AppointmentQueuePage({ title, description, statuses }: { t
 
 export async function ConsultationQueuePage({ title, description, statuses }: { title: string; description: string; statuses?: string[] }) {
   const result = await getConsultationQueue(statuses)
-  return <main className="space-y-6"><PageHeader title={title} description={description} /><QueueTable columns={["Patient", "Complaint", "Doctor", "Checked in", "Status"]} emptyMessage={result.error ?? "No consultations match this view."} rows={result.consultations.map((item) => ({ id: item.id, values: [item.patient_name, item.complaint, item.doctor_name ?? "", new Date(item.check_in_time).toLocaleString(), item.status] }))} /></main>
+  return (
+    <main className="space-y-6 max-w-6xl mx-auto mt-[-25px] px-4 py-4">
+      <PageHeader title={title} description={description} />
+      <QueueTable
+        columns={["Patient", "Complaint", "Doctor", "Checked in", "Status", "Actions"]}
+        emptyMessage={result.error ?? "No consultations match this view."}
+        rows={result.consultations.map((item) => ({
+          id: item.id,
+          values: [item.patient_name, item.complaint, item.doctor_name ?? "—", new Date(item.check_in_time).toLocaleString(), item.status],
+          action: { label: "Write Prescription", href: `/doctor/prescriptions/new?consultationId=${item.id}` }
+        }))}
+      />
+    </main>
+  )
 }
 
 export async function InventoryQueuePage({ alertsOnly = false }: { alertsOnly?: boolean }) {

@@ -7,11 +7,17 @@ interface DoctorPatientPageProps {
   params: Promise<{
     id: string
   }>
+  searchParams: Promise<{
+    type?: string
+  }>
 }
 
-export default async function DoctorPatientPage({ params }: DoctorPatientPageProps) {
+export default async function DoctorPatientPage({ params, searchParams }: DoctorPatientPageProps) {
   const { id } = await params
-  const { record, error } = await getPatientMedicalRecord(id, "student")
+  const { type } = await searchParams
+  const patientType = type === "faculty" ? "faculty" : "student"
+  
+  const { record, error } = await getPatientMedicalRecord(id, patientType)
   
   if (error || !record) {
     notFound()
