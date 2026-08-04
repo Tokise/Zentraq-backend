@@ -36,6 +36,32 @@ async function requireFacultyUser() {
     return { error: null, user }
 }
 
+export async function getFacultyProfileIdAction(): Promise<{ error: string | null; facultyId: string | null }> {
+    try {
+        const auth = await requireFacultyUser()
+        if (auth.error || !auth.user) {
+            return { error: auth.error, facultyId: null }
+        }
+
+        const admin = createAdminClient()
+        const { data, error } = await admin
+            .from("faculty")
+            .select("id")
+            .eq("user_id", auth.user.id)
+            .maybeSingle()
+
+        if (error) {
+            console.error("[getFacultyProfileIdAction DB Error]:", error)
+            return { error: error.message, facultyId: null }
+        }
+
+        return { error: null, facultyId: data?.id ?? null }
+    } catch (err: any) {
+        console.error("[getFacultyProfileIdAction Exception]:", err)
+        return { error: err?.message || "Failed to load faculty profile", facultyId: null }
+    }
+}
+
 export async function getFacultyProfileDTO() {
     try {
         const auth = await requireFacultyUser()

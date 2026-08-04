@@ -11,6 +11,8 @@ export const DEFAULT_MASK = '••••••••';
 /**
  * Mask patterns for different field types
  */
+export type MaskFieldType = keyof typeof MASK_PATTERNS;
+
 export const MASK_PATTERNS = {
     // Identifier masks
     studentNumber: (value: string) => maskPartial(value, 2, 2),

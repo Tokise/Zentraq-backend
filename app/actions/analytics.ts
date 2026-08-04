@@ -10,6 +10,26 @@ async function staff(roles: readonly StaffRole[]) {
   return actor && hasAnyRole(actor, roles) ? actor : null
 }
 
+export async function getDoctorClinicAccountIdAction(): Promise<{ error: string | null; clinicAccountId: string | null }> {
+  const actor = await getActionActor()
+  if (!actor || !hasAnyRole(actor, ["doctor", "nurse", "admin"])) {
+    return { error: "Access denied", clinicAccountId: null }
+  }
+
+  const { data, error } = await createAdminClient()
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", actor.id)
+    .maybeSingle()
+
+  if (error) {
+    console.error("[getDoctorClinicAccountIdAction DB Error]:", error)
+    return { error: error.message, clinicAccountId: null }
+  }
+
+  return { error: null, clinicAccountId: data?.id ?? null }
+}
+
 export interface DailyConsultation {
   consultation_date: string
   total_consultations: number

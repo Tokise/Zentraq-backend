@@ -6,13 +6,13 @@ import { toast } from "sonner"
 import { redirect } from "next/navigation"
 
 interface AdminClearancePageProps {
-  searchParams: {
+  searchParams: Promise<{
     clearanceId?: string
-  }
+  }>
 }
 
 export default async function AdminClearancePage({ searchParams }: AdminClearancePageProps) {
-  const clearanceId = searchParams.clearanceId
+  const { clearanceId } = await searchParams
 
   if (!clearanceId) {
     return (

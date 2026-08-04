@@ -6,6 +6,7 @@ import { createClient } from "@/utils/supabase/server"
 import { getUserRole } from "@/lib/auth/get-user-role"
 import { isAdmin } from "@/lib/auth/roles"
 import { logAuditEvent } from "@/lib/audit-logger"
+import { ROLE_PERMISSIONS } from "@/constants/permissions"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Authorization
@@ -179,12 +180,40 @@ export async function createRoleAction(params: {
             return { error: error.message }
         }
 
+        // Auto-assign preset permissions for known roles (SAD §4.7 Global Permission Matrix).
+        // This ensures roles like admin/doctor/nurse/student/faculty get their
+        // predefined permission set automatically — no manual assignment needed.
+        const presetCodes = ROLE_PERMISSIONS[name.trim().toLowerCase()]
+        if (presetCodes && presetCodes.length > 0) {
+            const { data: permissionRows, error: permFetchError } = await admin
+                .from("permissions")
+                .select("id, code")
+                .in("code", presetCodes)
+
+            if (permFetchError) {
+                console.error("[createRoleAction permission fetch Error]:", permFetchError)
+            } else if (permissionRows && permissionRows.length > 0) {
+                const { error: assignError } = await admin
+                    .from("role_permissions")
+                    .insert(
+                        permissionRows.map((p) => ({
+                            role_id: data.id,
+                            permission_id: p.id,
+                        }))
+                    )
+
+                if (assignError) {
+                    console.error("[createRoleAction permission assign Error]:", assignError)
+                }
+            }
+        }
+
         await logAuditEvent({
             action: "ROLE_CREATED",
             userId: auth.userId,
             email: auth.email,
             resource: data.id,
-            details: { name: name.trim(), description },
+            details: { name: name.trim(), description, presetPermissionsAssigned: presetCodes?.length ?? 0 },
         })
 
         return { success: true, role: data as RoleDTO }

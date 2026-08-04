@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Table,
   TableBody,
@@ -15,6 +16,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { SensitiveField } from "@/components/sensitive-field"
 import { createOperator, removeOperator, getClinicAccountsAction, type StaffAccountDTO } from "./actions"
 import { toast } from "sonner"
 import {
@@ -26,6 +34,9 @@ import {
   ArrowRight,
   ArrowLeft,
   RefreshCw,
+  Mail,
+  CalendarDays,
+  UserCog,
 } from "lucide-react"
 import { format } from "date-fns"
 import { Pagination } from "@/components/pagination"
@@ -36,12 +47,19 @@ type StaffAccount = StaffAccountDTO
 
 const STEPS = ["Role", "Account Details", "Review"]
 
+const ROLE_META: Record<StaffRole, { label: string; badge: string; icon: typeof Shield }> = {
+  admin: { label: "Admin", badge: "bg-red-50 text-red-700 border-red-200", icon: Shield },
+  nurse: { label: "Nurse", badge: "bg-blue-50 text-blue-700 border-blue-200", icon: UserCog },
+  doctor: { label: "Doctor", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: UserCog },
+}
+
 export default function ClinicAccountsPage() {
   const [operators, setOperators] = useState<StaffAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [showWizard, setShowWizard] = useState(false)
   const [step, setStep] = useState(1)
+  const [selected, setSelected] = useState<StaffAccount | null>(null)
   const [form, setForm] = useState({ email: "", password: "", fullName: "", role: "nurse" as StaffRole })
 
   async function fetchOperators() {
@@ -105,19 +123,18 @@ export default function ClinicAccountsPage() {
       toast.error(result.error)
     } else {
       toast.success("Account removed")
+      if (selected?.id === userId) setSelected(null)
       await fetchOperators()
     }
   }
 
   const roleBadge = (role: StaffRole) => {
-    const colors: Record<StaffRole, string> = {
-      admin: "bg-red-50 text-red-700 border-red-200",
-      nurse: "bg-blue-50 text-blue-700 border-blue-200",
-      doctor: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    }
+    const meta = ROLE_META[role] || ROLE_META.nurse
+    const Icon = meta.icon
     return (
-      <Badge variant="outline" className={`capitalize text-[10px] ${colors[role] || ""}`}>
+      <Badge variant="outline" className={`capitalize text-[10px] ${meta.badge}`}>
         {role === "admin" && <Shield className="size-3 mr-1" />}
+        {role !== "admin" && <Icon className="size-3 mr-1" />}
         {role}
       </Badge>
     )
@@ -326,7 +343,7 @@ export default function ClinicAccountsPage() {
       )}
 
       {/* Accounts Table */}
-      <Card className="shadow-sm">
+      <Card className="shadow-sm border-zinc-200/80 bg-white overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -340,7 +357,7 @@ export default function ClinicAccountsPage() {
             <>
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="hover:bg-transparent">
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
@@ -351,11 +368,37 @@ export default function ClinicAccountsPage() {
                 <TableBody>
                   {paginatedOperators.map((account) => {
                     const accountId = account.id
+                    const initials = (account.full_name || account.email || "?")
+                      .split(" ")
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join("")
+                      .toUpperCase()
 
                     return (
-                      <TableRow key={accountId} className="cursor-pointer">
-                        <TableCell className="font-medium">{account.full_name || "—"}</TableCell>
-                        <TableCell className="text-muted-foreground">{account.email}</TableCell>
+                      <TableRow
+                        key={accountId}
+                        className="cursor-pointer"
+                        onClick={() => setSelected(account)}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <Avatar className="size-9 rounded-full border border-zinc-200 bg-zinc-50 shrink-0">
+                              <AvatarFallback className="text-xs font-bold bg-zinc-100 text-zinc-500">
+                                {initials || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-900 truncate">
+                                {account.full_name || "—"}
+                              </p>
+                              <p className="text-xs text-zinc-400 truncate capitalize">{account.role}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <SensitiveField value={account.email} fieldType="email" ariaLabel="Email" />
+                        </TableCell>
                         <TableCell>{roleBadge(account.role as StaffRole)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {account.created_at
@@ -393,6 +436,67 @@ export default function ClinicAccountsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Account Detail Dialog */}
+      <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Account Details</DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="size-14 rounded-full border border-zinc-200 bg-zinc-50">
+                  <AvatarFallback className="text-base font-bold bg-zinc-100 text-zinc-500">
+                    {(selected.full_name || selected.email || "?")
+                      .split(" ")
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join("")
+                      .toUpperCase() || "?"}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="font-semibold text-sm text-zinc-900">
+                    {selected.full_name || "—"}
+                  </h3>
+                  <p className="text-xs text-zinc-400 capitalize">{selected.role}</p>
+                </div>
+              </div>
+
+              <div className="text-xs space-y-2 divide-y divide-zinc-100">
+                <div className="flex justify-between py-1.5">
+                  <span className="text-zinc-400 flex items-center gap-1"><Mail className="size-3" /> Email</span>
+                  <SensitiveField value={selected.email} fieldType="email" ariaLabel="Email" />
+                </div>
+                <div className="flex justify-between py-1.5">
+                  <span className="text-zinc-400 flex items-center gap-1"><UserCog className="size-3" /> Role</span>
+                  <span className="text-zinc-700 capitalize">{selected.role}</span>
+                </div>
+                <div className="flex justify-between py-1.5">
+                  <span className="text-zinc-400 flex items-center gap-1"><CalendarDays className="size-3" /> Created</span>
+                  <span className="text-zinc-700">
+                    {selected.created_at ? format(new Date(selected.created_at), "MMM d, yyyy") : "—"}
+                  </span>
+                </div>
+              </div>
+
+              {selected.role !== "admin" && (
+                <div className="flex gap-2 pt-2 border-t border-zinc-100">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 text-xs text-destructive hover:text-destructive"
+                    onClick={() => handleRemove(selected.id)}
+                  >
+                    <Trash2 className="size-3.5 mr-1.5" /> Remove Account
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

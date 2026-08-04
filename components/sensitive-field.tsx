@@ -4,10 +4,12 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Eye, EyeOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { getMaskFunction, DEFAULT_MASK, AUTO_HIDE_DELAY_MS, type MaskFieldType } from "@/lib/data/masks/field-masks"
 
 type SensitiveFieldProps = {
     value: string
     mask?: string
+    fieldType?: MaskFieldType
     revealable?: boolean
     autoHide?: boolean
     autoHideDelay?: number
@@ -16,12 +18,12 @@ type SensitiveFieldProps = {
     onReveal?: () => void
 }
 
-const DEFAULT_MASK = "••••••••"
-const DEFAULT_AUTO_HIDE_DELAY = 30000 // 30 seconds per SAD §14.5
+const DEFAULT_AUTO_HIDE_DELAY = AUTO_HIDE_DELAY_MS // 30 seconds per SAD §14.5
 
 export function SensitiveField({
     value,
-    mask = DEFAULT_MASK,
+    mask,
+    fieldType,
     revealable = true,
     autoHide = true,
     autoHideDelay = DEFAULT_AUTO_HIDE_DELAY,
@@ -29,6 +31,9 @@ export function SensitiveField({
     ariaLabel,
     onReveal,
 }: SensitiveFieldProps) {
+    // Use the field-type-specific mask from lib/data/masks/field-masks.ts
+    // when no explicit mask is provided. Falls back to the default mask.
+    const resolvedMask = mask ?? (fieldType ? getMaskFunction(fieldType)(value) : DEFAULT_MASK)
     const [revealed, setRevealed] = useState(false)
     const timerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -75,7 +80,7 @@ export function SensitiveField({
                 aria-label={ariaLabel}
                 aria-hidden="true"
             >
-                {mask}
+                {resolvedMask}
             </span>
         )
     }
@@ -92,7 +97,7 @@ export function SensitiveField({
                 )}
                 aria-hidden={!revealed}
             >
-                {revealed ? value || "—" : mask}
+                {revealed ? value || "—" : resolvedMask}
             </span>
             <Button
                 variant="ghost"

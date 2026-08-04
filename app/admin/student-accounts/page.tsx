@@ -8,6 +8,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { SensitiveField } from "@/components/sensitive-field"
 import { toast } from "sonner"
 import { toggleStudentActiveStatus, archiveStudentProfile, saveStudentProfileEdit, getStudentAccountsAction } from "./actions"
 import { Pagination } from "@/components/pagination"
@@ -26,8 +35,6 @@ import {
   Building2,
   Archive,
   ArchiveRestore,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react"
 
 type RoleFilter = "all" | "student" | "employee"
@@ -357,7 +364,7 @@ export default function StudentAccountsPage() {
         </button>
       </div>
 
-      {/* List */}
+      {/* Table */}
       <Card className="border-zinc-200/80 shadow-sm bg-white overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
@@ -395,70 +402,94 @@ export default function StudentAccountsPage() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-zinc-100">
-              {paginated.map((p) => {
-                const isStudent = !!p.student_number
-                const idLabel = p.student_number || p.employee_number || "—"
-                const subLabel = isStudent
-                  ? [p.course, p.year_level ? `Yr ${p.year_level}` : null].filter(Boolean).join(" • ")
-                  : p.position || "—"
-                return (
-                  <div
-                    key={p.id}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-50/80 transition-colors"
-                  >
-                    <button onClick={() => openPanel(p)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
-                      <Avatar className="size-9 rounded-full border border-zinc-200 bg-zinc-50 shrink-0">
-                        <AvatarImage src={p.clinic_photo_url || ""} className="object-cover" />
-                        <AvatarFallback className="text-xs font-bold bg-zinc-100 text-zinc-500">
-                          {p.first_name[0]}{p.last_name[0]}
-                        </AvatarFallback>
-                      </Avatar>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-zinc-900 truncate">
-                            {p.first_name} {p.last_name}
-                          </span>
-                          {!p.active_status && (
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-zinc-400 border-zinc-200">
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Name</TableHead>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginated.map((p) => {
+                    const isStudent = !!p.student_number
+                    const idLabel = p.student_number || p.employee_number || "—"
+                    const subLabel = isStudent
+                      ? [p.course, p.year_level ? `Yr ${p.year_level}` : null].filter(Boolean).join(" • ")
+                      : p.position || "—"
+                    return (
+                      <TableRow
+                        key={p.id}
+                        className="cursor-pointer"
+                        onClick={() => openPanel(p)}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <Avatar className="size-9 rounded-full border border-zinc-200 bg-zinc-50 shrink-0">
+                              <AvatarImage src={p.clinic_photo_url || ""} className="object-cover" />
+                              <AvatarFallback className="text-xs font-bold bg-zinc-100 text-zinc-500">
+                                {p.first_name[0]}{p.last_name[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-zinc-900 truncate">
+                                {p.first_name} {p.last_name}
+                              </p>
+                              <p className="text-xs text-zinc-400 truncate">{subLabel}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <SensitiveField value={idLabel} fieldType={isStudent ? "studentNumber" : "employeeNumber"} ariaLabel="ID number" />
+                        </TableCell>
+                        <TableCell>
+                          <SensitiveField value={p.email || "—"} fieldType="email" ariaLabel="Email" />
+                        </TableCell>
+                        <TableCell className="text-sm text-zinc-600">{p.department || "—"}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={`shrink-0 text-[10px] capitalize ${isStudent ? "text-blue-600 border-blue-200 bg-blue-50" : "text-purple-600 border-purple-200 bg-purple-50"
+                              }`}
+                          >
+                            {isStudent ? "Student" : "Employee"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {p.archived_at ? (
+                            <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-200 bg-amber-50">
+                              Archived
+                            </Badge>
+                          ) : p.active_status ? (
+                            <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                              Active
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] bg-zinc-100 text-zinc-500 border-zinc-200">
                               Inactive
                             </Badge>
                           )}
-                          {p.archived_at && (
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-amber-600 border-amber-200 bg-amber-50">
-                              Archived
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-zinc-400 truncate">{subLabel}</p>
-                      </div>
-
-                      <div className="hidden sm:block text-right shrink-0">
-                        <p className="text-xs font-mono text-zinc-600">{idLabel}</p>
-                        <p className="text-[10px] text-zinc-400">{p.department || "—"}</p>
-                      </div>
-
-                      <Badge
-                        variant="outline"
-                        className={`shrink-0 text-[10px] capitalize ${isStudent ? "text-blue-600 border-blue-200 bg-blue-50" : "text-purple-600 border-purple-200 bg-purple-50"
-                          }`}
-                      >
-                        {isStudent ? "Student" : "Employee"}
-                      </Badge>
-                    </button>
-
-                    <button
-                      onClick={() => toggleArchived(p)}
-                      title={p.archived_at ? "Restore" : "Archive"}
-                      className="shrink-0 p-1.5 rounded-md text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 transition-colors"
-                    >
-                      {p.archived_at ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleArchived(p) }}
+                            title={p.archived_at ? "Restore" : "Archive"}
+                            className="shrink-0 p-1.5 rounded-md text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 transition-colors"
+                          >
+                            {p.archived_at ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </>
           )}
         </CardContent>
       </Card>
@@ -500,7 +531,7 @@ export default function StudentAccountsPage() {
                       {selected.first_name} {selected.last_name}
                     </h3>
                     <p className="text-xs font-mono text-zinc-400">
-                      {selected.student_number || selected.employee_number}
+                      <SensitiveField value={selected.student_number || selected.employee_number || "—"} fieldType={selected.student_number ? "studentNumber" : "employeeNumber"} ariaLabel="ID number" />
                     </p>
                   </div>
                 </div>
@@ -514,7 +545,7 @@ export default function StudentAccountsPage() {
                   <div className="text-xs space-y-2 divide-y divide-zinc-100">
                     <div className="flex justify-between py-1.5">
                       <span className="text-zinc-400 flex items-center gap-1"><Mail className="size-3" /> Email</span>
-                      <span className="text-zinc-700">{selected.email || "—"}</span>
+                      <SensitiveField value={selected.email || "—"} fieldType="email" ariaLabel="Email" />
                     </div>
                     <div className="flex justify-between py-1.5">
                       <span className="text-zinc-400 flex items-center gap-1"><Building2 className="size-3" /> Department</span>
@@ -535,7 +566,7 @@ export default function StudentAccountsPage() {
                     )}
                     <div className="flex justify-between py-1.5">
                       <span className="text-zinc-400">RFID UID</span>
-                      <span className="font-mono text-zinc-700">{selected.rfid_uid}</span>
+                      <SensitiveField value={selected.rfid_uid} fieldType="rfidUid" ariaLabel="RFID UID" />
                     </div>
                     <div className="flex justify-between py-1.5">
                       <span className="text-zinc-400">Status</span>

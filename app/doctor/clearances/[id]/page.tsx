@@ -6,13 +6,14 @@ import { toast } from "sonner"
 import { redirect } from "next/navigation"
 
 interface DoctorClearancePageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function DoctorClearancePage({ params }: DoctorClearancePageProps) {
-  const { clearance, error } = await getClearanceDetail(params.id)
+  const { id } = await params
+  const { clearance, error } = await getClearanceDetail(id)
   
   if (error || !clearance) {
     notFound()
@@ -72,10 +73,10 @@ export default async function DoctorClearancePage({ params }: DoctorClearancePag
         </div>
 
         <ClearanceEvaluationForm
-          clearanceId={params.id}
+          clearanceId={id}
           onSubmit={async (data) => {
             "use server"
-            const result = await recordClearanceEvaluation(params.id, data)
+            const result = await recordClearanceEvaluation(id, data)
             if (result.error) {
               toast.error(result.error)
               throw new Error(result.error)

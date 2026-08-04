@@ -38,6 +38,32 @@ async function requireStudentUser() {
   return { error: null, user }
 }
 
+export async function getStudentProfileIdAction(): Promise<{ error: string | null; studentId: string | null }> {
+  try {
+    const auth = await requireStudentUser()
+    if (auth.error || !auth.user) {
+      return { error: auth.error, studentId: null }
+    }
+
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from("students")
+      .select("id")
+      .eq("user_id", auth.user.id)
+      .maybeSingle()
+
+    if (error) {
+      console.error("[getStudentProfileIdAction DB Error]:", error)
+      return { error: error.message, studentId: null }
+    }
+
+    return { error: null, studentId: data?.id ?? null }
+  } catch (err: any) {
+    console.error("[getStudentProfileIdAction Exception]:", err)
+    return { error: err?.message || "Failed to load student profile", studentId: null }
+  }
+}
+
 export async function getStudentProfileDTO() {
   try {
     const auth = await requireStudentUser()

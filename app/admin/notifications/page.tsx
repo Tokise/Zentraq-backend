@@ -7,57 +7,48 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Pagination } from "@/components/pagination"
 import { Input } from "@/components/ui/input"
-import { Search, Stethoscope, User } from "lucide-react"
-import { getConsultationQueue } from "@/app/actions/workflow-queries"
+import { Button } from "@/components/ui/button"
+import { Search, Bell, CheckCircle2, AlertCircle } from "lucide-react"
+import { getNotifications, markNotificationRead } from "@/app/actions/notifications"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
 
-interface QueueConsultation {
-  id: string
-  patient_name: string
-  complaint: string
-  status: string
-  check_in_time: string
-  doctor_name: string | null
-}
 
 const PAGE_SIZE = 10
 
-export default function DoctorConsultationsCompletedPage() {
-  const router = useRouter()
-  const [consultations, setConsultations] = useState<QueueConsultation[]>([])
+export default function AdminNotificationsPage() {
+  const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
 
-  const fetchConsultations = async () => {
+  const fetchNotifications = async () => {
     setLoading(true)
     try {
-      const result = await getConsultationQueue(["completed", "cancelled"])
+      const result = await getNotifications()
       if (result.error) {
         toast.error(result.error)
-        setConsultations([])
+        setNotifications([])
       } else {
-        setConsultations(result.consultations || [])
+        setNotifications(result.data || [])
       }
     } catch (err: any) {
-      toast.error(err.message || "Failed to load consultations")
+      toast.error(err.message || "Failed to load notifications")
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchConsultations()
+    fetchNotifications()
   }, [])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return consultations
-    return consultations.filter((c) => {
-      return c.patient_name.toLowerCase().includes(q) || c.complaint.toLowerCase().includes(q) || c.status.toLowerCase().includes(q)
+    if (!q) return notifications
+    return notifications.filter((n) => {
+      return n.title.toLowerCase().includes(q) || n.message.toLowerCase().includes(q) || n.type.toLowerCase().includes(q)
     })
-  }, [consultations, search])
+  }, [notifications, search])
 
   useEffect(() => {
     setPage(1)
@@ -67,22 +58,31 @@ export default function DoctorConsultationsCompletedPage() {
   const currentPage = Math.min(page, totalPages)
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
-    return filtered.slice(start, start + PAGE_SIZE)
+    return filtered.slice(start, start + PAGE_SIZE) as any[]
   }, [filtered, currentPage])
 
-  const statusBadge = (status: string) => {
-    const variants: Record<string, string> = {
-      completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      cancelled: "bg-red-50 text-red-700 border-red-200",
+  const handleMarkRead = async (id: string) => {
+    const result = await markNotificationRead(id)
+    if (!result.error) {
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
     }
-    return <Badge variant="outline" className={`text-[10px] ${variants[status] || "bg-zinc-50 text-zinc-700 border-zinc-200"}`}>{status}</Badge>
+  }
+
+  const typeBadge = (type: string) => {
+    const variants: Record<string, string> = {
+      info: "bg-blue-50 text-blue-700 border-blue-200",
+      warning: "bg-yellow-50 text-yellow-700 border-yellow-200",
+      error: "bg-red-50 text-red-700 border-red-200",
+      success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    }
+    return <Badge variant="outline" className={`text-[10px] ${variants[type] || "bg-zinc-50 text-zinc-700 border-zinc-200"}`}>{type}</Badge>
   }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto mt-[-25px] px-4 py-4">
       <PageHeader
-        title="Completed Consultations"
-        description="View past consultation records."
+        title="Notifications"
+        description="View and manage system notifications."
       />
 
       <div className="relative w-full sm:max-w-xs">
@@ -90,7 +90,7 @@ export default function DoctorConsultationsCompletedPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search patients..."
+          placeholder="Search notifications..."
           className="h-9 pl-8 text-sm"
         />
         {search && (
@@ -116,42 +116,53 @@ export default function DoctorConsultationsCompletedPage() {
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-14 px-6 text-center space-y-1.5">
-              <Stethoscope className="size-7 text-zinc-300 mx-auto" />
-              <p className="text-sm font-medium text-zinc-600">No completed consultations</p>
-              <p className="text-xs text-zinc-400">Completed consultations will appear here.</p>
+              <Bell className="size-7 text-zinc-300 mx-auto" />
+              <p className="text-sm font-medium text-zinc-600">No notifications</p>
+              <p className="text-xs text-zinc-400">Notifications will appear here.</p>
             </div>
           ) : (
             <>
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Complaint</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Checked In</TableHead>
-                    <TableHead>Doctor</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginated.map((c) => (
-                    <TableRow
-                      key={c.id}
-                      className="hover:bg-zinc-50/50 cursor-pointer"
-                      onClick={() => router.push(`/doctor/consultations/${c.id}`)}
-                    >
+                  {paginated.map((n) => (
+                    <TableRow key={n.id} className={n.read ? "opacity-60" : "bg-zinc-50/30"}>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <User className="size-3.5 text-zinc-400" />
-                          <span className="text-sm font-medium">{c.patient_name}</span>
+                        {n.read ? (
+                          <CheckCircle2 className="size-4 text-zinc-400" />
+                        ) : (
+                          <AlertCircle className="size-4 text-blue-500" />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="text-sm font-medium">{n.title}</p>
+                          <p className="text-xs text-zinc-400 line-clamp-1">{n.message}</p>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-zinc-600">{c.complaint || "—"}</TableCell>
-                      <TableCell>{statusBadge(c.status)}</TableCell>
+                      <TableCell>{typeBadge(n.type)}</TableCell>
                       <TableCell className="text-sm text-zinc-600">
-                        {new Date(c.check_in_time).toLocaleString()}
+                        {new Date(n.created_at).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="text-sm text-zinc-600">
-                        {c.doctor_name || "Unassigned"}
+                      <TableCell>
+                        {!n.read && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleMarkRead(n.id)}
+                            className="h-8 text-xs"
+                          >
+                            Mark read
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

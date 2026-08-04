@@ -1,5 +1,8 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 import { useState, useEffect, useCallback } from "react"
 import { PageHeader } from "@/components/page-header"
 import { SectionHeader } from "@/components/section-header"
