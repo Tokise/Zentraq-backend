@@ -5,19 +5,15 @@ import { useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
 import { StatusBadge } from "@/components/status-badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { MonthCalendar, type CalendarMarker } from "@/components/month-calendar"
+import { SensitiveField } from "@/components/sensitive-field"
 import { toast } from "sonner"
-import { Loader2, CalendarDays, X } from "lucide-react"
-import { createAppointment, cancelAppointment, getStudentAppointmentsAction, type StudentAppointmentDTO } from "./actions"
-
-const TIME_SLOTS = [
-    "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM",
-    "10:30 AM", "11:00 AM", "11:30 AM", "1:00 PM", "1:30 PM",
-    "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM", "4:00 PM",
-]
+import { Loader2, CalendarDays, X, LayoutGrid, TableProperties, Clock, Plus, ChevronRight } from "lucide-react"
+import { getStudentAppointmentsAction, type StudentAppointmentDTO } from "./actions"
+import { cancelAppointment } from "@/app/actions/appointments"
+import Link from "next/link"
 
 function todayKey() {
     const d = new Date()
@@ -34,6 +30,25 @@ function statusVariant(status: string): "success" | "warning" | "danger" | "info
     }
 }
 
+const STATUS_COLORS: Record<string, string> = {
+    pending: "bg-amber-400",
+    confirmed: "bg-blue-500",
+    completed: "bg-emerald-500",
+    cancelled: "bg-zinc-300",
+}
+
+function formatDateReadable(dateStr: string) {
+    if (!dateStr) return "—"
+    return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+    })
+}
+
+type ViewMode = "calendar" | "table"
+
 export default function StudentAppointmentsPage() {
     const searchParams = useSearchParams()
     const targetId = searchParams.get("id")
@@ -41,12 +56,12 @@ export default function StudentAppointmentsPage() {
 
     const [appointments, setAppointments] = useState<StudentAppointmentDTO[]>([])
     const [loading, setLoading] = useState(true)
-    const [submitting, setSubmitting] = useState(false)
-    const [showForm, setShowForm] = useState(false)
-    const [form, setForm] = useState({ date: "", time_slot: "", reason: "" })
-    const [selectedDay, setSelectedDay] = useState<string>(dateParam || todayKey())
+    const [viewMode, setViewMode] = useState<ViewMode>("calendar")
+    
+    // Dialog states
     const [selectedAptModal, setSelectedAptModal] = useState<StudentAppointmentDTO | null>(null)
-
+    const [selectedDayApts, setSelectedDayApts] = useState<StudentAppointmentDTO[] | null>(null)
+    const [selectedDayNoApts, setSelectedDayNoApts] = useState<string | null>(null)
 
     async function refreshAppointments() {
         try {
@@ -73,44 +88,10 @@ export default function StudentAppointmentsPage() {
         if (targetId && appointments.length > 0) {
             const match = appointments.find((a) => a.id === targetId)
             if (match) {
-                setSelectedDay(match.appointment_date)
                 setSelectedAptModal(match)
             }
         }
     }, [targetId, appointments])
-
-    async function handleBook(e: React.FormEvent) {
-        e.preventDefault()
-        if (!form.date || !form.time_slot) {
-            toast.error("Please select a date and time slot")
-            return
-        }
-
-        setSubmitting(true)
-        try {
-            const result = await createAppointment({
-                appointmentDate: form.date,
-                timeSlot: form.time_slot,
-                reason: form.reason || "Student appointment",
-            })
-
-            if (result.error) {
-                toast.error(result.error)
-                return
-            }
-
-            toast.success("Appointment booked!")
-            setShowForm(false)
-            setSelectedDay(form.date)
-            setForm({ date: "", time_slot: "", reason: "" })
-
-            await refreshAppointments()
-        } catch (err: any) {
-            toast.error(err.message || "Failed to book appointment")
-        } finally {
-            setSubmitting(false)
-        }
-    }
 
     async function handleCancel(id: string) {
         try {
@@ -124,208 +105,301 @@ export default function StudentAppointmentsPage() {
             setAppointments((prev) =>
                 prev.map((a) => (a.id === id ? { ...a, status: "cancelled" } : a))
             )
+            if (selectedAptModal?.id === id) {
+                setSelectedAptModal(prev => prev ? { ...prev, status: "cancelled" } : null)
+            }
         } catch (err: any) {
             toast.error(err.message || "Failed to cancel")
         }
     }
 
-    // Group appointments by date for the calendar chips
+    // Calendar markers
     const markersByDate = useMemo(() => {
         const map: Record<string, CalendarMarker[]> = {}
         for (const apt of appointments) {
             const key = apt.appointment_date
+            if (!key) continue
             if (!map[key]) map[key] = []
             map[key].push({ status: apt.status, label: apt.time_slot })
         }
         return map
     }, [appointments])
 
-    const appointmentsOnSelectedDay = appointments
-        .filter((a) => a.appointment_date === selectedDay)
-        .sort((a, b) => a.time_slot.localeCompare(b.time_slot))
+    // Sort for table view: upcoming first, then past
+    const sortedAppointments = useMemo(() => {
+        return [...appointments].sort((a, b) => {
+            const aActive = !["completed", "cancelled"].includes(a.status) ? 0 : 1
+            const bActive = !["completed", "cancelled"].includes(b.status) ? 0 : 1
+            if (aActive !== bActive) return aActive - bActive
+            return b.appointment_date.localeCompare(a.appointment_date)
+        })
+    }, [appointments])
 
-    const selectedDayLabel = new Date(selectedDay + "T00:00:00").toLocaleDateString("en-US", {
-        weekday: "long", month: "long", day: "numeric", year: "numeric",
-    })
+    // Handle clicking a box on the MonthCalendar
+    const handleSelectDate = (dateKey: string) => {
+        const dayApts = appointments.filter((a) => a.appointment_date === dateKey)
+        if (dayApts.length === 1) {
+            setSelectedAptModal(dayApts[0])
+        } else if (dayApts.length > 1) {
+            setSelectedDayApts(dayApts)
+        } else {
+            setSelectedDayNoApts(dateKey)
+        }
+    }
 
     return (
-        <div className="space-y-6 max-w-5xl mx-auto">
-            <PageHeader title="Appointments" description="Book and manage your clinic appointments">
-                <Button size="sm" onClick={() => setShowForm(!showForm)} className="cursor-pointer">
-                    {showForm ? "Cancel" : "Book Appointment"}
-                </Button>
-            </PageHeader>
-
-            {showForm && (
-                <Card className="shadow-sm border-zinc-200/80">
-                    <CardHeader>
-                        <CardTitle className="text-base">New Appointment</CardTitle>
-                        <CardDescription>Pick a date on the calendar, then choose a time slot</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleBook} className="space-y-4">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs">Date</Label>
-                                <MonthCalendar
-                                    selectedDate={form.date}
-                                    onSelectDate={(dateKey) => setForm((f) => ({ ...f, date: dateKey }))}
-                                    disablePast
-                                    size="compact"
-                                />
-                                {form.date && (
-                                    <p className="text-xs text-zinc-500 pt-1">
-                                        Selected: <span className="font-medium text-zinc-700">
-                                            {new Date(form.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-                                        </span>
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <Label className="text-xs">Time Slot</Label>
-                                <div className="grid grid-cols-5 gap-1.5">
-                                    {TIME_SLOTS.map((slot) => (
-                                        <button
-                                            key={slot}
-                                            type="button"
-                                            onClick={() => setForm((f) => ({ ...f, time_slot: slot }))}
-                                            className={`text-xs py-1.5 px-2 rounded border transition-colors cursor-pointer ${form.time_slot === slot
-                                                ? "bg-zinc-900 text-white border-zinc-900"
-                                                : "bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50"
-                                                }`}
-                                        >
-                                            {slot}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <Label className="text-xs">Reason (optional)</Label>
-                                <textarea
-                                    value={form.reason}
-                                    onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
-                                    placeholder="Brief description of your concern..."
-                                    rows={3}
-                                    className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10 resize-none"
-                                />
-                            </div>
-
-                            <Button
-                                type="submit"
-                                disabled={submitting}
-                                className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer"
-                            >
-                                {submitting ? (
-                                    <><Loader2 className="size-3.5 animate-spin mr-1" /> Booking...</>
-                                ) : (
-                                    "Confirm Booking"
-                                )}
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
-            )}
+        <div className="space-y-5 max-w-5xl mx-auto">
+            {/* ──── Header ──── */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <PageHeader title="My Appointments" description="Book and manage your clinic appointments." />
+                <div className="flex items-center gap-2">
+                    {/* View toggle */}
+                    <div className="flex items-center bg-zinc-100 rounded-lg p-0.5">
+                        <button
+                            onClick={() => setViewMode("calendar")}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${viewMode === "calendar"
+                                ? "bg-white text-zinc-900 shadow-sm"
+                                : "text-zinc-500 hover:text-zinc-700"
+                                }`}
+                        >
+                            <LayoutGrid className="size-3.5" />
+                            Calendar
+                        </button>
+                        <button
+                            onClick={() => setViewMode("table")}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${viewMode === "table"
+                                ? "bg-white text-zinc-900 shadow-sm"
+                                : "text-zinc-500 hover:text-zinc-700"
+                                }`}
+                        >
+                            <TableProperties className="size-3.5" />
+                            List
+                        </button>
+                    </div>
+                    <Link href="/student/appointments/new">
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-sm cursor-pointer">
+                            <Plus className="size-3.5" />
+                            Book Appointment
+                        </Button>
+                    </Link>
+                </div>
+            </div>
 
             {loading ? (
                 <div className="flex items-center justify-center py-24">
                     <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 </div>
+            ) : viewMode === "calendar" ? (
+                /* ──────────────── CALENDAR VIEW (FULL WIDTH) ──────────────── */
+                <div className="space-y-4">
+                    <MonthCalendar
+                        selectedDate={dateParam || undefined}
+                        onSelectDate={handleSelectDate}
+                        markersByDate={markersByDate}
+                    />
+                    {/* Legend */}
+                    <div className="flex items-center gap-4 pt-1 flex-wrap px-1">
+                        {Object.entries(STATUS_COLORS).map(([status, dot]) => (
+                            <span key={status} className="flex items-center gap-1.5 text-[11px] text-zinc-500 capitalize">
+                                <span className={`size-2 rounded-full ${dot}`} /> {status}
+                            </span>
+                        ))}
+                    </div>
+                </div>
             ) : (
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-                    {/* Calendar is the main view */}
-                    <Card className="shadow-sm border-zinc-200/80">
-                        <CardContent className="p-4">
-                            <MonthCalendar
-                                selectedDate={selectedDay}
-                                onSelectDate={setSelectedDay}
-                                markersByDate={markersByDate}
-                            />
-                            <div className="flex items-center gap-3 pt-3 flex-wrap px-1">
-                                {Object.entries({
-                                    pending: "bg-amber-400",
-                                    confirmed: "bg-blue-500",
-                                    completed: "bg-emerald-500",
-                                    cancelled: "bg-zinc-300",
-                                }).map(([status, dot]) => (
-                                    <span key={status} className="flex items-center gap-1 text-[11px] text-zinc-500 capitalize">
-                                        <span className={`size-1.5 rounded-full ${dot}`} /> {status}
-                                    </span>
-                                ))}
+                /* ──────────────── TABLE / LIST VIEW (COMPACT) ──────────────── */
+                <Card className="shadow-sm border-zinc-200/80 bg-white overflow-hidden">
+                    <CardHeader className="border-b border-zinc-100 pb-4">
+                        <CardTitle className="text-base font-semibold flex items-center gap-2">
+                            <CalendarDays className="size-4 text-blue-600" />
+                            All Appointments
+                        </CardTitle>
+                        <CardDescription>
+                            Complete list of your clinic appointment bookings. Click on any row to see details.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        {sortedAppointments.length === 0 ? (
+                            <div className="py-14 px-6 text-center space-y-2">
+                                <CalendarDays className="size-8 text-zinc-200 mx-auto" />
+                                <p className="text-sm font-medium text-zinc-500">No appointments yet</p>
+                                <p className="text-xs text-zinc-400">Book an appointment to get started.</p>
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Selected day panel */}
-                    <Card className="shadow-sm border-zinc-200/80 h-fit">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm">{selectedDayLabel}</CardTitle>
-                            <CardDescription className="text-xs">
-                                {appointmentsOnSelectedDay.length} appointment{appointmentsOnSelectedDay.length === 1 ? "" : "s"}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            {appointmentsOnSelectedDay.length === 0 ? (
-                                <div className="py-8 text-center">
-                                    <CalendarDays className="size-6 text-zinc-300 mx-auto mb-2" />
-                                    <p className="text-sm text-muted-foreground">Nothing scheduled</p>
+                        ) : (
+                            <>
+                                {/* Table header */}
+                                <div className="hidden sm:grid grid-cols-[1fr_130px_100px_100px_80px] gap-3 px-5 py-2.5 bg-zinc-50/80 border-b border-zinc-100 text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+                                    <span>Reason</span>
+                                    <span>Date</span>
+                                    <span>Time</span>
+                                    <span>Status</span>
+                                    <span></span>
                                 </div>
-                            ) : (
-                                appointmentsOnSelectedDay.map((apt) => (
-                                    <div key={apt.id} className="rounded-lg border border-zinc-200/80 p-3 space-y-2">
-                                        <div className="flex items-start justify-between gap-2">
-                                            <p className="text-sm font-medium">{apt.time_slot}</p>
-                                            <StatusBadge status={statusVariant(apt.status)} className="shrink-0">
+                                <div className="divide-y divide-zinc-100">
+                                    {sortedAppointments.map((apt) => (
+                                        <div
+                                            key={apt.id}
+                                            onClick={() => setSelectedAptModal(apt)}
+                                            className="group grid grid-cols-1 sm:grid-cols-[1fr_130px_100px_100px_80px] gap-2 sm:gap-3 items-center px-5 py-3 hover:bg-zinc-50/70 transition-colors cursor-pointer"
+                                        >
+                                            {/* Reason (Compact column) */}
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className={`size-2 rounded-full shrink-0 ${STATUS_COLORS[apt.status] || "bg-zinc-300"}`} />
+                                                <span className="text-sm font-medium text-zinc-800 truncate max-w-[240px] sm:max-w-[320px]">
+                                                    {apt.reason || "Clinic visit"}
+                                                </span>
+                                            </div>
+                                            {/* Date */}
+                                            <span className="text-xs text-zinc-500">
+                                                {formatDateReadable(apt.appointment_date)}
+                                            </span>
+                                            {/* Time */}
+                                            <span className="text-xs text-zinc-500 flex items-center gap-1">
+                                                <Clock className="size-3 text-zinc-400" />
+                                                {apt.time_slot}
+                                            </span>
+                                            {/* Status */}
+                                            <StatusBadge status={statusVariant(apt.status)} className="text-[10px] w-fit">
                                                 {apt.status}
                                             </StatusBadge>
+                                            {/* Actions */}
+                                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                                                <button
+                                                    onClick={() => setSelectedAptModal(apt)}
+                                                    className="text-xs text-blue-600 hover:text-blue-700 font-medium cursor-pointer"
+                                                >
+                                                    View
+                                                </button>
+                                                {apt.status === "pending" && (
+                                                    <button
+                                                        onClick={() => handleCancel(apt.id)}
+                                                        className="text-xs text-red-500 hover:text-red-600 font-medium ml-1 cursor-pointer"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-
-                                        {apt.reason && (
-                                            <p className="text-xs text-zinc-500 line-clamp-2">{apt.reason}</p>
-                                        )}
-
-                                        {apt.status === "pending" && (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleCancel(apt.id)}
-                                                className="h-7 text-xs px-2 -ml-2 text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
-                                            >
-                                                <X className="size-3 mr-1" /> Cancel
-                                            </Button>
-                                        )}
-                                    </div>
-                                ))
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
             )}
 
-            {/* Exact Appointment Pop-up Dialog from Notification */}
+            {/* ──── Dialog: Multiple appointments on selected day ──── */}
+            {selectedDayApts && (
+                <Dialog open={!!selectedDayApts} onOpenChange={() => setSelectedDayApts(null)}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-semibold">Appointments</DialogTitle>
+                            <DialogDescription className="text-xs">
+                                Multiple appointments scheduled for {selectedDayApts[0] ? formatDateReadable(selectedDayApts[0].appointment_date) : ""}
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="divide-y divide-zinc-100 max-h-60 overflow-y-auto">
+                            {selectedDayApts.map((apt) => (
+                                <button
+                                    key={apt.id}
+                                    onClick={() => {
+                                        setSelectedAptModal(apt)
+                                        setSelectedDayApts(null)
+                                    }}
+                                    className="w-full text-left p-3 hover:bg-zinc-50 transition-colors flex items-center justify-between cursor-pointer"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className={`size-2 rounded-full ${STATUS_COLORS[apt.status] || "bg-zinc-300"}`} />
+                                        <div>
+                                            <p className="text-sm font-medium text-zinc-800">{apt.time_slot}</p>
+                                            <p className="text-xs text-zinc-500 truncate max-w-xs">{apt.reason || "Clinic visit"}</p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="size-4 text-zinc-300" />
+                                </button>
+                            ))}
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
+
+            {/* ──── Dialog: No appointments scheduled on selected day ──── */}
+            {selectedDayNoApts && (
+                <Dialog open={!!selectedDayNoApts} onOpenChange={() => setSelectedDayNoApts(null)}>
+                    <DialogContent className="sm:max-w-sm">
+                        <DialogHeader>
+                            <DialogTitle className="text-sm font-semibold">No Appointments Scheduled</DialogTitle>
+                            <DialogDescription className="text-xs">
+                                There are no appointments scheduled for {formatDateReadable(selectedDayNoApts)}.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="pt-2 flex justify-end gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setSelectedDayNoApts(null)}>
+                                Close
+                            </Button>
+                            <Link href={`/student/appointments/new?date=${selectedDayNoApts}`}>
+                                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setSelectedDayNoApts(null)}>
+                                    Book Appointment
+                                </Button>
+                            </Link>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
+
+            {/* ──── Appointment Detail Modal (with SensitiveField) ──── */}
             {selectedAptModal && (
                 <Dialog open={!!selectedAptModal} onOpenChange={() => setSelectedAptModal(null)}>
                     <DialogContent className="sm:max-w-md">
                         <DialogHeader>
-                            <DialogTitle className="text-base font-semibold">My Appointment Details</DialogTitle>
+                            <DialogTitle className="text-base font-semibold">Appointment Details</DialogTitle>
                         </DialogHeader>
-                        <div className="space-y-3 py-2">
-                            <div className="flex items-center justify-between border-b pb-2">
-                                <span className="text-xs text-muted-foreground">Date & Time</span>
-                                <span className="text-sm font-semibold">
-                                    {selectedAptModal.appointment_date} at {selectedAptModal.time_slot}
-                                </span>
+                        <div className="space-y-4 py-2">
+                            <div className="pb-3 border-b border-zinc-100">
+                                <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block mb-1">Reason / Purpose</span>
+                                <div className="flex items-start gap-2">
+                                    <div className={`size-3 rounded-full mt-1 shrink-0 ${STATUS_COLORS[selectedAptModal.status] || "bg-zinc-300"}`} />
+                                    <SensitiveField
+                                        value={selectedAptModal.reason || "Clinic visit"}
+                                        fieldType="medicalNotes"
+                                        className="text-sm font-semibold text-zinc-900"
+                                    />
+                                </div>
                             </div>
-                            <div className="flex items-center justify-between border-b pb-2">
-                                <span className="text-xs text-muted-foreground">Status</span>
-                                <StatusBadge status={statusVariant(selectedAptModal.status)}>
-                                    {selectedAptModal.status}
-                                </StatusBadge>
-                            </div>
-                            {selectedAptModal.reason && (
+
+                            <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <span className="text-xs text-muted-foreground">Reason / Purpose</span>
-                                    <p className="text-xs bg-muted/40 p-2.5 rounded-md text-foreground">{selectedAptModal.reason}</p>
+                                    <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">Status</span>
+                                    <StatusBadge status={statusVariant(selectedAptModal.status)}>
+                                        {selectedAptModal.status}
+                                    </StatusBadge>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">Date</span>
+                                    <p className="text-sm text-zinc-700 font-medium">{selectedAptModal.appointment_date}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">Time Slot</span>
+                                    <p className="text-sm text-zinc-700 font-medium">{selectedAptModal.time_slot}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">Created</span>
+                                    <p className="text-sm text-zinc-700 font-medium">
+                                        {new Date(selectedAptModal.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {selectedAptModal.status === "pending" && (
+                                <div className="pt-2 flex justify-end">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleCancel(selectedAptModal.id)}
+                                        className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 cursor-pointer"
+                                    >
+                                        <X className="size-3 mr-1" /> Cancel Appointment
+                                    </Button>
                                 </div>
                             )}
                         </div>

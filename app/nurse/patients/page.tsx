@@ -32,7 +32,7 @@ export default function NursePatientsPage() {
         toast.error(result.error)
         setPatients([])
       } else {
-        setPatients(result.record ? [result.record] : [])
+        setPatients(result.records || (result.record ? [result.record] : []))
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to load patients")

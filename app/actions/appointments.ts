@@ -52,8 +52,108 @@ export async function submitAppointmentRequest(input: unknown): Promise<ActionRe
   if (error || !data) return { success: false, error: "Unable to create appointment", code: "DATABASE" }
 
   await writeAuditLog(actor, "appointment.requested", "appointment", data.id)
+
+  // ──── AI EVALUATION & AUTO ASSIGNMENT ────
+  let priorityScore = 3
+  let assignedStaffId: string | null = null
+  let assignedStaffUserId: string | null = null
+
+  try {
+    // 1. Run AI Evaluation
+    const aiResult = await evaluateAppointmentWithAI({
+      actorId: actor.id,
+      appointmentId: data.id,
+      reason: data.reason,
+      symptoms: data.symptoms
+    })
+
+    priorityScore = aiResult.evaluation.priority_score
+
+    // Save AI evaluation details
+    await admin.from("appointment_ai_evaluations").insert({
+      appointment_id: data.id,
+      priority_score: aiResult.evaluation.priority_score,
+      recommended_slot: aiResult.evaluation.recommended_slot,
+      rationale: aiResult.evaluation.rationale,
+      ai_log_id: aiResult.logId,
+    })
+
+    // 2. Determine target role based on priority score (>= 4 is doctor, else nurse)
+    const targetRole = priorityScore >= 4 ? "doctor" : "nurse"
+
+    // 3. Find active clinic accounts matching target role
+    let { data: staffList } = await admin
+      .from("clinic_accounts")
+      .select("id, user_id, role, display_name")
+      .eq("is_active", true)
+      .eq("role", targetRole)
+
+    // Fallback: If no active staff with target role, search for any active doctors or nurses
+    if (!staffList || staffList.length === 0) {
+      const fallbackResult = await admin
+        .from("clinic_accounts")
+        .select("id, user_id, role, display_name")
+        .eq("is_active", true)
+        .in("role", ["nurse", "doctor"])
+      staffList = fallbackResult.data
+    }
+
+    if (staffList && staffList.length > 0) {
+      // 4. Calculate workloads (active appointments counts)
+      const { data: activeApts } = await admin
+        .from("appointments")
+        .select("doctor_id")
+        .in("status", ["pending", "ai_evaluated", "recommended", "approved", "scheduled", "reminded", "checked_in", "in_consultation"])
+        .not("doctor_id", "is", null)
+
+      const workloadMap: Record<string, number> = {}
+      staffList.forEach(s => { workloadMap[s.id] = 0 })
+      if (activeApts) {
+        activeApts.forEach(apt => {
+          if (apt.doctor_id && apt.doctor_id in workloadMap) {
+            workloadMap[apt.doctor_id]++
+          }
+        })
+      }
+
+      // 5. Select staff with lowest workload
+      const sortedStaff = [...staffList].sort((a, b) => workloadMap[a.id] - workloadMap[b.id])
+      const chosenStaff = sortedStaff[0]
+
+      assignedStaffId = chosenStaff.id
+      assignedStaffUserId = chosenStaff.user_id
+
+      // 6. Update appointment with assignment and schedule it
+      await admin.from("appointments")
+        .update({
+          priority: priorityScore,
+          doctor_id: assignedStaffId,
+          status: "scheduled"
+        })
+        .eq("id", data.id)
+
+      // 7. Send notification to the assigned staff member
+      await sendNotification(null, {
+        receiver_id: assignedStaffUserId,
+        title: `Appointment Assigned (AI Triage: Priority ${priorityScore})`,
+        message: `You have been automatically assigned a new appointment for ${data.reason}. Date: ${data.scheduled_date} at ${data.scheduled_time}.`,
+        type: "appointment",
+        entity_type: "appointment",
+        entity_id: data.id
+      })
+    }
+  } catch (err) {
+    console.error("AI Auto-assignment failed:", err)
+  }
+
+  // Fetch updated appointment details to return
+  const { data: finalAppointment } = await admin.from("appointments")
+    .select("id, patient_type, reason, symptoms, priority, scheduled_date, scheduled_time, status, created_at")
+    .eq("id", data.id)
+    .single()
+
   revalidatePath(`/${actor.role}/appointments`)
-  return { success: true, data: toAppointmentDTO(data) }
+  return { success: true, data: toAppointmentDTO(finalAppointment || data) }
 }
 
 /** Runs the advisory-only evaluator. It never approves or schedules an appointment. */
@@ -178,6 +278,25 @@ export async function checkInAppointment(input: unknown): Promise<ActionResult<n
   return { success: true, data: null }
 }
 
+export async function getMyAppointments(): Promise<{ error: string | null; appointments: AppointmentDTO[] }> {
+  const actor = await getActionActor()
+  if (!actor || !hasAnyRole(actor, ["student", "faculty"])) return { error: "Not authenticated", appointments: [] }
+
+  const profileTable = actor.role === "student" ? "students" : "faculty"
+  const profileIdField = actor.role === "student" ? "student_id" : "faculty_id"
+  const admin = createAdminClient()
+  const { data: profile } = await admin.from(profileTable).select("id").eq("user_id", actor.id).maybeSingle()
+  if (!profile) return { error: "Patient profile not found", appointments: [] }
+
+  const { data, error } = await admin.from("appointments")
+    .select("id, patient_type, reason, symptoms, priority, scheduled_date, scheduled_time, status, created_at")
+    .eq(profileIdField, profile.id)
+    .order("created_at", { ascending: false })
+
+  if (error) return { error: error.message, appointments: [] }
+  return { error: null, appointments: (data || []).map(toAppointmentDTO) }
+}
+
 function toAppointmentDTO(row: { id: string; patient_type: "student" | "faculty"; reason: string; symptoms: string | null; priority: number | null; scheduled_date: string | null; scheduled_time: string | null; status: AppointmentStatus; created_at: string }): AppointmentDTO {
   return { ...row, patient_name: "", patient_identifier: "", doctor_name: null, ai_evaluation: null }
 }
@@ -191,4 +310,31 @@ async function getPatientUserId(admin: ReturnType<typeof createAdminClient>, pat
   if (!id) return null
   const { data } = await admin.from(table).select("user_id").eq("id", id).maybeSingle()
   return data?.user_id ?? null
+}
+
+export async function cancelAppointment(appointmentId: string): Promise<ActionResult<null>> {
+  const actor = await getActionActor()
+  if (!actor || !hasAnyRole(actor, ["student", "faculty"])) return forbidden()
+  
+  const profileTable = actor.role === "student" ? "students" : "faculty"
+  const profileIdField = actor.role === "student" ? "student_id" : "faculty_id"
+  const admin = createAdminClient()
+  const { data: profile } = await admin.from(profileTable).select("id").eq("user_id", actor.id).maybeSingle()
+  if (!profile) return { success: false, error: "Patient profile not found", code: "NOT_FOUND" }
+
+  const { data, error } = await admin
+    .from("appointments")
+    .update({ status: "cancelled" })
+    .eq("id", appointmentId)
+    .eq(profileIdField, profile.id)
+    .in("status", ["pending", "ai_evaluated", "recommended", "approved", "scheduled", "reminded"])
+    .select("id")
+    .maybeSingle()
+
+  if (error) return { success: false, error: error.message, code: "DATABASE" }
+  if (!data) return { success: false, error: "Appointment cannot be cancelled or is not yours", code: "PRECONDITION" }
+
+  await writeAuditLog(actor, "appointment.cancelled", "appointment", appointmentId)
+  revalidatePath(`/${actor.role}/appointments`)
+  return { success: true, data: null }
 }
