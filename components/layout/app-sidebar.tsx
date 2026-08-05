@@ -28,10 +28,13 @@ export function AppSidebar({ onNavigate, collapsed = false, userRole = "nurse" }
     >
       <div className={cn("flex h-14 items-center border-b border-sidebar-border px-4", collapsed && "justify-center px-2")}>
         {collapsed ? (
-          <Image src="/4.png" alt="Logo" width={120} height={32} />
+          <Image src="/logo.png" alt="Logo" width={32} height={32} className="size-8 object-contain" />
         ) : (
-          <div className="flex items-center mx-10 gap-2">
-            <Image src="/4.png" alt="Logo" width={120} height={32} />
+          <div className="flex items-center ml-1 gap-3">
+            <Image src="/logo.png" alt="Logo" width={40} height={40} className="size-8 object-contain" />
+            <div className="flex flex-col leading-none">
+              <span className="text-lg font-bold ml-4 text-sidebar-foreground tracking-tight">BCP CLINIC</span>
+            </div>
           </div>
         )}
       </div>
@@ -59,15 +62,15 @@ export function AppSidebar({ onNavigate, collapsed = false, userRole = "nurse" }
                         if (onNavigate) onNavigate()
                       }}
                       className={cn(
-                        "flex items-center gap-3 rounded-md px-2 py-2 text-sm transition-colors duration-150",
+                        "flex items-center gap-3 px-2 py-2 text-sm transition-colors duration-150 rounded-md",
                         isActive
-                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                          ? "bg-primary/10 text-primary font-medium"
                           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                         collapsed && "justify-center px-2"
                       )}
                       title={collapsed ? item.title : undefined}
                     >
-                      <Icon className="size-4 shrink-0 text-muted-foreground" />
+                      <Icon className={cn("size-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
                       {!collapsed && <span>{item.title}</span>}
                     </Link>
                   </li>

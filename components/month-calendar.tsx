@@ -107,9 +107,9 @@ export function MonthCalendar({
     const maxChips = isCompact ? 1 : 4
 
     return (
-        <div className="rounded-xl border border-zinc-200/80 bg-white overflow-hidden shadow-sm select-none">
+        <div className="border border-border bg-card overflow-hidden select-none">
             {/* ──── Header ──── */}
-            <div className="flex items-center justify-between px-4 py-3 bg-white">
+            <div className="flex items-center justify-between px-4 py-3 bg-card">
                 <div className="flex items-center gap-3">
                     <h2 className="text-lg font-semibold text-zinc-900 tracking-tight">
                         {MONTH_NAMES[viewMonth]} <span className="text-zinc-400 font-normal">{viewYear}</span>
@@ -118,14 +118,14 @@ export function MonthCalendar({
                         <button
                             type="button"
                             onClick={goPrevMonth}
-                            className="size-8 flex items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 transition-colors cursor-pointer"
+                            className="size-8 flex items-center justify-center text-zinc-500 hover:bg-muted hover:text-zinc-700 transition-colors cursor-pointer"
                         >
                             <ChevronLeft className="size-4" />
                         </button>
                         <button
                             type="button"
                             onClick={goNextMonth}
-                            className="size-8 flex items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 transition-colors cursor-pointer"
+                            className="size-8 flex items-center justify-center text-zinc-500 hover:bg-muted hover:text-zinc-700 transition-colors cursor-pointer"
                         >
                             <ChevronRight className="size-4" />
                         </button>
@@ -134,18 +134,18 @@ export function MonthCalendar({
                 <button
                     type="button"
                     onClick={goToday}
-                    className="text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg px-3 py-1.5 transition-colors cursor-pointer"
+                    className="text-xs font-semibold text-primary hover:bg-primary-soft px-3 py-1.5 transition-colors cursor-pointer"
                 >
                     Today
                 </button>
             </div>
 
             {/* ──── Weekday header ──── */}
-            <div className="grid grid-cols-7 border-t border-zinc-100">
+            <div className="grid grid-cols-7 border-t border-border">
                 {weekdays.map((w, i) => (
                     <div
                         key={w + i}
-                        className={`text-center text-[11px] font-semibold tracking-wider py-2.5 ${i === 0 || i === 6 ? "text-zinc-400" : "text-zinc-500"
+                        className={`text-center text-[11px] font-semibold tracking-wider py-2.5 ${i === 0 || i === 6 ? "text-muted-foreground" : "text-muted-foreground"
                             }`}
                     >
                         {w}
@@ -154,7 +154,7 @@ export function MonthCalendar({
             </div>
 
             {/* ──── Date grid ──── */}
-            <div className="grid grid-cols-7 border-t border-zinc-100">
+            <div className="grid grid-cols-7 border-t border-border">
                 {cells.map(({ date, inCurrentMonth }, i) => {
                     const dateKey = toDateKey(date)
                     const isToday = isSameDay(date, today)
@@ -179,15 +179,15 @@ export function MonthCalendar({
                             className={`
                                 relative flex flex-col items-stretch gap-0.5 text-left transition-all duration-150
                                 ${cellHeight}
-                                ${col !== 6 ? "border-r border-zinc-100" : ""}
-                                ${row !== 5 ? "border-b border-zinc-100" : ""}
+                                ${col !== 6 ? "border-r border-border" : ""}
+                                ${row !== 5 ? "border-b border-border" : ""}
                                 ${!inCurrentMonth
-                                    ? "bg-zinc-50/50 cursor-default"
+                                    ? "bg-muted/30 cursor-default"
                                     : isPast
-                                        ? "cursor-not-allowed bg-white"
-                                        : "cursor-pointer hover:bg-blue-50/40"
+                                        ? "cursor-not-allowed bg-card"
+                                        : "cursor-pointer hover:bg-primary-soft/50"
                                 }
-                                ${isSelected && inCurrentMonth ? "bg-blue-50/60 hover:bg-blue-50/70" : ""}
+                                ${isSelected && inCurrentMonth ? "bg-primary-soft hover:bg-primary-soft/70" : ""}
                             `}
                         >
                             {/* Day number */}
@@ -205,11 +205,11 @@ export function MonthCalendar({
                                                     : "text-zinc-700"
                                         }
                                         ${isToday
-                                            ? "border border-blue-600 bg-blue-50/80 text-blue-600 font-semibold shadow-sm"
+                                            ? "border border-primary bg-primary-soft text-primary font-semibold"
                                             : ""
                                         }
                                         ${isSelected && !isToday && inCurrentMonth
-                                            ? "border border-blue-400 bg-blue-50/40 text-blue-600 font-semibold"
+                                            ? "border border-primary/40 bg-primary-soft/60 text-primary font-semibold"
                                             : ""
                                         }
                                     `}
@@ -239,7 +239,7 @@ export function MonthCalendar({
                                         )
                                     })}
                                     {overflowCount > 0 && (
-                                        <span className="text-[10px] font-medium text-blue-600 px-1.5 leading-tight">
+                                        <span className="text-[10px] font-medium text-primary px-1.5 leading-tight">
                                             +{overflowCount} more
                                         </span>
                                     )}

@@ -87,15 +87,15 @@ export default function AdminClearanceRequestsPage() {
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded-lg border border-zinc-200 overflow-hidden">
+        <div className="flex rounded-lg border border-border overflow-hidden">
           {(["pending", "all"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
               className={`px-4 py-2 text-sm font-medium cursor-pointer transition-colors ${
                 viewMode === mode
-                  ? "bg-zinc-900 text-white"
-                  : "bg-white text-zinc-600 hover:bg-zinc-50"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background text-foreground hover:bg-muted"
               }`}
             >
               {mode === "pending" ? "Pending" : "All"}
@@ -104,8 +104,8 @@ export default function AdminClearanceRequestsPage() {
         </div>
 
         {viewMode === "all" && (
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -117,7 +117,7 @@ export default function AdminClearanceRequestsPage() {
         )}
       </div>
 
-      <Card className="shadow-sm">
+      <Card className="border-border shadow-sm bg-card">
         <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-16">
@@ -125,7 +125,7 @@ export default function AdminClearanceRequestsPage() {
             </div>
           ) : clearances.length === 0 ? (
             <div className="py-16 text-center">
-              <FileText className="size-8 text-zinc-300 mx-auto mb-2" />
+              <FileText className="size-8 text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">No clearance requests found.</p>
             </div>
           ) : (
@@ -142,12 +142,12 @@ export default function AdminClearanceRequestsPage() {
                 </TableHeader>
                 <TableBody>
                   {clearances.map((c: any) => (
-                    <TableRow key={c.id} className="hover:bg-zinc-50/50">
-                      <TableCell className="font-medium">{displayName(c)}</TableCell>
-                      <TableCell className="text-sm text-zinc-600 capitalize">{c.requester_type}</TableCell>
-                      <TableCell className="text-sm text-zinc-600 max-w-[280px] truncate">{c.purpose || "—"}</TableCell>
+                    <TableRow key={c.id} className="hover:bg-muted/50">
+                      <TableCell className="font-medium text-foreground">{displayName(c)}</TableCell>
+                      <TableCell className="text-sm text-foreground capitalize">{c.requester_type}</TableCell>
+                      <TableCell className="text-sm text-foreground max-w-[280px] truncate">{c.purpose || "—"}</TableCell>
                       <TableCell>{statusBadge(c.status)}</TableCell>
-                      <TableCell className="text-sm text-zinc-500">
+                      <TableCell className="text-sm text-muted-foreground">
                         {new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </TableCell>
                     </TableRow>

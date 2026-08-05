@@ -4,9 +4,12 @@ import { useState, useEffect, useCallback } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Loader2, Shield } from "lucide-react"
 import { toast } from "sonner"
 import { getSettingsAction, updateSettingAction } from "@/actions/admin/settings"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 
 interface Role {
   id: string
@@ -112,11 +115,11 @@ export default function AdminRolesPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {roles.map((r) => (
-            <Card key={r.id} className="shadow-sm">
+            <Card key={r.id}>
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-2">
-                  <div className="size-8 rounded-full bg-zinc-100 flex items-center justify-center">
-                    <Shield className="size-4 text-zinc-600" />
+                  <div className="flex size-8 items-center justify-center border border-primary/20 bg-primary-soft text-primary">
+                    <Shield className="size-4" />
                   </div>
                   <div>
                     <CardTitle className="text-sm font-semibold">{r.name}</CardTitle>
@@ -127,17 +130,17 @@ export default function AdminRolesPage() {
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-1">
                   {r.permissions.map((p) => (
-                    <span key={p} className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-50 text-zinc-600 border border-zinc-200">
+                    <span key={p} className="border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                       {p}
                     </span>
                   ))}
                 </div>
-                <div className="flex items-center gap-1 pt-2 border-t border-zinc-100">
+                <div className="flex items-center gap-1 pt-2 border-t border-border">
                   <div className="flex-1" />
                   <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setEditingId(r.id); setForm({ name: r.name, description: r.description, permissions: r.permissions.join(", ") }); setShowForm(true) }}>
                     Edit
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs text-red-600 hover:text-red-700" onClick={() => handleDelete(r.id)}>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => handleDelete(r.id)}>
                     Delete
                   </Button>
                 </div>
@@ -147,34 +150,38 @@ export default function AdminRolesPage() {
         </div>
       )}
 
-      {/* Simple modal form */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="shadow-lg w-full max-w-lg mx-4">
-            <CardHeader>
-              <CardTitle className="text-base">{editingId ? "Edit Role" : "New Role"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium">Role Name</label>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full h-9 px-3 rounded-md border border-zinc-200 text-sm focus:outline-none" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium">Description</label>
-                <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full h-9 px-3 rounded-md border border-zinc-200 text-sm focus:outline-none" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium">Permissions (comma-separated)</label>
-                <input value={form.permissions} onChange={(e) => setForm({ ...form, permissions: e.target.value })} placeholder="consultations, prescriptions, records" className="w-full h-9 px-3 rounded-md border border-zinc-200 text-sm focus:outline-none" />
-              </div>
-            </CardContent>
-            <div className="flex justify-end gap-2 p-4 pt-0">
-              <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={saving}>{saving ? "Saving..." : editingId ? "Save Changes" : "Create Role"}</Button>
+      {/* Role form modal */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit Role" : "New Role"}</DialogTitle>
+            <DialogDescription>
+              Configure role details and permissions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="role-name" className="text-xs font-medium">Role Name</Label>
+              <Input id="role-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Pharmacist" />
             </div>
-          </Card>
-        </div>
-      )}
+            <div className="space-y-1.5">
+              <Label htmlFor="role-desc" className="text-xs font-medium">Description</Label>
+              <Input id="role-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Role description" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="role-perms" className="text-xs font-medium">Permissions</Label>
+              <Input id="role-perms" value={form.permissions} onChange={(e) => setForm({ ...form, permissions: e.target.value })} placeholder="consultations, prescriptions, records" />
+              <p className="text-xs text-muted-foreground">Comma-separated permission keys.</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={saving}>{saving ? "Saving..." : editingId ? "Save Changes" : "Create Role"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

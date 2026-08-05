@@ -23,11 +23,14 @@ export function ComplaintChart({ data }: ComplaintChartProps) {
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" />
-            <YAxis dataKey="complaint" type="category" width={150} />
-            <Tooltip />
-            <Bar dataKey="frequency" fill="#000" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis type="number" tick={{ fontSize: 12 }} stroke="#9ca3af" />
+            <YAxis dataKey="complaint" type="category" width={150} tick={{ fontSize: 12 }} stroke="#9ca3af" />
+            <Tooltip
+              contentStyle={{ borderRadius: 0, border: "1px solid #e5e7eb", fontSize: 12 }}
+              itemStyle={{ color: "#111827" }}
+            />
+            <Bar dataKey="frequency" fill="#157f5a" />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

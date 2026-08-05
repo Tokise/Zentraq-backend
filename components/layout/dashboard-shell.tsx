@@ -1,14 +1,12 @@
 ﻿"use client"
 
-import { useState, useRef, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import Link from "next/link"
-import { Search, Loader2, LogOut, User, Shield, ChevronLeft, ChevronRight, X } from "lucide-react"
+import { Loader2, LogOut, User, Shield, Menu, Sun, Moon } from "lucide-react"
 import NProgress from "nprogress"
 
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useSessionSecurity } from "@/lib/auth/session"
@@ -44,9 +42,24 @@ export function DashboardShell({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [searchFocused, setSearchFocused] = useState(false)
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("theme") as "light" | "dark" | null
+      return stored || "light"
+    }
+    return "light"
+  })
   const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === "dark") {
+      root.classList.add("dark")
+    } else {
+      root.classList.remove("dark")
+    }
+    localStorage.setItem("theme", theme)
+  }, [theme])
 
   const pageTitle = getPageTitle(pathname)
 
@@ -82,7 +95,7 @@ export function DashboardShell({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sidebar â€” responsive */}
+      {/* Sidebar — responsive */}
       <div
         className={cn(
           "hidden lg:block transition-all duration-300",
@@ -110,7 +123,7 @@ export function DashboardShell({
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top header */}
-        <header className="flex h-14 items-center justify-between border-b border-border bg-background px-3 md:px-4 shrink-0">
+        <header className="flex h-14 items-center justify-between border-b border-border bg-background px-3 md:px-4 shrink-0  z-10">
           <div className="flex items-center gap-2 min-w-0">
             {/* Hamburger for mobile + sidebar toggle on desktop */}
             <Button
@@ -124,20 +137,11 @@ export function DashboardShell({
                   setSidebarCollapsed(!sidebarCollapsed)
                 }
               }}
-              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label="Toggle sidebar"
+              title="Toggle sidebar"
             >
-              {sidebarCollapsed ? (
-                <ChevronRight className="size-4" />
-              ) : (
-                <ChevronLeft className="size-4" />
-              )}
+              <Menu className="size-4" />
             </Button>
-
-            {/* Page title */}
-            <div className="hidden sm:block text-sm font-semibold text-foreground truncate min-w-0 max-w-[200px]">
-              {pageTitle}
-            </div>
           </div>
 
           {/* Right side: Notification bell + Avatar */}
@@ -146,21 +150,21 @@ export function DashboardShell({
 
             <DropdownMenu>
               <DropdownMenuTrigger className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full hover:bg-accent/50 transition-colors focus:outline-none">
-                <Avatar className="h-8 w-8 border-2 border-background shadow-sm">
+                <Avatar className="h-8 w-8 border border-border">
                   <AvatarImage alt={userEmail || "User"} className="object-cover" />
-                  <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
+                  <AvatarFallback className="bg-card text-primary font-semibold text-xs">
                     {userEmail?.charAt(0).toUpperCase() || "U"}
                   </AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
 
-              <DropdownMenuContent className="w-64 p-2" align="end" sideOffset={8}>
+              <DropdownMenuContent className="w-64 p-2 bg-card bg-hover:bg-accentup" align="end" sideOffset={8}>
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="px-3 py-2.5">
                     <div className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
+                      <Avatar className="h-10 w-10 border border-border">
                         <AvatarImage alt={userEmail || "User"} className="object-cover" />
-                        <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                        <AvatarFallback className="bg-muted text-primary font-semibold">
                           {userEmail?.charAt(0).toUpperCase() || "U"}
                         </AvatarFallback>
                       </Avatar>
@@ -190,10 +194,19 @@ export function DashboardShell({
 
                   <DropdownMenuItem
                     className="cursor-pointer px-3 py-2 text-sm"
-                    onClick={() => router.push("/settings")}
+                    onClick={() => setTheme(theme === "light" ? "dark" : "light")}
                   >
-                    <User className="mr-2 size-4" />
-                    <span>Profile Settings</span>
+                    {theme === "light" ? (
+                      <>
+                        <Moon className="mr-2 size-4" />
+                        <span>Dark Mode</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sun className="mr-2 size-4" />
+                        <span>Light Mode</span>
+                      </>
+                    )}
                   </DropdownMenuItem>
 
                   <DropdownMenuSeparator className="my-1.5" />
@@ -223,7 +236,9 @@ export function DashboardShell({
 
         {/* Main content */}
         <main className={cn("flex-1 overflow-y-auto p-4 md:p-6 lg:p-8")}>
-          {children}
+          <div className="mx-auto w-full max-w-[1400px]">
+            {children}
+          </div>
         </main>
       </div>
     </div>

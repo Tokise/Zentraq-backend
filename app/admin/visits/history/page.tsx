@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/status-badge"
+import { EmptyState } from "@/components/empty-state"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
@@ -11,7 +12,21 @@ import { Loader2, Stethoscope } from "lucide-react"
 import { toast } from "sonner"
 import { getClinicVisitsAction } from "@/actions/admin/visits-admin"
 
+function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
+  const s = status?.toLowerCase() ?? ""
+  if (["completed", "approved"].includes(s)) return "success"
+  if (["pending", "evaluating"].includes(s)) return "warning"
+  if (["cancelled", "rejected"].includes(s)) return "danger"
+  if (["in-progress", "in_progress", "active", "checked_in"].includes(s)) return "info"
+  return "default"
+}
+
+function formatStatus(status: string): string {
+  return status?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "—"
+}
+
 export default function AdminVisitHistoryPage() {
+  const router = useRouter()
   const [visits, setVisits] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -36,15 +51,6 @@ export default function AdminVisitHistoryPage() {
     fetchData()
   }, [fetchData])
 
-  const statusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      "in-progress": "bg-amber-50 text-amber-700 border-amber-200",
-      completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      cancelled: "bg-zinc-50 text-zinc-500 border-zinc-200",
-    }
-    return <Badge variant="outline" className={`text-[10px] ${styles[status] || "bg-zinc-50 text-zinc-700 border-zinc-200"}`}>{status}</Badge>
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -52,53 +58,56 @@ export default function AdminVisitHistoryPage() {
         description="All clinic visits and their status."
       />
 
-      <Card className="shadow-sm">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : visits.length === 0 ? (
-            <div className="py-16 text-center">
-              <Stethoscope className="size-8 text-zinc-300 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No clinic visits recorded.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Patient</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Visit Type</TableHead>
-                    <TableHead>Check-in</TableHead>
-                    <TableHead>Check-out</TableHead>
-                    <TableHead>Consultations</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+      <div className="border border-border bg-card">
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : visits.length === 0 ? (
+          <div className="p-6">
+            <EmptyState
+              title="No clinic visits recorded"
+              description="Clinic visit records will appear here."
+              icon={Stethoscope}
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Visit Type</TableHead>
+                  <TableHead>Check-in</TableHead>
+                  <TableHead>Check-out</TableHead>
+                  <TableHead>Consultations</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                   {visits.map((v) => (
-                    <TableRow key={v.id} className="hover:bg-zinc-50/50">
-                      <TableCell className="font-medium">{v.patient_name || "—"}</TableCell>
-                      <TableCell className="text-sm text-zinc-600 capitalize">{v.patient_type}</TableCell>
-                      <TableCell className="text-sm text-zinc-600 capitalize">{v.visit_type}</TableCell>
-                      <TableCell className="text-sm text-zinc-500">
-                        {new Date(v.check_in_time).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                      </TableCell>
-                      <TableCell className="text-sm text-zinc-500">
-                        {v.check_out_time ? new Date(v.check_out_time).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-zinc-600">{v.consultation_count}</TableCell>
-                      <TableCell>{statusBadge(v.status)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    <TableRow key={v.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/admin/visits/history/${v.id}`)}>
+                    <TableCell className="font-medium">{v.patient_name || "—"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground capitalize">{v.patient_type}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground capitalize">{v.visit_type}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(v.check_in_time).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {v.check_out_time ? new Date(v.check_out_time).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{v.consultation_count}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={getStatusVariant(v.status)}>{formatStatus(v.status)}</StatusBadge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

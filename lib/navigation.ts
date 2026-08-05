@@ -32,6 +32,7 @@ import {
   Search,
   ClipboardCheck,
   Stethoscope as StethoscopeAlt,
+  Scan,
 } from "lucide-react"
 
 export type NavItem = {
@@ -60,8 +61,8 @@ export const adminNavigation: NavGroup[] = [
   {
     label: "Records",
     items: [
-      { title: "Search Patients", href: "/admin/records/search", icon: Search, roles: ["admin"] },
       { title: "Medical Records", href: "/admin/records/view", icon: HeartPulse, roles: ["admin"] },
+      { title: "RFID Kiosk", href: "/admin/rfid-kiosk", icon: Scan, roles: ["admin"] },
     ],
   },
   { label: "Clinical Operations", items: [
@@ -113,7 +114,8 @@ export const doctorNavigation: NavGroup[] = [
   {
     label: "Records",
     items: [
-      { title: "Search Patients", href: "/doctor/records/search", icon: Search, roles: ["doctor"] },
+      { title: "Medical Records", href: "/doctor/records/view", icon: HeartPulse, roles: ["doctor"] },
+      { title: "RFID Kiosk", href: "/doctor/rfid-kiosk", icon: Scan, roles: ["doctor"] },
     ],
   },
   { label: "Clinical", items: [
@@ -158,7 +160,10 @@ export const nurseNavigation: NavGroup[] = [
       { title: "New Walk-in", href: "/nurse/visits/new_entry", icon: UserPlus, roles: ["nurse"] },
     ],
   },
-  { label: "Records", items: [{ title: "Patient Records", href: "/nurse/records/search", icon: Search, roles: ["nurse"] }] },
+  { label: "Records", items: [
+    { title: "Medical Records", href: "/nurse/records/view", icon: HeartPulse, roles: ["nurse"] },
+    { title: "RFID Kiosk", href: "/nurse/rfid-kiosk", icon: Scan, roles: ["nurse"] },
+  ] },
   {
     label: "Medicine",
     items: [

@@ -13,9 +13,9 @@ export default function SettingsPage() {
 
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
                 <Link href="/settings/profile" className="block">
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                    <Card className="hover:border-primary/40 transition-colors cursor-pointer">
                         <CardHeader>
-                            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <div className="mb-2 flex size-10 items-center justify-center border border-primary/20 bg-primary-soft text-primary">
                                 <User className="size-5" />
                             </div>
                             <CardTitle className="text-sm font-semibold">Profile</CardTitle>
@@ -32,9 +32,9 @@ export default function SettingsPage() {
                 </Link>
 
                 <Link href="/settings/privacy" className="block">
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                    <Card className="hover:border-primary/40 transition-colors cursor-pointer">
                         <CardHeader>
-                            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-blue-500/10 text-blue-500">
+                            <div className="mb-2 flex size-10 items-center justify-center border border-primary/20 bg-primary-soft text-primary">
                                 <Eye className="size-5" />
                             </div>
                             <CardTitle className="text-sm font-semibold">Privacy</CardTitle>
@@ -51,9 +51,9 @@ export default function SettingsPage() {
                 </Link>
 
                 <Link href="/settings/security" className="block">
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                    <Card className="hover:border-primary/40 transition-colors cursor-pointer">
                         <CardHeader>
-                            <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+                            <div className="mb-2 flex size-10 items-center justify-center border border-success/20 bg-success/10 text-success">
                                 <Shield className="size-5" />
                             </div>
                             <CardTitle className="text-sm font-semibold">Security</CardTitle>

@@ -4,7 +4,9 @@ import { useState, useMemo } from "react"
 import { Search, Plus, Check } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import {
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table"
 import {
     Dialog,
     DialogContent,
@@ -121,14 +123,14 @@ export function ComplaintSelector({
             </div>
 
             {/* Complaints Table */}
-            <Card>
-                <CardContent className="p-0">
-                    <table className="w-full">
-                        <thead className="bg-muted/50">
-                            <tr>
-                                <th className="w-12 px-4 py-2 text-left text-xs font-medium text-muted-foreground">Select</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Complaint Type</th>
-                                <th className="w-32 px-4 py-2 text-right text-xs font-medium text-muted-foreground">
+            <div className="border border-border bg-card">
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-16">Select</TableHead>
+                                <TableHead>Complaint Type</TableHead>
+                                <TableHead className="w-32 text-right">
                                     <Button
                                         onClick={() => setShowAddDialog(true)}
                                         size="sm"
@@ -138,29 +140,29 @@ export function ComplaintSelector({
                                         <Plus className="size-3 mr-1" />
                                         Add Custom
                                     </Button>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
                             {paginated.length === 0 ? (
-                                <tr>
-                                    <td colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                                <TableRow>
+                                    <TableCell colSpan={3} className="px-4 py-8 text-center text-sm text-muted-foreground">
                                         No complaints found
-                                    </td>
-                                </tr>
+                                    </TableCell>
+                                </TableRow>
                             ) : (
                                 paginated.map((complaint) => {
                                     const isSelected = selected.some((s) => s.toLowerCase() === complaint.toLowerCase())
                                     return (
-                                        <tr
+                                        <TableRow
                                             key={complaint}
-                                            className="cursor-pointer hover:bg-muted/30 transition-colors"
+                                            className="cursor-pointer hover:bg-muted/50 transition-colors"
                                             onClick={() => handleToggle(complaint)}
                                         >
-                                            <td className="px-4 py-3">
+                                            <TableCell className="px-4 py-3">
                                                 <div className="flex items-center justify-center">
                                                     <div
-                                                        className={`size-4 rounded border-2 flex items-center justify-center ${isSelected
+                                                        className={`flex size-4 items-center justify-center border ${isSelected
                                                                 ? "border-primary bg-primary"
                                                                 : "border-muted-foreground/50"
                                                             }`}
@@ -170,19 +172,19 @@ export function ComplaintSelector({
                                                         )}
                                                     </div>
                                                 </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-sm">{complaint}</td>
-                                            <td className="px-4 py-3 text-xs text-muted-foreground">
+                                            </TableCell>
+                                            <TableCell className="px-4 py-3 text-sm">{complaint}</TableCell>
+                                            <TableCell className="px-4 py-3 text-xs text-muted-foreground">
                                                 {isSelected ? "Selected" : ""}
-                                            </td>
-                                        </tr>
+                                            </TableCell>
+                                        </TableRow>
                                     )
                                 })
                             )}
-                        </tbody>
-                    </table>
-                </CardContent>
-            </Card>
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
 
             {/* Pagination */}
             {totalPages > 1 && onPageChange && (

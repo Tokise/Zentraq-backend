@@ -78,7 +78,7 @@ export default function AdminAuditTrailPage() {
         <select
           value={actionFilter}
           onChange={(e) => setActionFilter(e.target.value)}
-          className="h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none"
+          className="h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none"
         >
           <option value="">All Actions</option>
           {Object.entries(ACTION_LABELS).map(([key, label]) => (
@@ -94,10 +94,10 @@ export default function AdminAuditTrailPage() {
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : logs.length === 0 ? (
-            <div className="py-16 text-center">
-              <ShieldCheck className="size-8 text-zinc-300 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No audit records found.</p>
-            </div>
+              <div className="py-16 text-center">
+                <ShieldCheck className="size-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No audit records found.</p>
+              </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -112,7 +112,7 @@ export default function AdminAuditTrailPage() {
                 </TableHeader>
                 <TableBody>
                   {logs.map((log) => (
-                    <TableRow key={log.id} className="text-xs hover:bg-zinc-50/50">
+                    <TableRow key={log.id} className="text-xs hover:bg-muted/50">
                       <TableCell className="font-mono whitespace-nowrap">
                         {new Date(log.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </TableCell>
