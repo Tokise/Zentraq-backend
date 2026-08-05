@@ -1,15 +1,26 @@
 ﻿"use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent } from "@/components/ui/card"
-import { Loader2, Package } from "lucide-react"
+import { StatusBadge } from "@/components/status-badge"
+import { EmptyState } from "@/components/empty-state"
+import { Pagination } from "@/components/pagination"
+import { Input } from "@/components/ui/input"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table"
+import { Loader2, Package, Search } from "lucide-react"
 import { toast } from "sonner"
 import { getInventoryQueue } from "@/actions/inventory/workflow-queries"
+
+type MedicineStatus = "success" | "warning" | "danger" | "default"
 
 export default function NurseMedicineStockPage() {
   const [medicines, setMedicines] = useState<Array<{ id: string; name: string; stock: number; minimum: number; expiry: string | null }>>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -32,49 +43,101 @@ export default function NurseMedicineStockPage() {
     fetchData()
   }, [fetchData])
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return medicines
+    return medicines.filter((m) => m.name.toLowerCase().includes(q))
+  }, [medicines, search])
+
+  const paginated = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    return filtered.slice(start, start + pageSize)
+  }, [filtered, currentPage, pageSize])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+
+  const getStockStatus = (stock: number, min: number): { variant: MedicineStatus; label: string } => {
+    if (stock <= 0) return { variant: "danger", label: "Out of Stock" }
+    if (stock <= min) return { variant: "warning", label: "Low Stock" }
+    return { variant: "success", label: "In Stock" }
+  }
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size)
+    setCurrentPage(1)
+  }
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search])
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Medicine Stock" description="Current inventory levels." />
+      <PageHeader
+        title="Medicine Stock"
+        description="Current inventory levels."
+      />
 
-      <Card className="shadow-sm">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : medicines.length === 0 ? (
-            <div className="py-16 text-center">
-              <Package className="size-8 text-zinc-300 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No medicines in stock.</p>
-            </div>
-          ) : (
+      <div className="relative w-full sm:max-w-xs">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search medicines..." className="h-9 pl-8 text-sm" />
+      </div>
+
+      <div className="border border-border bg-card">
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-6">
+            <EmptyState title="No medicines in stock" description="No inventory items match your search." icon={Package} />
+          </div>
+        ) : (
+          <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Medicine</th>
-                    <th className="px-4 py-3 font-medium">Stock</th>
-                    <th className="px-4 py-3 font-medium">Min Level</th>
-                    <th className="px-4 py-3 font-medium">Expiry</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {medicines.map((m) => (
-                    <tr key={m.id} className="hover:bg-zinc-50/50">
-                      <td className="px-4 py-3 font-medium">{m.name}</td>
-                      <td className="px-4 py-3 font-semibold">{m.stock}</td>
-                      <td className="px-4 py-3 text-zinc-500">{m.minimum > 0 ? `Min: ${m.minimum}` : "—"}</td>
-                      <td className="px-4 py-3 text-zinc-500">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Medicine</TableHead>
+                    <TableHead>Stock</TableHead>
+                    <TableHead>Min Level</TableHead>
+                    <TableHead>Expiry</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginated.map((m) => (
+                    <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50">
+                      <TableCell className="font-medium">{m.name}</TableCell>
+                      <TableCell className="text-sm font-semibold">{m.stock}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{m.minimum > 0 ? `Min: ${m.minimum}` : "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
                         {m.expiry ? new Date(m.expiry).toLocaleDateString() : "—"}
-                      </td>
-                    </tr>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={getStockStatus(m.stock, m.minimum).variant}>
+                          {getStockStatus(m.stock, m.minimum).label}
+                        </StatusBadge>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            <div className="p-4">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filtered.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={handlePageSizeChange}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

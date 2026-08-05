@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/status-badge"
 import { Loader2, CalendarDays } from "lucide-react"
 import { MonthCalendar } from "@/components/month-calendar"
 import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments-admin"
 import { toast } from "sonner"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { EmptyState } from "@/components/empty-state"
 
 const STATUS_CHIP: Record<string, string> = {
   pending: "pending",
@@ -24,6 +24,19 @@ const STATUS_CHIP: Record<string, string> = {
   cancelled: "cancelled",
   rejected: "cancelled",
   no_show: "cancelled",
+}
+
+function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
+  const s = status?.toLowerCase() ?? ""
+  if (["completed", "approved", "healthy", "in stock", "fit"].includes(s)) return "success"
+  if (["pending", "evaluating", "low stock", "ai_evaluated", "recommended", "reminded", "scheduled"].includes(s)) return "warning"
+  if (["cancelled", "rejected", "no_show", "out of stock", "critical"].includes(s)) return "danger"
+  if (["checked_in", "in_consultation", "active", "in-progress"].includes(s)) return "info"
+  return "default"
+}
+
+function formatStatus(status: string): string {
+  return status?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "—"
 }
 
 export default function AdminAppointmentsCalendarPage() {
@@ -81,28 +94,6 @@ export default function AdminAppointmentsCalendarPage() {
     })
   }, [appointments, selectedDate])
 
-  const statusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      pending: "bg-amber-50 text-amber-700 border-amber-200",
-      ai_evaluated: "bg-amber-50 text-amber-700 border-amber-200",
-      recommended: "bg-blue-50 text-blue-700 border-blue-200",
-      approved: "bg-blue-50 text-blue-700 border-blue-200",
-      scheduled: "bg-blue-50 text-blue-700 border-blue-200",
-      reminded: "bg-blue-50 text-blue-700 border-blue-200",
-      checked_in: "bg-purple-50 text-purple-700 border-purple-200",
-      in_consultation: "bg-purple-50 text-purple-700 border-purple-200",
-      completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      cancelled: "bg-zinc-50 text-zinc-500 border-zinc-200",
-      rejected: "bg-red-50 text-red-700 border-red-200",
-      no_show: "bg-zinc-50 text-zinc-500 border-zinc-200",
-    }
-    return (
-      <Badge variant="outline" className={`text-[10px] ${styles[status] || "bg-zinc-50 text-zinc-700 border-zinc-200"}`}>
-        {status.replace(/_/g, " ")}
-      </Badge>
-    )
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -136,29 +127,34 @@ export default function AdminAppointmentsCalendarPage() {
                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
               </div>
             ) : dayAppointments.length === 0 ? (
-              <div className="py-10 text-center">
-                <CalendarDays className="size-6 text-zinc-300 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No appointments for this day.</p>
-              </div>
+              <EmptyState
+                title="No appointments for this day"
+                description="This date has no scheduled appointments."
+                icon={CalendarDays}
+              />
             ) : (
               <div className="space-y-2">
                 {dayAppointments.map((a) => (
-                  <div key={a.id} className="rounded-lg border border-zinc-200 p-3 bg-white hover:bg-zinc-50/50 transition-colors">
+                  <div key={a.id} className="border border-border p-3 bg-card hover:bg-muted/50 transition-colors cursor-pointer">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium">{a.patient_name || "—"}</p>
-                      {statusBadge(a.status)}
+                      <StatusBadge status={getStatusVariant(a.status)}>{formatStatus(a.status)}</StatusBadge>
                     </div>
-                    <p className="text-xs text-zinc-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {a.scheduled_time ? a.scheduled_time.slice(0, 5) : "Unscheduled"} · {a.reason || "No reason"}
                     </p>
                     {a.doctor_name && (
-                      <p className="text-xs text-zinc-400 mt-0.5">Dr. {a.doctor_name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Dr. {a.doctor_name}</p>
                     )}
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

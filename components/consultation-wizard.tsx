@@ -143,6 +143,8 @@ export function ConsultationWizard({
 
     const title = mode === "consultation" ? "Consultation Report" : "Emergency Report"
 
+    const textareaClass = "flex w-full border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+
     return (
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto [&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/30 hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50">
@@ -168,11 +170,11 @@ export function ConsultationWizard({
                                             goTo(s.key)
                                         }
                                     }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 cursor-pointer rounded-full text-xs font-medium transition-colors ${isActive
-                                        ? "bg-primary text-primary-foreground"
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 cursor-pointer border text-xs font-medium transition-colors ${isActive
+                                        ? "border-primary bg-primary text-primary-foreground"
                                         : isDone
-                                            ? "bg-primary/10 text-primary"
-                                            : "bg-muted text-muted-foreground"
+                                            ? "border-primary/40 bg-primary-soft text-primary"
+                                            : "border-border bg-background text-muted-foreground"
                                         }`}
                                 >
                                     <Icon className="size-3" />
@@ -217,7 +219,7 @@ export function ConsultationWizard({
                                             placeholder="Enter or update the student's complaint..."
                                             required
                                             rows={4}
-                                            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                            className={textareaClass}
                                         />
                                         <p className="text-xs text-muted-foreground">
                                             Enter or update the student's complaint. Use multiple lines for multiple complaints.
@@ -240,7 +242,7 @@ export function ConsultationWizard({
                                     placeholder="Describe the diagnosis and findings..."
                                     required
                                     rows={3}
-                                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className={textareaClass}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -253,7 +255,7 @@ export function ConsultationWizard({
                                     placeholder="Medication, procedure, or care provided..."
                                     required
                                     rows={3}
-                                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className={textareaClass}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -266,7 +268,7 @@ export function ConsultationWizard({
                                     placeholder="Follow-up, rest, referral, etc..."
                                     required
                                     rows={3}
-                                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    className={textareaClass}
                                 />
                             </div>
                         </div>
@@ -274,7 +276,7 @@ export function ConsultationWizard({
 
                     {step === "review" && (
                         <div className="space-y-4 py-4">
-                            <div className="rounded-md border border-border p-3 space-y-3">
+                            <div className="border border-border p-3 space-y-3">
                                 <div>
                                     <p className="text-xs text-muted-foreground">Student Complaint</p>
                                     <p className="text-sm font-medium">{complaints.join(", ")}</p>
@@ -304,33 +306,33 @@ export function ConsultationWizard({
                                     {DISPOSITIONS.map((d) => {
                                         const borderColor =
                                             d.value === "return_to_class"
-                                                ? "border-emerald-500"
+                                                ? "border-success"
                                                 : d.value === "return_to_activity"
-                                                    ? "border-sky-500"
-                                                    : "border-amber-500"
+                                                    ? "border-info"
+                                                    : "border-warning"
                                         const selectedBg =
                                             d.value === "return_to_class"
-                                                ? "bg-emerald-50"
+                                                ? "bg-success/10"
                                                 : d.value === "return_to_activity"
-                                                    ? "bg-sky-50"
-                                                    : "bg-amber-50"
+                                                    ? "bg-info/10"
+                                                    : "bg-warning/10"
                                         const isSelected = disposition === d.value
                                         return (
                                             <button
                                                 key={d.value}
                                                 type="button"
                                                 onClick={() => setDisposition(d.value)}
-                                                className={`w-full text-left rounded-md border-2 p-3 transition-colors cursor-pointer ${isSelected
+                                                className={`w-full text-left border p-3 transition-colors cursor-pointer ${isSelected
                                                     ? `${borderColor} ${selectedBg}`
                                                     : "border-border hover:bg-muted/50"
                                                     }`}
                                             >
                                                 <p className={`text-sm font-medium ${isSelected
                                                     ? d.value === "return_to_class"
-                                                        ? "text-emerald-700"
+                                                        ? "text-success"
                                                         : d.value === "return_to_activity"
-                                                            ? "text-sky-700"
-                                                            : "text-amber-700"
+                                                            ? "text-info"
+                                                            : "text-warning"
                                                     : ""
                                                     }`}>{d.label}</p>
                                                 <p className="text-xs text-muted-foreground mt-0.5">{d.description}</p>

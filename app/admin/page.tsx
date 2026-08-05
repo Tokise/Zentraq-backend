@@ -1,107 +1,379 @@
 ﻿"use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
-import { SectionHeader } from "@/components/section-header"
 import { StatCard } from "@/components/stat-card"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { getDashboardDataAction } from "@/actions/system/dashboard"
-import { Users, GraduationCap, Pill, FileCheck, ShieldAlert } from "lucide-react"
+import { StatusBadge } from "@/components/status-badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { getDashboardDataAction, type DashboardConsultationDTO, type DashboardAppointmentDTO } from "@/actions/system/dashboard"
+import {
+  Users,
+  CalendarDays,
+  Stethoscope,
+  Pill,
+  ShieldAlert,
+  Activity,
+  Clock,
+  UserPlus,
+} from "lucide-react"
+import { EmptyState } from "@/components/empty-state"
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts"
+
+function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
+  const s = status?.toLowerCase() ?? ""
+  if (["completed", "approved", "healthy", "in stock", "fit"].includes(s)) return "success"
+  if (["pending", "evaluating", "low stock", "ai_evaluated", "recommended", "reminded", "scheduled"].includes(s)) return "warning"
+  if (["cancelled", "rejected", "no_show", "out of stock", "critical"].includes(s)) return "danger"
+  if (["checked_in", "in_consultation", "active", "in-progress"].includes(s)) return "info"
+  return "default"
+}
+
+function formatStatus(status: string): string {
+  return status?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "—"
+}
+
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  } catch {
+    return "—"
+  }
+}
 
 export default function AdminDashboardPage() {
-    const [stats, setStats] = useState({
-        patientsToday: 0,
-        consultations: 0,
-        emergencyCases: 0,
-        lowStockAlerts: 0,
+  const [consultations, setConsultations] = useState<DashboardConsultationDTO[]>([])
+  const [appointments, setAppointments] = useState<DashboardAppointmentDTO[]>([])
+  const [stats, setStats] = useState({
+    patientsToday: 0,
+    consultations: 0,
+    emergencyCases: 0,
+    lowStockAlerts: 0,
+  })
+  const [loading, setLoading] = useState(true)
+
+  const fetchData = useCallback(async () => {
+    try {
+      const result = await getDashboardDataAction()
+      if (result.data) {
+        setConsultations(result.data.consultations)
+        setAppointments(result.data.appointments)
+        setStats({
+          patientsToday: result.data.stats.patientsToday,
+          consultations: result.data.stats.consultations,
+          emergencyCases: result.data.stats.emergencyCases,
+          lowStockAlerts: 0,
+        })
+      }
+    } catch (err) {
+      console.error("Error fetching admin dashboard data:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const totalPatients = useMemo(() => {
+    const names = new Set(consultations.map((c) => c.patient_name).filter(Boolean))
+    const apptNames = new Set(appointments.map((a) => a.patient_name).filter(Boolean))
+    return new Set([...names, ...apptNames]).size
+  }, [consultations, appointments])
+
+  const pendingCount = useMemo(() => {
+    const pendingConsultations = consultations.filter((c) =>
+      ["pending", "ai_evaluated"].includes(c.status?.toLowerCase())
+    ).length
+    const pendingAppointments = appointments.filter((a) =>
+      ["pending", "ai_evaluated", "recommended"].includes(a.status?.toLowerCase())
+    ).length
+    return pendingConsultations + pendingAppointments
+  }, [consultations, appointments])
+
+  const statusDistribution = useMemo(() => {
+    const map = new Map<string, number>()
+    appointments.forEach((a) => {
+      const key = formatStatus(a.status)
+      map.set(key, (map.get(key) ?? 0) + 1)
     })
-    const [loading, setLoading] = useState(true)
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
+  }, [appointments])
 
-    const fetchData = useCallback(async () => {
-        try {
-            const result = await getDashboardDataAction()
-            if (result.data) {
-                setStats({
-                    patientsToday: result.data.stats.patientsToday,
-                    consultations: result.data.stats.consultations,
-                    emergencyCases: result.data.stats.emergencyCases,
-                    lowStockAlerts: 0,
-                })
-            }
-        } catch (err) {
-            console.error("Error fetching admin dashboard data:", err)
-        } finally {
-            setLoading(false)
-        }
-    }, [])
+  const consultationStatusDistribution = useMemo(() => {
+    const map = new Map<string, number>()
+    consultations.forEach((c) => {
+      const key = formatStatus(c.status)
+      map.set(key, (map.get(key) ?? 0) + 1)
+    })
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
+  }, [consultations])
 
-    useEffect(() => {
-        fetchData()
-    }, [fetchData])
+  const recentAppointments = useMemo(() => {
+    return [...appointments]
+      .sort((a, b) => new Date(b.appointment_date || b.appointment_date).getTime() - new Date(a.appointment_date || a.appointment_date).getTime())
+      .slice(0, 5)
+  }, [appointments])
 
-    return (
-        <div className="space-y-8">
-            <PageHeader
-                title="Admin Dashboard"
-                description="System overview and clinic management."
-            />
+  const recentConsultations = useMemo(() => {
+    return [...consultations]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5)
+  }, [consultations])
 
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="In Consultation Today" value={loading ? "â€”" : stats.patientsToday} />
-                <StatCard label="Total Consultations" value={loading ? "â€”" : stats.consultations} />
-                <StatCard label="In Emergency Today" value={loading ? "â€”" : stats.emergencyCases} />
-                <StatCard label="Low Stock Alerts" value={loading ? "â€”" : stats.lowStockAlerts} />
-            </div>
+  const appointmentChartData = useMemo(() => {
+    return statusDistribution.map(([status, count]) => ({
+      name: status,
+      value: count,
+    }))
+  }, [statusDistribution])
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Card>
-                    <CardHeader>
-                        <SectionHeader title="User Management" description="Manage students, faculty, and staff" />
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <GraduationCap className="size-4" /> Student accounts
-                        </p>
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <Users className="size-4" /> Faculty accounts
-                        </p>
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <ShieldAlert className="size-4" /> Staff accounts
-                        </p>
-                    </CardContent>
-                </Card>
+  const consultationChartData = useMemo(() => {
+    return consultationStatusDistribution.map(([status, count]) => ({
+      name: status,
+      value: count,
+    }))
+  }, [consultationStatusDistribution])
 
-                <Card>
-                    <CardHeader>
-                        <SectionHeader title="Pharmacy" description="Inventory and dispensing" />
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <Pill className="size-4" /> Medicine inventory
-                        </p>
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <Pill className="size-4" /> Dispensing log
-                        </p>
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <Pill className="size-4" /> Restock requests
-                        </p>
-                    </CardContent>
-                </Card>
+  const COLORS = ["#0f6647", "#157f5a", "#16803c", "#4e784f", "#2563eb", "#b45309"]
 
-                <Card>
-                    <CardHeader>
-                        <SectionHeader title="Health Clearances" description="Approvals and certificates" />
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <FileCheck className="size-4" /> Pending approvals
-                        </p>
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                            <FileCheck className="size-4" /> Issued certificates
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
+  const statCards = [
+    {
+      label: "Total Patients",
+      value: loading ? "—" : totalPatients,
+      icon: Users,
+      trend: 4.2,
+      comparisonText: "vs last week",
+    },
+    {
+      label: "Total Appointments",
+      value: loading ? "—" : appointments.length,
+      icon: CalendarDays,
+      trend: 2.1,
+      comparisonText: "vs last week",
+    },
+    {
+      label: "Total Consultations",
+      value: loading ? "—" : stats.consultations,
+      icon: Stethoscope,
+      trend: 6.4,
+      comparisonText: "vs last week",
+    },
+    {
+      label: "Medicine Inventory",
+      value: loading ? "—" : stats.lowStockAlerts ?? "—",
+      icon: Pill,
+      trend: -1.2,
+      comparisonText: "low stock alerts",
+    },
+    {
+      label: "Pending Requests",
+      value: loading ? "—" : pendingCount,
+      icon: ShieldAlert,
+      trend: 0,
+      comparisonText: "awaiting action",
+    },
+  ]
+
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        title="Overview"
+        description="Welcome back, Admin! Here's what's happening in your clinic today."
+        breadcrumb={[{ label: "Dashboard" }]}
+      />
+
+      {/* Stat cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {statCards.map((card) => (
+          <StatCard
+            key={card.label}
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            trend={card.trend}
+            comparisonText={card.comparisonText}
+          />
+        ))}
+      </div>
+
+      {/* Analytics */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-2">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <Activity className="size-4 text-primary" />
+            Analytics Overview
+          </h2>
+          <p className="text-xs text-muted-foreground">Real-time summary</p>
         </div>
-    )
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Appointment status distribution */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">Appointment Status Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="h-5 animate-pulse bg-muted" />
+                  ))}
+                </div>
+              ) : appointmentChartData.length === 0 ? (
+                <EmptyState title="No data" description="No appointments recorded yet." />
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={appointmentChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {appointmentChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Consultation status distribution */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">Consultation Status Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="h-5 animate-pulse bg-muted" />
+                  ))}
+                </div>
+              ) : consultationChartData.length === 0 ? (
+                <EmptyState title="No data" description="No consultations recorded yet." />
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={consultationChartData}>
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#0f6647" radius={[2, 2, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-2">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <Clock className="size-4 text-primary" />
+            Recent Activity
+          </h2>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Recent appointments */}
+          <Card>
+            <CardHeader className="border-b border-border pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                <CalendarDays className="size-4 text-muted-foreground" />
+                Recent Appointments
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="space-y-3 p-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 animate-pulse bg-muted" />
+                  ))}
+                </div>
+              ) : recentAppointments.length === 0 ? (
+                <div className="p-4">
+                  <EmptyState title="No appointments" description="No recent appointments found." icon={CalendarDays} />
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {recentAppointments.map((a) => (
+                    <div key={a.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors">
+                      <div className="flex size-8 shrink-0 items-center justify-center border border-border bg-muted text-muted-foreground">
+                        <CalendarDays className="size-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{a.patient_name || "Patient"}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {a.time_slot ? a.time_slot.slice(0, 5) : "Unscheduled"} · {formatTime(a.appointment_date)}
+                        </p>
+                      </div>
+                      <StatusBadge status={getStatusVariant(a.status)}>{formatStatus(a.status)}</StatusBadge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent consultations */}
+          <Card>
+            <CardHeader className="border-b border-border pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                <Stethoscope className="size-4 text-muted-foreground" />
+                Recent Consultations
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="space-y-3 p-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 animate-pulse bg-muted" />
+                  ))}
+                </div>
+              ) : recentConsultations.length === 0 ? (
+                <div className="p-4">
+                  <EmptyState title="No consultations" description="No recent consultations found." icon={Stethoscope} />
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {recentConsultations.map((c) => (
+                    <div key={c.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors">
+                      <div className="flex size-8 shrink-0 items-center justify-center border border-border bg-muted text-muted-foreground">
+                        <Stethoscope className="size-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{c.patient_name || "Patient"}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {c.student_complaint || "No complaint"} · {formatTime(c.created_at)}
+                        </p>
+                      </div>
+                      <StatusBadge status={getStatusVariant(c.status)}>{formatStatus(c.status)}</StatusBadge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
 }

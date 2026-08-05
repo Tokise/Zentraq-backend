@@ -17,52 +17,52 @@ export function ComplianceDashboard({ data }: ComplianceDashboardProps) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Requests</p>
-                <p className="text-2xl font-bold">{totalRequests}</p>
-              </div>
-              <FileCheck className="h-8 w-8 text-muted-foreground" />
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Requests</p>
+              <p className="mt-1 text-2xl font-semibold">{totalRequests}</p>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Approved</p>
-                <p className="text-2xl font-bold text-green-600">{totalApproved}</p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-green-600" />
+            <div className="flex size-9 items-center justify-center border border-border bg-muted text-muted-foreground">
+              <FileCheck className="size-4" />
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold text-amber-600">
-                  {data.reduce((sum, d) => sum + d.pending + d.evaluating, 0)}
-                </p>
-              </div>
-              <Clock className="h-8 w-8 text-amber-600" />
+          </div>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Approved</p>
+              <p className="mt-1 text-2xl font-semibold text-success">{totalApproved}</p>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Approval Rate</p>
-                <p className="text-2xl font-bold">{overallApprovalRate}%</p>
-              </div>
-              <XCircle className="h-8 w-8 text-muted-foreground" />
+            <div className="flex size-9 items-center justify-center border border-success/20 bg-success/10 text-success">
+              <TrendingUp className="size-4" />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Pending</p>
+              <p className="mt-1 text-2xl font-semibold text-warning">
+                {data.reduce((sum, d) => sum + d.pending + d.evaluating, 0)}
+              </p>
+            </div>
+            <div className="flex size-9 items-center justify-center border border-warning/20 bg-warning/10 text-warning">
+              <Clock className="size-4" />
+            </div>
+          </div>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Approval Rate</p>
+              <p className="mt-1 text-2xl font-semibold">{overallApprovalRate}%</p>
+            </div>
+            <div className="flex size-9 items-center justify-center border border-border bg-muted text-muted-foreground">
+              <XCircle className="size-4" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <Card>
@@ -84,20 +84,20 @@ export function ComplianceDashboard({ data }: ComplianceDashboardProps) {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Approved:</span>
-                    <span className="ml-2 font-medium text-green-600">{item.approved}</span>
+                    <span className="ml-2 font-medium text-success">{item.approved}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Pending:</span>
-                    <span className="ml-2 font-medium text-amber-600">{item.pending + item.evaluating}</span>
+                    <span className="ml-2 font-medium text-warning">{item.pending + item.evaluating}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground">Rejected:</span>
-                    <span className="ml-2 font-medium text-red-600">{item.rejected}</span>
+                    <span className="ml-2 font-medium text-destructive">{item.rejected}</span>
                   </div>
                 </div>
-                <div className="w-full bg-muted rounded-full h-2">
+                <div className="w-full bg-muted h-1.5">
                   <div
-                    className="bg-green-600 h-2 rounded-full"
+                    className="bg-success h-1.5"
                     style={{ width: `${item.approval_rate}%` }}
                   />
                 </div>

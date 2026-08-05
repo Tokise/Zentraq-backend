@@ -91,7 +91,7 @@ export default function AdminActivityLogsPage() {
             setActionFilter(e.target.value)
             setPage(1)
           }}
-          className="h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none"
+          className="h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none"
         >
           <option value="">All Actions</option>
           {Object.entries(ACTION_LABELS).map(([key, label]) => (
@@ -107,10 +107,10 @@ export default function AdminActivityLogsPage() {
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             </div>
           ) : logs.length === 0 ? (
-            <div className="py-16 text-center">
-              <ShieldCheck className="size-8 text-zinc-300 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No activity logs found.</p>
-            </div>
+              <div className="py-16 text-center">
+                <ShieldCheck className="size-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No activity logs found.</p>
+              </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -125,7 +125,7 @@ export default function AdminActivityLogsPage() {
                 </TableHeader>
                 <TableBody>
                   {logs.map((log) => (
-                    <TableRow key={log.id} className="text-xs hover:bg-zinc-50/50">
+                    <TableRow key={log.id} className="text-xs hover:bg-muted/50">
                       <TableCell className="font-mono whitespace-nowrap">
                         {new Date(log.timestamp).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </TableCell>
@@ -145,7 +145,7 @@ export default function AdminActivityLogsPage() {
           )}
 
           {logs.length > 0 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-zinc-50/50">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/50">
               <div className="text-xs text-muted-foreground">
                 Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} entries
               </div>

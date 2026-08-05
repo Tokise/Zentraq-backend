@@ -1,28 +1,83 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search, Loader2, User, HeartPulse } from "lucide-react"
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table"
+import { Pagination } from "@/components/pagination"
+import { Search, Loader2, User, HeartPulse, RefreshCcw } from "lucide-react"
 import { toast } from "sonner"
-import { searchRecordsAction } from "@/actions/admin/records"
+import { searchRecordsAction, type RecordSearchResult } from "@/actions/admin/records"
 import { getPatientMedicalRecord, type PatientMedicalRecord } from "@/actions/clinical/records"
 import { MedicalRecordView } from "@/components/medical/medical-record-view"
+import { RfidSearchButton } from "@/components/rfid-search-button"
 
 export default function AdminMedicalRecordsViewPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [query, setQuery] = useState("")
-  const [results, setResults] = useState<Array<Record<string, any>>>([])
+  const [results, setResults] = useState<RecordSearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  const [searched, setSearched] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Array<{ id: string; name: string; type: "student" | "faculty" }>>([])
   const [record, setRecord] = useState<PatientMedicalRecord | null>(null)
   const [loadingRecord, setLoadingRecord] = useState(false)
+  const [page, setPage] = useState(1)
+  const pageSize = 10
+
+  // RFID kiosk scan handler
+  async function handleRfidScan(uid: string) {
+    setQuery(uid)
+    setSearching(true)
+    setSearched(true)
+    setPage(1)
+    try {
+      const res = await searchRecordsAction(uid)
+      if (res.error) {
+        toast.error(res.error)
+        setResults([])
+      } else {
+        const combined = [...res.students, ...res.faculty]
+        setResults(combined)
+        if (combined.length === 1) {
+          const r = combined[0]
+          const type = "student_number" in r ? "student" : "faculty"
+          selectPatient(r)
+        }
+      }
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  // Auto-load record if id query param is present
+  useEffect(() => {
+    const id = searchParams.get("id")
+    if (!id) return
+    const type = searchParams.get("type") as "student" | "faculty" | null
+    if (!type) return
+    setSelectedPatient([{ id, name: "", type }])
+    loadRecord(id, type)
+  }, [searchParams])
+
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return results.slice(start, start + pageSize)
+  }, [results, page])
+
+  const totalPages = Math.max(1, Math.ceil(results.length / pageSize))
 
   async function handleSearch() {
     if (!query.trim()) return
     setSearching(true)
+    setSearched(true)
+    setPage(1)
     try {
       const res = await searchRecordsAction(query)
       if (res.error) {
@@ -53,15 +108,14 @@ export default function AdminMedicalRecordsViewPage() {
     }
   }, [])
 
-  function selectPatient(r: Record<string, any>) {
+  function selectPatient(r: RecordSearchResult) {
     const type = "student_number" in r ? "student" : "faculty"
     const name = `${r.first_name} ${r.last_name}`
-    setResults([])
-    setQuery("")
     setSelectedPatient((prev) => {
       if (prev.some((p) => p.id === r.id)) return prev
       return [...prev, { id: r.id, name, type }]
     })
+    loadRecord(r.id, type)
   }
 
   return (
@@ -72,62 +126,89 @@ export default function AdminMedicalRecordsViewPage() {
       />
 
       <Card className="shadow-sm">
-        <CardContent className="p-4">
-          <div className="flex gap-2">
+        <CardContent className="p-5 space-y-5">
+          <div className="flex flex-wrap items-center gap-2">
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Search by name, student number, or employee number"
-              className="h-9"
+              className="h-9 flex-1 min-w-[200px]"
             />
             <Button onClick={handleSearch} disabled={searching || !query.trim()} className="shrink-0 cursor-pointer">
               {searching ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Search className="size-3.5 mr-1" />}
               Search
             </Button>
+            <RfidSearchButton onResults={(results) => {
+              setResults(results)
+              setSearched(true)
+              setPage(1)
+              if (results.length === 1) {
+                selectPatient(results[0])
+              }
+            }} />
           </div>
 
-          {results.length > 0 && (
-            <div className="mt-3 divide-y rounded-lg border max-h-72 overflow-y-auto">
-              {results.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => selectPatient(r)}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-zinc-50/50 transition-colors text-left cursor-pointer"
-                >
-                  <User className="size-4 text-zinc-400 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{r.first_name} {r.last_name}</p>
-                    <p className="text-xs text-zinc-500">
-                      {"student_number" in r ? r.student_number : r.employee_number} · {r.department || "No department"}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] capitalize">
-                    {"student_number" in r ? "Student" : "Faculty"}
-                  </Badge>
-                </button>
-              ))}
+          {searched && results.length === 0 ? (
+            <div className="py-10 text-center">
+              <User className="size-8 text-zinc-300 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No patients found. Try a different search term.</p>
             </div>
-          )}
+          ) : (
+            <>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>ID No.</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead className="w-[1px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginated.length > 0 ? (
+                      paginated.map((r) => {
+                        const patientType = "student_number" in r ? "student" : "faculty"
+                        return (
+                          <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => selectPatient(r)}>
+                            <TableCell className="font-medium">{r.first_name} {r.last_name}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {"student_number" in r ? r.student_number : r.employee_number}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{r.department ?? "—"}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-[10px] capitalize">{patientType}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" className="h-7 text-xs cursor-pointer">View</Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-10 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <User className="size-8 text-zinc-300" />
+                            <p className="text-sm text-muted-foreground">Search for patients to view their medical records</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
 
-          {selectedPatient.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {selectedPatient.map((p) => (
-                <div key={p.id} className="flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 py-1 pl-3 pr-1">
-                  <span className="text-xs font-medium">{p.name}</span>
-                  <Badge variant="outline" className="text-[10px] capitalize">{p.type}</Badge>
-                  <button
-                    onClick={() => {
-                      setSelectedPatient((prev) => prev.filter((x) => x.id !== p.id))
-                      setRecord(null)
-                    }}
-                    className="size-5 rounded-full text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 cursor-pointer"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={results.length}
+                pageSize={pageSize}
+                onPageChange={setPage}
+              />
+            </>
           )}
         </CardContent>
       </Card>
@@ -147,6 +228,10 @@ export default function AdminMedicalRecordsViewPage() {
               {p.name}
             </Button>
           ))}
+          <Button variant="ghost" size="sm" onClick={() => { setSelectedPatient([]); setRecord(null) }} className="cursor-pointer">
+            <RefreshCcw className="size-3.5 mr-1" />
+            Clear
+          </Button>
         </div>
       )}
 

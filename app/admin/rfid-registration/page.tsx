@@ -348,7 +348,7 @@ export default function RfidRegistrationPage() {
     reader.readAsDataURL(file)
   }
 
-  // Step 4 â†’ Create the student or faculty profile via Server Action, then go to Account Setup.
+  // Step 4 → Create the student or faculty profile via Server Action, then go to Account Setup.
   async function handleRegister() {
     if (!rfidUid) return
     setLoading(true)
@@ -393,7 +393,7 @@ export default function RfidRegistrationPage() {
     }
   }
 
-  // Step 5 â†’ Create an auth user and link it to the new patient profile.
+  // Step 5 → Create an auth user and link it to the new patient profile.
   async function handleCreateAccount() {
     if (!accountEmail || !accountPassword) {
       toast.error("Please enter an email and password.")
@@ -613,11 +613,11 @@ export default function RfidRegistrationPage() {
       )}
 
       {mode === "WIZARD" && step === 1 && (
-        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+        <Card className="border-border shadow-sm bg-card max-w-md mx-auto">
           <CardContent className="py-8 px-6 space-y-5">
             <div className="text-center space-y-1">
-              <h2 className="text-base font-semibold text-zinc-900">Scan or Enter RFID</h2>
-              <p className="text-xs text-zinc-400">Tap the card on the desk reader or type the UID manually</p>
+              <h2 className="text-base font-semibold text-foreground">Scan or Enter RFID</h2>
+              <p className="text-xs text-muted-foreground">Tap the card on the desk reader or type the UID manually</p>
             </div>
             <form onSubmit={handleScanSubmit} className="space-y-3">
               <Input
@@ -643,11 +643,11 @@ export default function RfidRegistrationPage() {
       )}
 
       {mode === "WIZARD" && step === 2 && (
-        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+        <Card className="border-border shadow-sm bg-card max-w-md mx-auto">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Student Details</CardTitle>
+            <CardTitle className="text-base font-semibold text-foreground">Student Details</CardTitle>
             <CardDescription className="text-xs">
-              Card: <code className="bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700 font-semibold">{rfidUid}</code>
+              Card: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground font-semibold">{rfidUid}</code>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -657,7 +657,7 @@ export default function RfidRegistrationPage() {
                 <select
                   value={role}
                   onChange={(e) => handleRoleChange(e.target.value as any)}
-                  className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="student">Student</option>
                   <option value="faculty">Faculty</option>
@@ -666,14 +666,14 @@ export default function RfidRegistrationPage() {
               </div>
 
               <div className="grid gap-3 grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
-                  <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="h-9" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
-                  <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="h-9" />
-                </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
+                        <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="h-9 bg-background" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
+                        <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="h-9 bg-background" />
+                      </div>
               </div>
 
               <div className="grid gap-3 grid-cols-2">
@@ -681,7 +681,7 @@ export default function RfidRegistrationPage() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Student No. <span className="text-red-500">*</span></Label>
                     <div className="flex items-center gap-1.5">
-                      <div className="h-9 px-2.5 flex items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-mono text-zinc-500 select-none shrink-0">
+                      <div className="h-9 px-2.5 flex items-center rounded-md border border-border bg-muted text-sm font-mono text-muted-foreground select-none shrink-0">
                         {STUDENT_ID_PREFIX}
                       </div>
                       <Input
@@ -692,7 +692,7 @@ export default function RfidRegistrationPage() {
                         maxLength={4}
                         required
                         disabled={generatingId}
-                        className="h-9 font-mono tracking-widest"
+                        className="h-9 font-mono tracking-widest bg-background"
                       />
                       <Button
                         type="button"
@@ -706,17 +706,17 @@ export default function RfidRegistrationPage() {
                         <RefreshCw className={`size-3.5 ${generatingId ? "animate-spin" : ""}`} />
                       </Button>
                     </div>
-                    <p className="text-[10px] text-zinc-400">Next available ID â€” edit manually if needed</p>
+                    <p className="text-[10px] text-muted-foreground">Next available ID — edit manually if needed</p>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
                     <Label className="text-xs">Employee No. <span className="text-red-500">*</span></Label>
-                    <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="EMP-0231" required className="h-9" />
+                    <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="EMP-0231" required className="h-9 bg-background" />
                   </div>
                 )}
                 <div className="space-y-1.5">
                   <Label className="text-xs">Email</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9" />
+                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9 bg-background" />
                 </div>
               </div>
 
@@ -725,7 +725,7 @@ export default function RfidRegistrationPage() {
                 <select
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Select Department</option>
                   <option value="College of Engineering">College of Engineering</option>
@@ -743,7 +743,7 @@ export default function RfidRegistrationPage() {
                     <select
                       value={course}
                       onChange={(e) => setCourse(e.target.value)}
-                      className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                      className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       required
                     >
                       <option value="">Select Course</option>
@@ -756,8 +756,8 @@ export default function RfidRegistrationPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs">Year</Label>
-                    <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none">
-                      <option value="">â€”</option>
+                    <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm focus:outline-none">
+                      <option value="">—</option>
                       <option value="1">1st</option>
                       <option value="2">2nd</option>
                       <option value="3">3rd</option>
@@ -770,11 +770,11 @@ export default function RfidRegistrationPage() {
               {role !== "student" && (
                 <div className="space-y-1.5">
                   <Label className="text-xs">Position <span className="text-red-500">*</span></Label>
-                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9" />
+                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9 bg-background" />
                 </div>
               )}
 
-              <div className="flex gap-2 justify-end pt-3 border-t border-zinc-100">
+              <div className="flex gap-2 justify-end pt-3 border-t border-border">
                 <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="cursor-pointer">
                   Cancel
                 </Button>
@@ -788,20 +788,20 @@ export default function RfidRegistrationPage() {
       )}
 
       {mode === "WIZARD" && step === 3 && (
-        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+        <Card className="border-border shadow-sm bg-card max-w-md mx-auto">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Profile Photo</CardTitle>
+            <CardTitle className="text-base font-semibold text-foreground">Profile Photo</CardTitle>
             <CardDescription className="text-xs">Capture or upload a photo for {firstName} {lastName}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="flex flex-col items-center space-y-4">
-              <div className="relative size-48 rounded-2xl overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
+              <div className="relative size-48 rounded-2xl overflow-hidden border-2 border-border bg-muted flex items-center justify-center shadow-inner">
                 {cameraActive ? (
                   <video ref={videoRef} autoPlay playsInline className="size-full object-cover scale-x-[-1]" />
                 ) : photo ? (
                   <img src={photo} alt="Preview" className="size-full object-cover" />
                 ) : (
-                  <CameraOff className="size-10 text-zinc-300" />
+                  <CameraOff className="size-10 text-muted-foreground" />
                 )}
                 {cameraActive && !photo && (
                   <div className="absolute inset-5 rounded-xl border border-dashed border-white/60 pointer-events-none" />
@@ -834,13 +834,13 @@ export default function RfidRegistrationPage() {
 
               <div className="text-center">
                 <input type="file" accept="image/*" id="photo-upload" onChange={handlePhotoUpload} className="hidden" />
-                <label htmlFor="photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-zinc-200 cursor-pointer hover:bg-zinc-50 text-xs font-medium text-zinc-600">
+                <label htmlFor="photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-border cursor-pointer hover:bg-muted text-xs font-medium text-foreground">
                   <ImageIcon className="size-3.5" /> Upload File
                 </label>
               </div>
             </div>
 
-            <div className="flex gap-2 justify-between pt-3 border-t border-zinc-100">
+            <div className="flex gap-2 justify-between pt-3 border-t border-border">
               <Button type="button" variant="outline" size="sm" onClick={() => { stopCamera(); setStep(2) }} className="flex items-center cursor-pointer gap-1">
                 <ArrowLeft className="size-3.5" /> Back
               </Button>
@@ -853,66 +853,66 @@ export default function RfidRegistrationPage() {
       )}
 
       {mode === "WIZARD" && step === 4 && (
-        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+        <Card className="border-border shadow-sm bg-card max-w-md mx-auto">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Review Registration</CardTitle>
-            <CardDescription className="text-xs">Confirm all details are correct before submitting</CardDescription>
+            <CardTitle className="text-base font-semibold text-foreground">Review Registration</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">Confirm all details are correct before submitting</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="border border-zinc-200/80 rounded-lg p-5 bg-zinc-50/50 flex flex-col items-center gap-4">
-              <div className="size-20 rounded-2xl overflow-hidden border-2 border-zinc-200 bg-white shadow-sm flex items-center justify-center shrink-0">
+            <div className="border border-border rounded-lg p-5 bg-muted/50 flex flex-col items-center gap-4">
+              <div className="size-20 rounded-2xl overflow-hidden border-2 border-border bg-card shadow-sm flex items-center justify-center shrink-0">
                 {photo ? (
                   <img src={photo} alt="Preview" className="size-full object-cover" />
                 ) : (
-                  <span className="text-xl font-bold bg-zinc-100 text-zinc-600 size-full flex items-center justify-center">
+                  <span className="text-xl font-bold bg-muted text-foreground size-full flex items-center justify-center">
                     {firstName?.[0]}{lastName?.[0]}
                   </span>
                 )}
               </div>
 
               <div className="text-center space-y-0.5">
-                <h3 className="font-bold text-base text-zinc-900">{firstName} {lastName}</h3>
-                <p className="text-xs font-mono text-zinc-500">{idNumber}</p>
+                <h3 className="font-bold text-base text-foreground">{firstName} {lastName}</h3>
+                <p className="text-xs font-mono text-muted-foreground">{idNumber}</p>
                 <Badge variant="outline" className="capitalize text-[10px] mt-1">{role}</Badge>
               </div>
             </div>
 
-            <div className="text-xs space-y-2 divide-y divide-zinc-100">
+            <div className="text-xs space-y-2 divide-y divide-border">
               <div className="flex justify-between py-1.5">
-                <span className="text-zinc-400">RFID UID</span>
-                <span className="font-mono font-semibold text-zinc-700">{rfidUid}</span>
+                <span className="text-muted-foreground">RFID UID</span>
+                <span className="font-mono font-semibold text-foreground">{rfidUid}</span>
               </div>
               {email && (
                 <div className="flex justify-between py-1.5">
-                  <span className="text-zinc-400">Email</span>
-                  <span className="text-zinc-700">{email}</span>
+                  <span className="text-muted-foreground">Email</span>
+                  <span className="text-foreground">{email}</span>
                 </div>
               )}
               {department && (
                 <div className="flex justify-between py-1.5">
-                  <span className="text-zinc-400">Department</span>
-                  <span className="text-zinc-700">{department}</span>
+                  <span className="text-muted-foreground">Department</span>
+                  <span className="text-foreground">{department}</span>
                 </div>
               )}
               {role === "student" && course && (
                 <div className="flex justify-between py-1.5">
-                  <span className="text-zinc-400">Course</span>
-                  <span className="text-zinc-700">{course}{yearLevel ? ` â€” Year ${yearLevel}` : ""}</span>
+                  <span className="text-muted-foreground">Course</span>
+                  <span className="text-foreground">{course}{yearLevel ? ` — Year ${yearLevel}` : ""}</span>
                 </div>
               )}
               {role !== "student" && position && (
                 <div className="flex justify-between py-1.5">
-                  <span className="text-zinc-400">Position</span>
-                  <span className="text-zinc-700">{position}</span>
+                  <span className="text-muted-foreground">Position</span>
+                  <span className="text-foreground">{position}</span>
                 </div>
               )}
               <div className="flex justify-between py-1.5">
-                <span className="text-zinc-400">Photo</span>
-                <span className="text-zinc-700">{photo ? "âœ“ Captured" : "Not set"}</span>
+                <span className="text-muted-foreground">Photo</span>
+                <span className="text-foreground">{photo ? "✓ Captured" : "Not set"}</span>
               </div>
             </div>
 
-            <div className="flex gap-2 justify-between pt-3 border-t border-zinc-100">
+            <div className="flex gap-2 justify-between pt-3 border-t border-border">
               <Button type="button" variant="outline" size="sm" onClick={() => setStep(3)} className="flex items-center gap-1">
                 <ArrowLeft className="size-3.5 cursor-pointer" /> Back
               </Button>
@@ -931,36 +931,36 @@ export default function RfidRegistrationPage() {
       )}
 
       {mode === "WIZARD" && step === 5 && (
-        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+        <Card className="border-border shadow-sm bg-card max-w-md mx-auto">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">Account Setup</CardTitle>
-            <CardDescription className="text-xs">
+            <CardTitle className="text-base font-semibold text-foreground">Account Setup</CardTitle>
+            <CardDescription className="text-xs text-muted-foreground">
               Create a portal account so {firstName} {lastName} can log in.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             {accountCreated ? (
               <div className="text-center space-y-4 py-4">
-                <div className="mx-auto size-10 rounded-full bg-emerald-50 flex items-center justify-center">
-                  <Check className="size-5 text-emerald-600" />
+                <div className="mx-auto size-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <Check className="size-5 text-emerald-500" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-sm font-semibold text-emerald-800">Account Created!</h3>
-                  <p className="text-xs text-zinc-400">The student can now log in.</p>
+                  <h3 className="text-sm font-semibold text-foreground">Account Created!</h3>
+                  <p className="text-xs text-muted-foreground">The student can now log in.</p>
                 </div>
-                <div className="bg-zinc-50 rounded-lg p-3 text-left space-y-1 text-xs">
+                <div className="bg-muted rounded-lg p-3 text-left space-y-1 text-xs border border-border">
                   <div className="flex justify-between">
-                    <span className="text-zinc-400">Email</span>
-                    <span className="font-mono text-zinc-700">{accountEmail}</span>
+                    <span className="text-muted-foreground">Email</span>
+                    <span className="font-mono text-foreground">{accountEmail}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-zinc-400">Password</span>
-                    <span className="font-mono text-zinc-700 flex items-center gap-2">
-                      {showPassword ? accountPassword : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-zinc-400 hover:text-zinc-600">
+                    <span className="text-muted-foreground">Password</span>
+                    <span className="font-mono text-foreground flex items-center gap-2">
+                      {showPassword ? accountPassword : "••••••••"}
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-muted-foreground hover:text-foreground">
                         {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                       </button>
-                      <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="text-zinc-400 hover:text-zinc-600">
+                      <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="text-muted-foreground hover:text-foreground">
                         <Copy className="size-3.5" />
                       </button>
                     </span>
@@ -972,22 +972,22 @@ export default function RfidRegistrationPage() {
               </div>
             ) : (
               <>
-                <div className="bg-zinc-50 rounded-lg p-3 text-xs space-y-1 mb-2">
+                <div className="bg-muted rounded-lg p-3 text-xs space-y-1 mb-2 border border-border">
                   <div className="flex justify-between">
-                    <span className="text-zinc-400">Name</span>
-                    <span className="font-medium text-zinc-700">{firstName} {lastName}</span>
+                    <span className="text-muted-foreground">Name</span>
+                    <span className="font-medium text-foreground">{firstName} {lastName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-400">ID</span>
-                    <span className="font-mono text-zinc-700">{idNumber}</span>
+                    <span className="text-muted-foreground">ID</span>
+                    <span className="font-mono text-foreground">{idNumber}</span>
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Login Email</Label>
-                    <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="student@school.edu" className="h-9" required />
-                  </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Login Email</Label>
+                        <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="student@school.edu" className="h-9 bg-background" required />
+                      </div>
                   <PasswordStrengthInput
                     label="Temporary Password"
                     id="account-password"
@@ -997,12 +997,12 @@ export default function RfidRegistrationPage() {
                   />
                 </div>
 
-                <div className="flex flex-col gap-2 pt-2 border-t border-zinc-100">
+                <div className="flex flex-col gap-2 pt-2 border-t border-border">
                   <Button size="sm" onClick={handleCreateAccount} disabled={creatingAccount} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
                     {creatingAccount ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Creating Account...</> : <><UserCheck className="size-3.5 mr-1" /> Create Portal Account</>}
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" onClick={handleSkipAccount} className="text-zinc-400 hover:text-zinc-600 cursor-pointer">
-                    Skip â€” register card only
+                  <Button type="button" variant="ghost" size="sm" onClick={handleSkipAccount} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                    Skip — register card only
                   </Button>
                 </div>
               </>
@@ -1012,30 +1012,30 @@ export default function RfidRegistrationPage() {
       )}
 
       {mode === "VERIFIED" && searchedProfile && (
-        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto overflow-hidden">
+        <Card className="border-border shadow-sm bg-card max-w-md mx-auto overflow-hidden">
           <CardContent className="py-8 px-6 space-y-5 text-center">
-            <div className="mx-auto size-10 rounded-full bg-emerald-50 flex items-center justify-center">
-              <UserCheck className="size-5 text-emerald-600" />
+            <div className="mx-auto size-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <UserCheck className="size-5 text-emerald-500" />
             </div>
             <div className="space-y-1">
-              <h2 className="text-base font-semibold text-emerald-800">Already Registered</h2>
-              <p className="text-xs text-zinc-400">This card is already linked to a clinic profile</p>
+              <h2 className="text-base font-semibold text-foreground">Already Registered</h2>
+              <p className="text-xs text-muted-foreground">This card is already linked to a clinic profile</p>
             </div>
 
-            <div className="flex items-center gap-4 border border-zinc-200/80 rounded-lg p-4 bg-zinc-50/50 text-left">
-              <div className="size-16 rounded-2xl overflow-hidden border border-zinc-200 bg-white shrink-0 flex items-center justify-center">
+            <div className="flex items-center gap-4 border border-border rounded-lg p-4 bg-muted/50 text-left">
+              <div className="size-16 rounded-2xl overflow-hidden border border-border bg-muted shrink-0 flex items-center justify-center">
                 {searchedProfile.clinic_photo_url ? (
                   <img src={searchedProfile.clinic_photo_url} alt="Profile" className="size-full object-cover" />
                 ) : (
-                  <span className="text-lg font-bold bg-zinc-100 text-zinc-600 size-full flex items-center justify-center">
+                  <span className="text-lg font-bold bg-muted text-foreground size-full flex items-center justify-center">
                     {searchedProfile.first_name[0]}{searchedProfile.last_name[0]}
                   </span>
                 )}
               </div>
               <div className="min-w-0 space-y-0.5">
-                <h3 className="font-semibold text-sm text-zinc-900 truncate">{searchedProfile.first_name} {searchedProfile.last_name}</h3>
-                <p className="text-xs font-mono text-zinc-500">{searchedProfile.student_number || searchedProfile.employee_number || "N/A"}</p>
-                <p className="text-xs text-zinc-400 truncate">{searchedProfile.department || "N/A"}</p>
+                <h3 className="font-semibold text-sm text-foreground truncate">{searchedProfile.first_name} {searchedProfile.last_name}</h3>
+                <p className="text-xs font-mono text-muted-foreground">{searchedProfile.student_number || searchedProfile.employee_number || "N/A"}</p>
+                <p className="text-xs text-muted-foreground truncate">{searchedProfile.department || "N/A"}</p>
               </div>
             </div>
 
@@ -1048,7 +1048,7 @@ export default function RfidRegistrationPage() {
               </Button>
             </div>
             {resetTimer !== null && (
-              <p className="text-[10px] text-zinc-400 animate-pulse">Auto-resetting in {resetTimer}s</p>
+              <p className="text-[10px] text-muted-foreground animate-pulse">Auto-resetting in {resetTimer}s</p>
             )}
           </CardContent>
         </Card>
@@ -1086,12 +1086,12 @@ export default function RfidRegistrationPage() {
             })}
           </div>
 
-          <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto">
+          <Card className="border-border shadow-sm bg-card max-w-md mx-auto">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Edit Profile</CardTitle>
+              <CardTitle className="text-base font-semibold text-foreground">Edit Profile</CardTitle>
               <CardDescription className="text-xs">
-                Card: <code className="bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700 font-semibold">{rfidUid}</code>
-                {searchedProfile.user_id && <span className="ml-2 text-emerald-600">â€¢ Portal account linked</span>}
+                Card: <code className="bg-muted px-1.5 py-0.5 rounded font-mono text-foreground font-semibold">{rfidUid}</code>
+                {searchedProfile.user_id && <span className="ml-2 text-emerald-500">• Portal account linked</span>}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -1099,13 +1099,13 @@ export default function RfidRegistrationPage() {
               {step === 1 && (
                 <>
                   <div className="flex flex-col items-center gap-3">
-                    <div className="relative size-28 rounded-2xl overflow-hidden border-2 border-zinc-200 bg-zinc-50 flex items-center justify-center shadow-inner">
+                    <div className="relative size-28 rounded-2xl overflow-hidden border-2 border-border bg-muted flex items-center justify-center shadow-inner">
                       {cameraActive ? (
                         <video ref={videoRef} autoPlay playsInline className="size-full object-cover scale-x-[-1]" />
                       ) : photo ? (
                         <img src={photo} alt="Preview" className="size-full object-cover" />
                       ) : (
-                        <CameraOff className="size-8 text-zinc-300" />
+                        <CameraOff className="size-8 text-muted-foreground" />
                       )}
                     </div>
                     <canvas ref={canvasRef} className="hidden" width="200" height="200" />
@@ -1127,7 +1127,7 @@ export default function RfidRegistrationPage() {
                         </>
                       )}
                       <input type="file" accept="image/*" id="edit-photo-upload" onChange={handlePhotoUpload} className="hidden" />
-                      <label htmlFor="edit-photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-zinc-200 cursor-pointer hover:bg-zinc-50 text-xs font-medium text-zinc-600">
+                      <label htmlFor="edit-photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-border cursor-pointer hover:bg-muted text-xs font-medium text-foreground">
                         <ImageIcon className="size-3.5" /> Upload
                       </label>
                     </div>
@@ -1139,7 +1139,7 @@ export default function RfidRegistrationPage() {
                       <select
                         value={role}
                         onChange={(e) => handleRoleChange(e.target.value as any)}
-                        className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         <option value="student">Student</option>
                         <option value="faculty">Faculty</option>
@@ -1150,42 +1150,42 @@ export default function RfidRegistrationPage() {
                     <div className="grid gap-3 grid-cols-2">
                       <div className="space-y-1.5">
                         <Label className="text-xs">First Name <span className="text-red-500">*</span></Label>
-                        <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="h-9" />
+                        <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="h-9 bg-background" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Last Name <span className="text-red-500">*</span></Label>
-                        <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="h-9" />
+                        <Input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="h-9 bg-background" />
                       </div>
                     </div>
 
                     <div className="grid gap-3 grid-cols-2">
                       {role === "student" ? (
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Student No. <span className="text-red-500">*</span></Label>
-                          <div className="flex items-center gap-1.5">
-                            <div className="h-9 px-2.5 flex items-center rounded-md border border-zinc-200 bg-zinc-50 text-sm font-mono text-zinc-500 select-none shrink-0">
-                              {STUDENT_ID_PREFIX}
-                            </div>
-                            <Input
-                              value={studentIdSuffix}
-                              onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                              placeholder="0000"
-                              inputMode="numeric"
-                              maxLength={4}
-                              required
-                              className="h-9 font-mono tracking-widest"
-                            />
-                          </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Student No. <span className="text-red-500">*</span></Label>
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-9 px-2.5 flex items-center rounded-md border border-border bg-muted text-sm font-mono text-muted-foreground select-none shrink-0">
+                          {STUDENT_ID_PREFIX}
                         </div>
+                        <Input
+                          value={studentIdSuffix}
+                          onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                          placeholder="0000"
+                          inputMode="numeric"
+                          maxLength={4}
+                          required
+                          className="h-9 font-mono tracking-widest bg-background"
+                        />
+                      </div>
+                    </div>
                       ) : (
                         <div className="space-y-1.5">
                           <Label className="text-xs">Employee No. <span className="text-red-500">*</span></Label>
-                          <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="EMP-0231" required className="h-9" />
+                          <Input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="EMP-0231" required className="h-9 bg-background" />
                         </div>
                       )}
                       <div className="space-y-1.5">
                         <Label className="text-xs">Email</Label>
-                        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9" />
+                        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9 bg-background" />
                       </div>
                     </div>
 
@@ -1194,7 +1194,7 @@ export default function RfidRegistrationPage() {
                       <select
                         value={department}
                         onChange={(e) => setDepartment(e.target.value)}
-                        className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         <option value="">Select Department</option>
                         <option value="College of Engineering">College of Engineering</option>
@@ -1212,7 +1212,7 @@ export default function RfidRegistrationPage() {
                           <select
                             value={course}
                             onChange={(e) => setCourse(e.target.value)}
-                            className="w-full h-9 px-3 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+                            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             required
                           >
                             <option value="">Select Course</option>
@@ -1225,8 +1225,8 @@ export default function RfidRegistrationPage() {
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-xs">Year</Label>
-                          <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none">
-                            <option value="">â€”</option>
+                          <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm focus:outline-none">
+                            <option value="">—</option>
                             <option value="1">1st</option>
                             <option value="2">2nd</option>
                             <option value="3">3rd</option>
@@ -1239,11 +1239,11 @@ export default function RfidRegistrationPage() {
                     {role !== "student" && (
                       <div className="space-y-1.5">
                         <Label className="text-xs">Position <span className="text-red-500">*</span></Label>
-                        <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9" />
+                        <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9 bg-background" />
                       </div>
                     )}
 
-                    <div className="flex gap-2 justify-end pt-3 border-t border-zinc-100">
+                    <div className="flex gap-2 justify-end pt-3 border-t border-border">
                       <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="cursor-pointer">
                         Cancel
                       </Button>
@@ -1260,15 +1260,15 @@ export default function RfidRegistrationPage() {
                 <div className="space-y-5">
                   {editAccountCreated ? (
                     <div className="text-center space-y-3 py-4">
-                      <div className="mx-auto size-10 rounded-full bg-emerald-50 flex items-center justify-center">
-                        <Check className="size-5 text-emerald-600" />
+                      <div className="mx-auto size-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                        <Check className="size-5 text-emerald-500" />
                       </div>
-                      <h3 className="text-sm font-semibold text-emerald-800">Account Already Linked</h3>
-                      <p className="text-xs text-zinc-400">This profile already has a portal account.</p>
-                      <div className="bg-zinc-50 rounded-lg p-3 text-left space-y-1 text-xs border border-zinc-200/80">
+                      <h3 className="text-sm font-semibold text-foreground">Account Already Linked</h3>
+                      <p className="text-xs text-muted-foreground">This profile already has a portal account.</p>
+                      <div className="bg-muted rounded-lg p-3 text-left space-y-1 text-xs border border-border">
                         <div className="flex justify-between">
-                          <span className="text-zinc-400">Email</span>
-                          <span className="font-mono text-zinc-700">{accountEmail}</span>
+                          <span className="text-muted-foreground">Email</span>
+                          <span className="font-mono text-foreground">{accountEmail}</span>
                         </div>
                       </div>
 
@@ -1295,7 +1295,7 @@ export default function RfidRegistrationPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => { setShowResetForm(false); setResetPassword("") }}
-                              className="text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                              className="text-muted-foreground hover:text-foreground cursor-pointer"
                             >
                               Cancel
                             </Button>
@@ -1320,15 +1320,15 @@ export default function RfidRegistrationPage() {
                   ) : (
                     <>
                       <div className="text-center space-y-0.5">
-                        <h4 className="text-sm font-semibold text-zinc-700">Create Portal Account</h4>
-                        <p className="text-[10px] text-zinc-400">Allow {firstName} {lastName} to log in to the portal</p>
+                        <h4 className="text-sm font-semibold text-foreground">Create Portal Account</h4>
+                        <p className="text-[10px] text-muted-foreground">Allow {firstName} {lastName} to log in to the portal</p>
                       </div>
 
                       <div className="space-y-3">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs">Login Email</Label>
-                          <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="student@school.edu" className="h-9" required />
-                        </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Login Email</Label>
+                        <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="student@school.edu" className="h-9 bg-background" required />
+                      </div>
                         <PasswordStrengthInput
                           label="Temporary Password"
                           id="edit-account-password"
@@ -1338,11 +1338,11 @@ export default function RfidRegistrationPage() {
                         />
                       </div>
 
-                      <div className="flex flex-col gap-2 pt-2 border-t border-zinc-100">
+                      <div className="flex flex-col gap-2 pt-2 border-t border-border">
                         <Button size="sm" onClick={handleCreateEditAccount} disabled={creatingAccount} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
                           {creatingAccount ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Creating...</> : <><UserCheck className="size-3.5 mr-1" /> Create Account</>}
                         </Button>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => setStep(1)} className="text-zinc-400 hover:text-zinc-600 cursor-pointer">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setStep(1)} className="text-muted-foreground hover:text-foreground cursor-pointer">
                           <ArrowLeft className="size-3.5 mr-1" /> Back to Edit
                         </Button>
                       </div>
@@ -1356,15 +1356,15 @@ export default function RfidRegistrationPage() {
       )}
 
       {mode === "SUCCESS" && searchedProfile && (
-        <Card className="border-zinc-200/80 shadow-sm bg-white max-w-md mx-auto overflow-hidden">
+        <Card className="border-border shadow-sm bg-card max-w-md mx-auto overflow-hidden">
           <CardContent className="py-8 px-6 space-y-5 text-center">
-            <div className="size-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto border border-emerald-200/60">
-              <Check className="size-7 text-emerald-600" />
+            <div className="size-14 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto border border-emerald-500/20">
+              <Check className="size-7 text-emerald-500" />
             </div>
 
             <div className="space-y-1">
-              <h2 className="text-base font-bold text-zinc-900">RFID Linked Successfully</h2>
-              <p className="text-xs text-zinc-400">
+              <h2 className="text-base font-bold text-foreground">RFID Linked Successfully</h2>
+              <p className="text-xs text-muted-foreground">
                 {accountCreated || editAccountCreated
                   ? "Portal account has been created. The student can now log in."
                   : skippedAccount
@@ -1374,19 +1374,19 @@ export default function RfidRegistrationPage() {
             </div>
 
             {(accountCreated || editAccountCreated) && (
-              <div className="bg-zinc-50 rounded-lg p-3 text-left space-y-1 text-xs border border-zinc-200/80">
+              <div className="bg-muted rounded-lg p-3 text-left space-y-1 text-xs border border-border">
                 <div className="flex justify-between">
-                  <span className="text-zinc-400">Email</span>
-                  <span className="font-mono text-zinc-700">{accountEmail}</span>
+                  <span className="text-muted-foreground">Email</span>
+                  <span className="font-mono text-foreground">{accountEmail}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-zinc-400">Password</span>
-                  <span className="font-mono text-zinc-700 flex items-center gap-2">
-                    {showPassword ? accountPassword : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-zinc-400 hover:text-zinc-600">
+                  <span className="text-muted-foreground">Password</span>
+                  <span className="font-mono text-foreground flex items-center gap-2">
+                    {showPassword ? accountPassword : "••••••••"}
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-muted-foreground hover:text-foreground">
                       {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                     </button>
-                    <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="text-zinc-400 hover:text-zinc-600">
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="text-muted-foreground hover:text-foreground">
                       <Copy className="size-3.5" />
                     </button>
                   </span>
@@ -1394,20 +1394,20 @@ export default function RfidRegistrationPage() {
               </div>
             )}
 
-            <div className="flex items-center gap-4 border border-zinc-200/80 rounded-lg p-4 bg-zinc-50/50 text-left">
-              <div className="size-14 rounded-2xl overflow-hidden border border-zinc-200 bg-white shrink-0 flex items-center justify-center">
+            <div className="flex items-center gap-4 border border-border rounded-lg p-4 bg-muted/50 text-left">
+              <div className="size-14 rounded-2xl overflow-hidden border border-border bg-muted shrink-0 flex items-center justify-center">
                 {searchedProfile.clinic_photo_url ? (
                   <img src={searchedProfile.clinic_photo_url} alt="Profile" className="size-full object-cover" />
                 ) : (
-                  <span className="font-bold bg-zinc-100 text-zinc-600 size-full flex items-center justify-center">
+                  <span className="font-bold bg-muted text-foreground size-full flex items-center justify-center">
                     {searchedProfile.first_name[0]}{searchedProfile.last_name[0]}
                   </span>
                 )}
               </div>
               <div className="min-w-0 text-xs space-y-0.5">
-                <div className="font-semibold text-sm text-zinc-900">{searchedProfile.first_name} {searchedProfile.last_name}</div>
-                <div className="font-mono text-zinc-500">{searchedProfile.student_number || searchedProfile.employee_number}</div>
-                <div className="font-mono text-zinc-400">{searchedProfile.rfid_uid}</div>
+                <div className="font-semibold text-sm text-foreground">{searchedProfile.first_name} {searchedProfile.last_name}</div>
+                <div className="font-mono text-muted-foreground">{searchedProfile.student_number || searchedProfile.employee_number}</div>
+                <div className="font-mono text-muted-foreground">{searchedProfile.rfid_uid}</div>
               </div>
             </div>
 
@@ -1415,7 +1415,7 @@ export default function RfidRegistrationPage() {
               Register Another (Esc)
             </Button>
             {resetTimer !== null && (
-              <p className="text-[10px] text-zinc-400 animate-pulse">Auto-resetting in {resetTimer}s</p>
+              <p className="text-[10px] text-muted-foreground animate-pulse">Auto-resetting in {resetTimer}s</p>
             )}
           </CardContent>
         </Card>

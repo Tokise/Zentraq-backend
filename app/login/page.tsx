@@ -57,20 +57,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <div
         className={`w-full max-w-md space-y-6 transition-all duration-300 ${isSuccess ? "scale-[0.99] opacity-90" : "scale-100 opacity-100"
           }`}
       >
-        <Card className="rounded-xl border-slate-200 bg-white shadow-lg">
+        <Card className="border-border">
           <div className="flex flex-col items-center space-y-3 text-center pt-6">
             <Image
-              src="/4.png"
-              alt="Zentraq Clinic Center"
-              width={200}
-              height={50}
+              src="/logo.png"
+              alt="Bestlink Clinic Center"
+              width={300}
+              height={150}
               priority
-              className="h-12 w-auto object-contain"
+              className="h-20 w-auto object-contain"
             />
           </div>
 
@@ -79,7 +79,7 @@ export default function LoginPage() {
               <div className="grid gap-2">
                 <Label
                   htmlFor="email"
-                  className="text-xs font-semibold text-slate-700"
+                  className="text-xs font-semibold text-foreground"
                 >
                   Email Address
                 </Label>
@@ -91,14 +91,14 @@ export default function LoginPage() {
                   placeholder="Enter your email address"
                   required
                   disabled={isLoading || isSuccess}
-                  className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400"
+                  className="h-10"
                 />
               </div>
 
               <div className="grid gap-2">
                 <Label
                   htmlFor="password"
-                  className="text-xs font-semibold text-slate-700"
+                  className="text-xs font-semibold text-foreground"
                 >
                   Password
                 </Label>
@@ -111,13 +111,13 @@ export default function LoginPage() {
                     type={showPassword ? "text" : "password"}
                     required
                     disabled={isLoading || isSuccess}
-                    className="h-10 border-slate-200 bg-white text-slate-900 focus:border-slate-400 focus:ring-slate-400 pr-10"
+                    className="h-10 pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     disabled={isLoading || isSuccess}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                     tabIndex={-1}
                   >
                     {showPassword ? (
@@ -134,7 +134,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isLoading || isSuccess}
-                className="h-10 w-full cursor-pointer text-sm font-medium text-white shadow-sm"
+                className="h-10 w-full cursor-pointer text-sm font-medium"
               >
                 {isSuccess ? (
                   <>

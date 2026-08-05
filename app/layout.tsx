@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Zentraq — Clinic Management",
-  description: "Clinic management system for healthcare operations",
+  title: "BCP - Clinic Management System",
+  description: "Your way for better wellness",
 }
 
 export default function RootLayout({
@@ -41,13 +41,13 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <NextTopLoader
-          color="#1f6feb"
-          height={4}
+          color="#0f6647"
+          height={5}
           showSpinner={false}
           crawl
           easing="ease"
           speed={250}
-          shadow="0 0 10px #1f6feb, 0 0 5px #1f6feb"
+          shadow="none"
         />
 
         {children}

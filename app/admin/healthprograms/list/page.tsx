@@ -89,25 +89,25 @@ export default function AdminServicesProgramsPage() {
         )}
       </div>
 
-      <Card className="border-zinc-200/80 shadow-sm bg-white overflow-hidden">
+      <Card className="border-border shadow-sm bg-card overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
-            <div className="divide-y divide-zinc-100">
+            <div className="divide-y divide-border">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3 px-4 py-3 animate-pulse">
-                  <div className="size-9 rounded-full bg-zinc-100 shrink-0" />
+                  <div className="size-9 rounded-full bg-muted shrink-0" />
                   <div className="flex-1 space-y-1.5">
-                    <div className="h-3 w-40 bg-zinc-100 rounded" />
-                    <div className="h-2.5 w-24 bg-zinc-100 rounded" />
+                    <div className="h-3 w-40 bg-muted rounded" />
+                    <div className="h-2.5 w-24 bg-muted rounded" />
                   </div>
                 </div>
               ))}
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-14 px-6 text-center space-y-1.5">
-              <Heart className="size-7 text-zinc-300 mx-auto" />
-              <p className="text-sm font-medium text-zinc-600">No health programs</p>
-              <p className="text-xs text-zinc-400">Health programs will appear here.</p>
+              <Heart className="size-7 text-muted-foreground mx-auto" />
+              <p className="text-sm font-medium text-foreground">No health programs</p>
+              <p className="text-xs text-muted-foreground">Health programs will appear here.</p>
             </div>
           ) : (
             <>
@@ -122,15 +122,15 @@ export default function AdminServicesProgramsPage() {
                 </TableHeader>
                 <TableBody>
                   {paginated.map((p) => (
-                    <TableRow key={p.id} className="hover:bg-zinc-50/50">
+                    <TableRow key={p.id} className="hover:bg-muted/50">
                       <TableCell>
                         <div>
-                          <p className="text-sm font-medium">{p.name}</p>
-                          {p.description && <p className="text-xs text-zinc-400 line-clamp-1">{p.description}</p>}
+                          <p className="text-sm font-medium text-foreground">{p.name}</p>
+                          {p.description && <p className="text-xs text-muted-foreground line-clamp-1">{p.description}</p>}
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-zinc-600 capitalize">{p.program_type || "â€”"}</TableCell>
-                      <TableCell className="text-sm text-zinc-600">
+                      <TableCell className="text-sm text-foreground capitalize">{p.program_type || "â€”"}</TableCell>
+                      <TableCell className="text-sm text-foreground">
                         {p.start_date ? new Date(p.start_date).toLocaleDateString() : "â€”"} - {p.end_date ? new Date(p.end_date).toLocaleDateString() : "â€”"}
                       </TableCell>
                       <TableCell>{statusBadge(p.is_active)}</TableCell>
@@ -140,7 +140,7 @@ export default function AdminServicesProgramsPage() {
               </Table>
 
               {!loading && filtered.length > 0 && (
-                <div className="px-4 py-3 border-t border-zinc-100">
+                <div className="px-4 py-3 border-t border-border">
                   <Pagination
                     currentPage={currentPage}
                     totalPages={totalPages}
