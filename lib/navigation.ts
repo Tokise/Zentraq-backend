@@ -29,6 +29,7 @@ import {
   Syringe,
   BookOpen,
   ScrollText,
+  Search,
   ClipboardCheck,
   Stethoscope as StethoscopeAlt,
 } from "lucide-react"
@@ -57,39 +58,44 @@ export const adminNavigation: NavGroup[] = [
     ],
   },
   {
-    label: "User Management",
+    label: "Records",
     items: [
-      { title: "Students", href: "/admin/student-accounts", icon: GraduationCap, roles: ["admin"] },
-      { title: "Faculty", href: "/admin/faculty-accounts", icon: Users, roles: ["admin"] },
-      { title: "Clinic Accounts", href: "/admin/clinic-accounts", icon: UserCog, roles: ["admin"] },
+      { title: "Search Patients", href: "/admin/records/search", icon: Search, roles: ["admin"] },
+      { title: "Medical Records", href: "/admin/records/view", icon: HeartPulse, roles: ["admin"] },
     ],
   },
+  { label: "Clinical Operations", items: [
+    { title: "Visits", href: "/admin/visits/history", icon: Stethoscope, roles: ["admin"] },
+    { title: "Follow-ups", href: "/admin/visits/followup", icon: ClipboardCheck, roles: ["admin"] },
+    { title: "Medicine", href: "/admin/medicine/stock", icon: Pill, roles: ["admin"] },
+    { title: "Appointments", href: "/admin/appointments/calendar", icon: CalendarDays, roles: ["admin"] },
+    { title: "Incidents", href: "/admin/incidents/log", icon: AlertTriangle, roles: ["admin"] },
+  ] },
   {
     label: "Portal Management",
     items: [
-      { title: "Announcements", href: "/admin/clinic-announcements", icon: Megaphone, roles: ["admin"] },
-      { title: "Audit Logs", href: "/admin/audit-logs", icon: ShieldAlert, roles: ["admin"] },
-      { title: "Roles & Permissions", href: "/admin/roles", icon: Shield, roles: ["admin"] },
+      { title: "Announcements", href: "/admin/announcement", icon: Megaphone, roles: ["admin"] },
+      { title: "Audit Logs", href: "/admin/useraccess/activity_logs", icon: ShieldAlert, roles: ["admin"] },
+      { title: "Roles & Permissions", href: "/admin/useraccess/roles", icon: Shield, roles: ["admin"] },
+      { title: "User Approvals", href: "/admin/useraccess/approval", icon: UserCheck, roles: ["admin"] },
+      { title: "Password Resets", href: "/admin/useraccess/password_reset", icon: UserCog, roles: ["admin"] },
     ],
   },
   {
     label: "Services",
     items: [
-      { title: "Services", href: "/admin/services", icon: Activity, roles: ["admin"] },
-      { title: "Health Programs", href: "/admin/services/programs", icon: FileCheck, roles: ["admin"] },
-      { title: "Health Clearance", href: "/admin/services/clearance", icon: Stethoscope, roles: ["admin"] },
+      { title: "Health Programs", href: "/admin/healthprograms/list", icon: FileCheck, roles: ["admin"] },
+      { title: "Program Schedule", href: "/admin/healthprograms/schedule", icon: CalendarDays, roles: ["admin"] },
+      { title: "Program Reports", href: "/admin/healthprograms/reports", icon: BarChart3, roles: ["admin"] },
+      { title: "Staff Health", href: "/admin/staffhealth/record", icon: HeartPulse, roles: ["admin"] },
+      { title: "Clearances", href: "/admin/clearance/request", icon: FileText, roles: ["admin"] },
+      { title: "Reports", href: "/admin/reports/generate", icon: BarChart3, roles: ["admin"] },
     ],
   },
   {
     label: "RFID",
     items: [
       { title: "RFID Registration", href: "/admin/rfid-registration", icon: UserPlus, roles: ["admin"] },
-    ],
-  },
-  {
-    label: "System",
-    items: [
-      { title: "System Settings", href: "/admin/settings", icon: Settings, roles: ["admin"] },
     ],
   },
 ]
@@ -105,53 +111,33 @@ export const doctorNavigation: NavGroup[] = [
     ],
   },
   {
-    label: "Patients",
+    label: "Records",
     items: [
-      { title: "Student Records", href: "/doctor/patients", icon: GraduationCap, roles: ["doctor"] },
-      { title: "Faculty Records", href: "/doctor/patients/faculty", icon: Users, roles: ["doctor"] },
+      { title: "Search Patients", href: "/doctor/records/search", icon: Search, roles: ["doctor"] },
     ],
   },
-  {
-    label: "Consultations",
-    items: [
-      { title: "Pending Review", href: "/doctor/consultations/pending", icon: ClipboardCheck, roles: ["doctor"] },
-      { title: "Active Consultations", href: "/doctor/consultations", icon: Stethoscope, roles: ["doctor"] },
-      { title: "Completed", href: "/doctor/consultations/completed", icon: ClipboardList, roles: ["doctor"] },
-    ],
-  },
-  {
-    label: "Prescriptions",
-    items: [
-      { title: "Write Prescription", href: "/doctor/prescriptions/new", icon: Pill, roles: ["doctor"] },
-      { title: "Prescription History", href: "/doctor/prescriptions", icon: Pill, roles: ["doctor"] },
-    ],
-  },
-  {
-    label: "Appointments",
-    items: [
-      { title: "My Schedule", href: "/doctor/appointments", icon: CalendarDays, roles: ["doctor"] },
-      { title: "Appointment Requests", href: "/doctor/appointments/requests", icon: ListOrdered, roles: ["doctor"] },
-    ],
-  },
+  { label: "Clinical", items: [
+    { title: "Visits", href: "/doctor/visits/history", icon: Stethoscope, roles: ["doctor"] },
+    { title: "Appointments", href: "/doctor/appointments/calendar", icon: CalendarDays, roles: ["doctor"] },
+    { title: "Clearances", href: "/doctor/clearance/history", icon: FileCheck, roles: ["doctor"] },
+    { title: "Reports", href: "/doctor/reports/generate", icon: BarChart3, roles: ["doctor"] },
+    { title: "Export Data", href: "/doctor/reports/export", icon: FileText, roles: ["doctor"] },
+  ] },
   {
     label: "Incidents",
     items: [
-      { title: "Active Cases", href: "/doctor/incidents", icon: AlertTriangle, roles: ["doctor"] },
-      { title: "Case History", href: "/doctor/incidents/history", icon: History, roles: ["doctor"] },
+      { title: "Case Status", href: "/doctor/incidents/status", icon: AlertTriangle, roles: ["doctor"] },
     ],
   },
   {
-    label: "Health Clearances",
+    label: "Services",
     items: [
-      { title: "Medical Evaluation", href: "/doctor/clearances", icon: FileCheck, roles: ["doctor"] },
-      { title: "Clearance Requests", href: "/doctor/clearances/requests", icon: FileText, roles: ["doctor"] },
-    ],
-  },
-  {
-    label: "Analytics",
-    items: [
-      { title: "My Statistics", href: "/doctor/analytics", icon: BarChart3, roles: ["doctor"] },
-      { title: "Clinic Overview", href: "/doctor/analytics/overview", icon: Activity, roles: ["doctor"] },
+      { title: "Health Programs", href: "/doctor/healthprograms/list", icon: FileCheck, roles: ["doctor"] },
+      { title: "Program Participants", href: "/doctor/healthprograms/participants", icon: Users, roles: ["doctor"] },
+      { title: "Program Reports", href: "/doctor/healthprograms/reports", icon: BarChart3, roles: ["doctor"] },
+      { title: "Staff Health Record", href: "/doctor/staffhealth/record", icon: HeartPulse, roles: ["doctor"] },
+      { title: "Staff Consultations", href: "/doctor/staffhealth/consultation", icon: Stethoscope, roles: ["doctor"] },
+      { title: "Certificates", href: "/doctor/staffhealth/certificate_request", icon: FileText, roles: ["doctor"] },
     ],
   },
 ]
@@ -167,56 +153,46 @@ export const nurseNavigation: NavGroup[] = [
     ],
   },
   {
-    label: "Patients",
+    label: "Visits",
     items: [
-      { title: "Student Records", href: "/nurse/patients", icon: GraduationCap, roles: ["nurse"] },
-      { title: "Faculty Records", href: "/nurse/patients/faculty", icon: Users, roles: ["nurse"] },
+      { title: "New Walk-in", href: "/nurse/visits/new_entry", icon: UserPlus, roles: ["nurse"] },
     ],
   },
+  { label: "Records", items: [{ title: "Patient Records", href: "/nurse/records/search", icon: Search, roles: ["nurse"] }] },
   {
-    label: "Consultations",
+    label: "Medicine",
     items: [
-      { title: "New Walk-in", href: "/nurse/consultations/new", icon: UserPlus, roles: ["nurse"] },
-      { title: "Triage", href: "/nurse/consultations/triage", icon: ClipboardCheck, roles: ["nurse"] },
-      { title: "Active", href: "/nurse/consultations", icon: StethoscopeAlt, roles: ["nurse"] },
-      { title: "Completed", href: "/nurse/consultations/completed", icon: ClipboardList, roles: ["nurse"] },
-    ],
-  },
-  {
-    label: "Pharmacy",
-    items: [
-      { title: "Dispense Medicine", href: "/nurse/pharmacy/dispense", icon: Pill, roles: ["nurse"] },
-      { title: "Inventory Status", href: "/nurse/pharmacy/stock", icon: Package, roles: ["nurse"] },
-      { title: "Low Stock Alerts", href: "/nurse/pharmacy/alerts", icon: AlertTriangle, roles: ["nurse"] },
+      { title: "Dispense Medicine", href: "/nurse/medicine/dispense", icon: Pill, roles: ["nurse"] },
+      { title: "Inventory Status", href: "/nurse/medicine/stock", icon: Package, roles: ["nurse"] },
+      { title: "Low Stock Alerts", href: "/nurse/medicine/low_stock_alerts", icon: AlertTriangle, roles: ["nurse"] },
     ],
   },
   {
     label: "Appointments",
     items: [
-      { title: "Requests", href: "/nurse/appointments/requests", icon: ListOrdered, roles: ["nurse"] },
-      { title: "Today's Schedule", href: "/nurse/appointments/today", icon: CalendarDays, roles: ["nurse"] },
-      { title: "Manage Appointments", href: "/nurse/appointments", icon: CalendarDays, roles: ["nurse"] },
+      { title: "Today's Schedule", href: "/nurse/appointments/calendar", icon: CalendarDays, roles: ["nurse"] },
     ],
   },
   {
     label: "Incidents",
     items: [
-      { title: "Report Incident", href: "/nurse/incidents/new", icon: AlertTriangle, roles: ["nurse"] },
-      { title: "Case Management", href: "/nurse/incidents", icon: HeartPulse, roles: ["nurse"] },
+      { title: "Report Incident", href: "/nurse/incidents/report", icon: AlertTriangle, roles: ["nurse"] },
+    ],
+  },
+  { label: "Clearances", items: [{ title: "Clearance Requests", href: "/nurse/clearance/history", icon: FileCheck, roles: ["nurse"] }] },
+  {
+    label: "Services",
+    items: [
+      { title: "Health Programs", href: "/nurse/healthprograms/list", icon: FileCheck, roles: ["nurse"] },
+      { title: "Program Participants", href: "/nurse/healthprograms/participants", icon: Users, roles: ["nurse"] },
+      { title: "Staff Health Record", href: "/nurse/staffhealth/record", icon: HeartPulse, roles: ["nurse"] },
+      { title: "Staff Consultations", href: "/nurse/staffhealth/consultation", icon: Stethoscope, roles: ["nurse"] },
     ],
   },
   {
-    label: "Health Clearances",
+    label: "Reports",
     items: [
-      { title: "Process Requests", href: "/nurse/clearances", icon: FileCheck, roles: ["nurse"] },
-      { title: "Issued Certificates", href: "/nurse/clearances/issued", icon: ScrollText, roles: ["nurse"] },
-    ],
-  },
-  {
-    label: "RFID Check-in",
-    items: [
-      { title: "Kiosk Status", href: "/nurse/rfid", icon: CreditCard, roles: ["nurse"] },
-      { title: "Check-in Log", href: "/nurse/rfid/log", icon: ClipboardList, roles: ["nurse"] },
+      { title: "View Reports", href: "/nurse/reports/view_only", icon: BarChart3, roles: ["nurse"] },
     ],
   },
 ]
@@ -235,30 +211,21 @@ export const studentNavigation: NavGroup[] = [
   {
     label: "Appointments",
     items: [
-      { title: "Request Appointment", href: "/student/appointments/new", icon: CalendarDays },
-      { title: "My Appointments", href: "/student/appointments", icon: CalendarDays },
-      { title: "Appointment History", href: "/student/appointments/history", icon: History },
+      { title: "Request Appointment", href: "/student/appointments/book", icon: CalendarDays },
     ],
   },
   {
     label: "Health Records",
     items: [
-      { title: "My Health Records", href: "/student/records", icon: HeartPulse },
-      { title: "Consultations", href: "/student/records/consultations", icon: Stethoscope },
-      { title: "Prescriptions", href: "/student/records/prescriptions", icon: Pill },
+      { title: "My Health Records", href: "/student/records/my_record", icon: HeartPulse },
+      { title: "Consultations", href: "/student/visits/my_history", icon: Stethoscope },
     ],
   },
   {
     label: "Clearances",
     items: [
-      { title: "My Clearances", href: "/student/clearances", icon: FileCheck },
-      { title: "Request Clearance", href: "/student/clearances/request", icon: FileText },
-    ],
-  },
-  {
-    label: "Account",
-    items: [
-      { title: "Settings", href: "/settings", icon: Settings },
+      { title: "My Clearances", href: "/student/clearance/my_history", icon: FileCheck },
+      { title: "Request Clearance", href: "/student/clearance/request", icon: FileText },
     ],
   },
 ]
@@ -277,30 +244,21 @@ export const facultyNavigation: NavGroup[] = [
   {
     label: "Appointments",
     items: [
-      { title: "Request Appointment", href: "/faculty/appointments/new", icon: CalendarDays },
-      { title: "My Appointments", href: "/faculty/appointments", icon: CalendarDays },
-      { title: "Appointment History", href: "/faculty/appointments/history", icon: History },
+      { title: "Request Appointment", href: "/faculty/appointments/book", icon: CalendarDays },
     ],
   },
   {
     label: "Health Records",
     items: [
-      { title: "My Health Records", href: "/faculty/records", icon: HeartPulse },
-      { title: "Consultations", href: "/faculty/records/consultations", icon: Stethoscope },
-      { title: "Prescriptions", href: "/faculty/records/prescriptions", icon: Pill },
+      { title: "My Health Records", href: "/faculty/staffhealth/my_record", icon: HeartPulse },
+      { title: "Consultations", href: "/faculty/visits/my_history", icon: Stethoscope },
     ],
   },
   {
     label: "Clearances",
     items: [
-      { title: "My Clearances", href: "/faculty/clearances", icon: FileCheck },
-      { title: "Request Clearance", href: "/faculty/clearances/request", icon: FileText },
-    ],
-  },
-  {
-    label: "Account",
-    items: [
-      { title: "Settings", href: "/settings", icon: Settings },
+      { title: "My Clearances", href: "/faculty/clearance/my_history", icon: FileCheck },
+      { title: "Request Clearance", href: "/faculty/clearance/request", icon: FileText },
     ],
   },
 ]

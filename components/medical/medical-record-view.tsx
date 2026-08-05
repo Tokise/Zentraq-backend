@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -9,8 +9,8 @@ import { MedicalHistorySection } from "./medical-history-section"
 import { AllergiesSection } from "./allergies-section"
 import { MedicationsSection } from "./medications-section"
 import { ImmunizationsSection } from "./immunizations-section"
-import type { PatientMedicalRecord } from "@/app/actions/medical-records"
-import { addPatientAllergy, addPatientImmunization, addPatientMedication, addMedicalHistory } from "@/app/actions/medical-records"
+import type { PatientMedicalRecord } from "@/actions/clinical/records"
+import { addPatientAllergy, addPatientImmunization, addPatientMedication, addMedicalHistory } from "@/actions/clinical/records"
 import { toast } from "sonner"
 
 interface MedicalRecordViewProps {

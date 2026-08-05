@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useRef, useEffect, useMemo } from "react"
 import { useRouter, usePathname } from "next/navigation"
@@ -24,7 +24,7 @@ import {
 import type { UserRole } from "@/lib/auth/roles"
 import { NotificationDropdown } from "@/components/layout/notification-dropdown"
 import { getPageTitle } from "@/lib/navigation"
-import { signOutAction } from "@/app/actions/auth"
+import { signOutAction } from "@/actions/system/auth"
 
 type DashboardShellProps = {
   children: React.ReactNode
@@ -82,7 +82,7 @@ export function DashboardShell({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sidebar — responsive */}
+      {/* Sidebar â€” responsive */}
       <div
         className={cn(
           "hidden lg:block transition-all duration-300",

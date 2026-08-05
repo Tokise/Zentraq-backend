@@ -1,6 +1,6 @@
-import { PageHeader } from "@/components/page-header"
+﻿import { PageHeader } from "@/components/page-header"
 import { QueueTable } from "@/components/workflow/queue-table"
-import { getAppointmentQueue, getClearanceQueue, getConsultationQueue, getIncidentQueue, getInventoryQueue } from "@/app/actions/workflow-queries"
+import { getAppointmentQueue, getClearanceQueue, getConsultationQueue, getIncidentQueue, getInventoryQueue } from "@/actions/inventory/workflow-queries"
 
 export async function AppointmentQueuePage({ title, description, statuses }: { title: string; description: string; statuses?: string[] }) {
   const result = await getAppointmentQueue(statuses)
@@ -17,8 +17,7 @@ export async function ConsultationQueuePage({ title, description, statuses }: { 
         emptyMessage={result.error ?? "No consultations match this view."}
         rows={result.consultations.map((item) => ({
           id: item.id,
-          values: [item.patient_name, item.complaint, item.doctor_name ?? "—", new Date(item.check_in_time).toLocaleString(), item.status],
-          action: { label: "Write Prescription", href: `/doctor/prescriptions/new?consultationId=${item.id}` }
+          values: [item.patient_name, item.complaint, item.doctor_name ?? "â€”", new Date(item.check_in_time).toLocaleString(), item.status],
         }))}
       />
     </main>

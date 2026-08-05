@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { MedicineSelector } from "./medicine-selector"
-import { type Medicine } from "@/app/actions/prescriptions"
+import { type Medicine } from "@/actions/clinical/prescriptions"
 import { toast } from "sonner"
 
 interface PrescriptionFormProps {

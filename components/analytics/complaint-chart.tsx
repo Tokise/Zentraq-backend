@@ -1,8 +1,8 @@
-"use client"
+﻿"use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import type { ComplaintFrequency } from "@/app/actions/analytics"
+import type { ComplaintFrequency } from "@/actions/reports/analytics"
 
 interface ComplaintChartProps {
   data: ComplaintFrequency[]

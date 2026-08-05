@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname, useSearchParams } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { getNavigationForRole, studentNavigation } from "@/lib/navigation"
 import { filterNavigationForRole, isStudent, type UserRole } from "@/lib/auth/roles"
@@ -15,7 +15,6 @@ type AppSidebarProps = {
 
 export function AppSidebar({ onNavigate, collapsed = false, userRole = "nurse" }: AppSidebarProps) {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
 
   const navGroups = getNavigationForRole(userRole)
   const visibleNavigation = filterNavigationForRole(navGroups, userRole)
@@ -47,13 +46,7 @@ export function AppSidebar({ onNavigate, collapsed = false, userRole = "nurse" }
             )}
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const isActive = pathname === item.href || (
-                  pathname.startsWith("/doctor/patients/") && (
-                    searchParams.get("type") === "faculty"
-                      ? item.href === "/doctor/patients/faculty"
-                      : item.href === "/doctor/patients"
-                  )
-                )
+                const isActive = pathname === item.href
                 const Icon = item.icon
                 return (
                   <li key={item.href}>

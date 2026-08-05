@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Search, Pill, AlertTriangle } from "lucide-react"
-import { getMedicineCatalog, type Medicine } from "@/app/actions/prescriptions"
+import { getMedicineCatalog, type Medicine } from "@/actions/clinical/prescriptions"
 import { toast } from "sonner"
 
 interface MedicineSelectorProps {
