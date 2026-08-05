@@ -256,10 +256,10 @@ These pages exist in the navigation and have route files, but currently render t
 |---|------|-------|----------|
 | P.1 | Analytics | `/reports/analytics` | High |
 | P.2 | Compliance | `/reports/compliance` | Medium |
-| P.3 | Roles Management | `/admin/roles` | Medium |
-| P.4 | Audit Logs | `/admin/audit-logs` | High |
+| P.3 | Roles Management | `/admin/useraccess/roles` | Medium |
+| P.4 | Audit Logs | `/admin/useraccess/activity_logs` | High |
 | P.5 | System Settings | `/admin/settings` | Medium |
-| P.6 | Health Programs | `/admin/services/programs` | Low |
+| P.6 | Health Programs | `/admin/healthprograms/list` | Low |
 | P.7 | Health Clearance | `/admin/services/clearance` | Low |
 | P.8 | Faculty Accounts | `/admin/faculty-accounts` | Medium |
 | P.9 | Create Faculty Accounts | `/admin/faculty-accounts/create` | Medium |
@@ -403,7 +403,7 @@ gantt
 - [ ] Build `/admin/faculty-accounts` page — data table with search, department filter, status filter, pagination
 - [ ] Build `/admin/faculty-accounts/create` page — multi-field creation form with server action
 - [ ] Build faculty account edit dialog
-- [ ] Build `/admin/audit-logs` page — filterable, sortable data table with date range picker
+- [ ] Build `/admin/useraccess/activity_logs` page — filterable, sortable data table with date range picker
 - [ ] Create `logAuditEvent()` server utility function
 - [ ] Integrate audit logging into existing server actions (login, account CRUD, RFID registration)
 - [ ] Add audit log export endpoint (CSV)
@@ -485,7 +485,7 @@ gantt
 - [ ] Create `program_enrollments` table migration (id, student_id, program_id, status, enrolled_at, completed_at)
 - [ ] Create `health_clearances` table migration (id, student_id, type, status, requested_at, approved_at, approved_by, documents)
 - [ ] Create `clinic_settings` table migration (key-value store for system config)
-- [ ] Build `/admin/services/programs` page — program list with CRUD, enrollment tracking
+- [ ] Build `/admin/healthprograms/list` page — program list with CRUD, enrollment tracking
 - [ ] Build `/admin/services/clearance` page — clearance request queue with approval workflow
 - [ ] Build `/admin/settings` page — tabbed settings interface (General, Notifications, Appointments, Security)
 - [ ] Add health clearance request to student portal
@@ -523,7 +523,7 @@ gantt
 ### Technical Tasks
 
 - [ ] Create `roles` and `permissions` tables migration
-- [ ] Build `/admin/roles` page — role list with expandable permission matrix
+- [ ] Build `/admin/useraccess/roles` page — role list with expandable permission matrix
 - [ ] Build role creation/edit dialog with permission checkboxes
 - [ ] Integrate permission checks into existing navigation filtering
 - [ ] Build command palette component (Cmd+K search across patients, consultations, medicines)

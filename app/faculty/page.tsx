@@ -1,10 +1,10 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getFacultyProfileDTO, type FacultyProfileDTO } from "./actions"
+import { getFacultyProfileDTO, type FacultyProfileDTO } from "@/actions/faculty/profile"
 import { CalendarDays, HeartPulse, FileCheck, Megaphone } from "lucide-react"
 import Link from "next/link"
 
@@ -76,7 +76,7 @@ export default function FacultyDashboard() {
 
             {/* Quick access cards */}
             <div className="grid gap-4 sm:grid-cols-2">
-                <Link href="/faculty/appointments" className="block">
+                <Link href="/faculty/appointments/book" className="block">
                     <Card className="hover:shadow-md transition-shadow cursor-pointer">
                         <CardHeader className="pb-2">
                             <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -90,7 +90,7 @@ export default function FacultyDashboard() {
                     </Card>
                 </Link>
 
-                <Link href="/faculty/records" className="block">
+                <Link href="/faculty/staffhealth/my_record" className="block">
                     <Card className="hover:shadow-md transition-shadow cursor-pointer">
                         <CardHeader className="pb-2">
                             <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-blue-500/10 text-blue-500">
@@ -104,7 +104,7 @@ export default function FacultyDashboard() {
                     </Card>
                 </Link>
 
-                <Link href="/faculty/clearances" className="block">
+                <Link href="/faculty/clearance/my_history" className="block">
                     <Card className="hover:shadow-md transition-shadow cursor-pointer">
                         <CardHeader className="pb-2">
                             <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">

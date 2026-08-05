@@ -1,11 +1,11 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, useCallback } from "react"
 import { PageHeader } from "@/components/page-header"
 import { SectionHeader } from "@/components/section-header"
 import { StatCard } from "@/components/stat-card"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { getDashboardDataAction } from "@/lib/data/dashboard-actions"
+import { getDashboardDataAction } from "@/actions/system/dashboard"
 import { Stethoscope, Users, AlertTriangle, FileCheck } from "lucide-react"
 
 export default function DoctorDashboardPage() {
@@ -45,10 +45,10 @@ export default function DoctorDashboardPage() {
             />
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="In Consultation Today" value={loading ? "—" : stats.patientsToday} />
-                <StatCard label="Total Consultations" value={loading ? "—" : stats.consultations} />
-                <StatCard label="In Emergency Today" value={loading ? "—" : stats.emergencyCases} />
-                <StatCard label="Pending Reviews" value="—" />
+                <StatCard label="In Consultation Today" value={loading ? "â€”" : stats.patientsToday} />
+                <StatCard label="Total Consultations" value={loading ? "â€”" : stats.consultations} />
+                <StatCard label="In Emergency Today" value={loading ? "â€”" : stats.emergencyCases} />
+                <StatCard label="Pending Reviews" value="â€”" />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

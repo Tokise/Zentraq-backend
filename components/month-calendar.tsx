@@ -104,7 +104,7 @@ export function MonthCalendar({
 
     const isCompact = size === "compact"
     const weekdays = isCompact ? WEEKDAYS_SHORT : WEEKDAYS_FULL
-    const maxChips = isCompact ? 1 : 2
+    const maxChips = isCompact ? 1 : 4
 
     return (
         <div className="rounded-xl border border-zinc-200/80 bg-white overflow-hidden shadow-sm select-none">
@@ -168,7 +168,7 @@ export function MonthCalendar({
                     const visibleMarkers = markers.slice(0, maxChips)
                     const overflowCount = markers.length - visibleMarkers.length
 
-                    const cellHeight = isCompact ? "min-h-12" : "min-h-[100px]"
+                    const cellHeight = isCompact ? "min-h-12" : "min-h-[140px]"
 
                     return (
                         <button

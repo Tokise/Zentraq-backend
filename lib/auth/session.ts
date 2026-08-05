@@ -1,8 +1,8 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useRef, useCallback } from "react"
 import { createClient } from "@/utils/supabase/client"
-import { logout } from "@/app/login/actions"
+import { logout } from "@/actions/system/login"
 import { useRouter } from "next/navigation"
 
 const INACTIVITY_TIMEOUT = 3 * 60 * 1000 // 3 minutes

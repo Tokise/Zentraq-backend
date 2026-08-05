@@ -21,7 +21,7 @@ import {
     deleteNotification,
     type NotificationDTO,
     type NotificationType,
-} from "@/app/admin/notifications/actions"
+} from "@/actions/admin/notifications"
 
 const NOTIFICATION_ICONS: Record<string, any> = {
     appointment: CalendarDays,
@@ -51,11 +51,11 @@ const RESOURCE_ROUTES: Record<string, (id: string) => string> = {
     consultation: (id) => `/consultations?id=${id}`,
     emergency: (id) => `/consultations/emergency?id=${id}`,
     visit_log: (id) => `/consultations/visit-logs?id=${id}`,
-    announcement: (id) => `/admin/clinic-announcements?id=${id}`,
+    announcement: (id) => `/admin/announcement?id=${id}`,
     student: (id) => `/admin/rfid-registration?id=${id}`,
-    role: () => `/admin/roles`,
-    service: (id) => `/admin/services?id=${id}`,
-    setting: () => `/admin/settings`,
+    role: () => `/admin/useraccess/roles`,
+    service: (id) => `/admin/healthprograms/list?id=${id}`,
+    setting: () => `/admin`,
 }
 
 function getRelativeTime(iso: string): string {
@@ -102,7 +102,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
     const [open, setOpen] = useState(false)
     const hasFetchedRef = useRef(false)
 
-    // Load unread count on mount (lightweight — always keep in sync)
+    // Load unread count on mount (lightweight â€” always keep in sync)
     const refreshUnreadCount = useCallback(async () => {
         const res = await getUnreadNotificationCount()
         if (!res.error) {
@@ -312,7 +312,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                         <DropdownMenuSeparator />
                         <div className="px-4 py-2 bg-muted/10">
                             <p className="text-[11px] text-muted-foreground text-center font-medium">
-                                {notifications.length} notification{notifications.length !== 1 ? "s" : ""} · latest
+                                {notifications.length} notification{notifications.length !== 1 ? "s" : ""} Â· latest
                             </p>
                         </div>
                     </>

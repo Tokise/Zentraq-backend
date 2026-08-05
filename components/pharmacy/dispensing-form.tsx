@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Pill, AlertTriangle, Package, Calendar } from "lucide-react"
-import { getMedicineStock, type Prescription, type MedicineStock } from "@/app/actions/prescriptions"
+import { getMedicineStock, type Prescription, type MedicineStock } from "@/actions/clinical/prescriptions"
 import { toast } from "sonner"
 
 interface DispensingFormProps {

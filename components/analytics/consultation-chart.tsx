@@ -1,8 +1,8 @@
-"use client"
+﻿"use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import type { DailyConsultation } from "@/app/actions/analytics"
+import type { DailyConsultation } from "@/actions/reports/analytics"
 
 interface ConsultationChartProps {
   data: DailyConsultation[]

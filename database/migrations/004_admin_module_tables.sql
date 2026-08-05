@@ -147,7 +147,7 @@ CREATE TRIGGER set_services_timestamp
 -- ============================================
 -- 3. ROLES & PERMISSIONS SCHEMA ALIGNMENT
 -- ============================================
--- The application code (app/admin/roles/actions.ts) expects:
+-- The application code (actions/admin/useraccess/roles.ts) expects:
 --   roles: id, name, description, is_deletable, created_at, updated_at
 --   permissions: id, name, resource, action, description
 -- The original schema (001) only had:

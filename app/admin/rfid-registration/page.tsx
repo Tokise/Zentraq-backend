@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { PageHeader } from "@/components/page-header"
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import { createStudentAccount, resetStudentPassword, registerStudentProfile, updateStudentProfile, generateStudentId as generateStudentIdAction, lookupStudentByRfid } from "./actions"
+import { createStudentAccount, resetStudentPassword, registerStudentProfile, updateStudentProfile, generateStudentId as generateStudentIdAction, lookupStudentByRfid } from "@/actions/admin/rfid-registration"
 import { PasswordStrengthInput } from "@/components/password-strength-input"
 import { checkPassword } from "@/lib/validation/password"
 import {
@@ -348,7 +348,7 @@ export default function RfidRegistrationPage() {
     reader.readAsDataURL(file)
   }
 
-  // Step 4 → Create the student or faculty profile via Server Action, then go to Account Setup.
+  // Step 4 â†’ Create the student or faculty profile via Server Action, then go to Account Setup.
   async function handleRegister() {
     if (!rfidUid) return
     setLoading(true)
@@ -393,7 +393,7 @@ export default function RfidRegistrationPage() {
     }
   }
 
-  // Step 5 → Create an auth user and link it to the new patient profile.
+  // Step 5 â†’ Create an auth user and link it to the new patient profile.
   async function handleCreateAccount() {
     if (!accountEmail || !accountPassword) {
       toast.error("Please enter an email and password.")
@@ -706,7 +706,7 @@ export default function RfidRegistrationPage() {
                         <RefreshCw className={`size-3.5 ${generatingId ? "animate-spin" : ""}`} />
                       </Button>
                     </div>
-                    <p className="text-[10px] text-zinc-400">Next available ID — edit manually if needed</p>
+                    <p className="text-[10px] text-zinc-400">Next available ID â€” edit manually if needed</p>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
@@ -757,7 +757,7 @@ export default function RfidRegistrationPage() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">Year</Label>
                     <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none">
-                      <option value="">—</option>
+                      <option value="">â€”</option>
                       <option value="1">1st</option>
                       <option value="2">2nd</option>
                       <option value="3">3rd</option>
@@ -897,7 +897,7 @@ export default function RfidRegistrationPage() {
               {role === "student" && course && (
                 <div className="flex justify-between py-1.5">
                   <span className="text-zinc-400">Course</span>
-                  <span className="text-zinc-700">{course}{yearLevel ? ` — Year ${yearLevel}` : ""}</span>
+                  <span className="text-zinc-700">{course}{yearLevel ? ` â€” Year ${yearLevel}` : ""}</span>
                 </div>
               )}
               {role !== "student" && position && (
@@ -908,7 +908,7 @@ export default function RfidRegistrationPage() {
               )}
               <div className="flex justify-between py-1.5">
                 <span className="text-zinc-400">Photo</span>
-                <span className="text-zinc-700">{photo ? "✓ Captured" : "Not set"}</span>
+                <span className="text-zinc-700">{photo ? "âœ“ Captured" : "Not set"}</span>
               </div>
             </div>
 
@@ -956,7 +956,7 @@ export default function RfidRegistrationPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-zinc-400">Password</span>
                     <span className="font-mono text-zinc-700 flex items-center gap-2">
-                      {showPassword ? accountPassword : "••••••••"}
+                      {showPassword ? accountPassword : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-zinc-400 hover:text-zinc-600">
                         {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                       </button>
@@ -1002,7 +1002,7 @@ export default function RfidRegistrationPage() {
                     {creatingAccount ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Creating Account...</> : <><UserCheck className="size-3.5 mr-1" /> Create Portal Account</>}
                   </Button>
                   <Button type="button" variant="ghost" size="sm" onClick={handleSkipAccount} className="text-zinc-400 hover:text-zinc-600 cursor-pointer">
-                    Skip — register card only
+                    Skip â€” register card only
                   </Button>
                 </div>
               </>
@@ -1091,7 +1091,7 @@ export default function RfidRegistrationPage() {
               <CardTitle className="text-base font-semibold">Edit Profile</CardTitle>
               <CardDescription className="text-xs">
                 Card: <code className="bg-zinc-100 px-1.5 py-0.5 rounded font-mono text-zinc-700 font-semibold">{rfidUid}</code>
-                {searchedProfile.user_id && <span className="ml-2 text-emerald-600">• Portal account linked</span>}
+                {searchedProfile.user_id && <span className="ml-2 text-emerald-600">â€¢ Portal account linked</span>}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -1226,7 +1226,7 @@ export default function RfidRegistrationPage() {
                         <div className="space-y-1.5">
                           <Label className="text-xs">Year</Label>
                           <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} className="w-full h-9 px-2 rounded-md border border-zinc-200 bg-white text-sm focus:outline-none">
-                            <option value="">—</option>
+                            <option value="">â€”</option>
                             <option value="1">1st</option>
                             <option value="2">2nd</option>
                             <option value="3">3rd</option>
@@ -1382,7 +1382,7 @@ export default function RfidRegistrationPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-zinc-400">Password</span>
                   <span className="font-mono text-zinc-700 flex items-center gap-2">
-                    {showPassword ? accountPassword : "••••••••"}
+                    {showPassword ? accountPassword : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-zinc-400 hover:text-zinc-600">
                       {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                     </button>

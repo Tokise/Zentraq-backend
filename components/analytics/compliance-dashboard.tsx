@@ -1,9 +1,9 @@
-"use client"
+﻿"use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { FileCheck, Clock, XCircle, TrendingUp } from "lucide-react"
-import type { ClearanceCompletion } from "@/app/actions/analytics"
+import type { ClearanceCompletion } from "@/actions/reports/analytics"
 
 interface ComplianceDashboardProps {
   data: ClearanceCompletion[]

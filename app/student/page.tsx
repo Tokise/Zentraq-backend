@@ -1,11 +1,11 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getStudentProfileDTO, getStudentAnnouncementsAction, type StudentProfileDTO, type StudentAnnouncementDTO } from "./actions"
+import { getStudentProfileDTO, getStudentAnnouncementsAction, type StudentProfileDTO, type StudentAnnouncementDTO } from "@/actions/student/profile"
 import { Bell, ArrowRight, ImageOff } from "lucide-react"
 
 export default function StudentDashboard() {
@@ -77,7 +77,7 @@ export default function StudentDashboard() {
                                 </div>
                                 <p className="text-sm text-zinc-400">{profile.department || "No department on file"}</p>
                                 {profile.course && (
-                                    <p className="text-xs text-zinc-400">{profile.course}{profile.yearLevel ? ` • ${profile.yearLevel}` : ""}</p>
+                                    <p className="text-xs text-zinc-400">{profile.course}{profile.yearLevel ? ` â€¢ ${profile.yearLevel}` : ""}</p>
                                 )}
                             </div>
                         </div>
@@ -130,7 +130,7 @@ export default function StudentDashboard() {
                                         <CardTitle className="text-sm font-semibold">{ann.title}</CardTitle>
                                         <p className="text-[11px] text-muted-foreground">
                                             {ann.createdAt ? new Date(ann.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
-                                            {ann.posterName ? ` • ${ann.posterName}` : ""}
+                                            {ann.posterName ? ` â€¢ ${ann.posterName}` : ""}
                                         </p>
                                     </CardHeader>
                                     <CardContent>

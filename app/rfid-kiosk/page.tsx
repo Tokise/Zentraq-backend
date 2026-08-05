@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
@@ -6,7 +6,7 @@ import { TypeAnimation } from "react-type-animation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
-import { createConsultation as createConsultationAction, getKioskStudentProfile } from "./actions"
+import { createConsultation as createConsultationAction, getKioskStudentProfile } from "@/actions/rfid/kiosk"
 
 type KioskMode = "IDLE" | "DISPLAY" | "UNREGISTERED"
 
@@ -60,7 +60,7 @@ export default function RfidKioskPage() {
     setTimeout(() => inputRef.current?.focus(), 50)
   }
 
-  // Snaps the kiosk back to idle after a few seconds — instant, no animation.
+  // Snaps the kiosk back to idle after a few seconds â€” instant, no animation.
   function scheduleAutoClear() {
     if (clearTimeoutRef.current) clearTimeout(clearTimeoutRef.current)
     clearTimeoutRef.current = setTimeout(() => {
@@ -139,7 +139,7 @@ export default function RfidKioskPage() {
             />
           </div>
 
-          {/* Header — subtitle types/deletes/cycles via react-type-animation */}
+          {/* Header â€” subtitle types/deletes/cycles via react-type-animation */}
           <div className="space-y-1">
             <h1 className="text-xl font-bold tracking-tight text-zinc-900">Clinic Management System</h1>
             <div className="text-xs text-zinc-400 h-4">
@@ -163,7 +163,7 @@ export default function RfidKioskPage() {
             </div>
           </div>
 
-          {/* Photo — always the same size, regardless of state — now a large box instead of a circle */}
+          {/* Photo â€” always the same size, regardless of state â€” now a large box instead of a circle */}
           <div className="relative">
             <div className="size-50 rounded-2xl overflow-hidden border-4 border-white shadow-lg bg-zinc-100 flex items-center justify-center">
               {profile?.clinicPhotoUrl ? (
@@ -186,11 +186,11 @@ export default function RfidKioskPage() {
             </div>
           </div>
 
-          {/* ID — directly under the picture */}
+          {/* ID â€” directly under the picture */}
           <div className="min-h-[20px] flex items-center justify-center">
             {kioskState === "DISPLAY" && profile && (
               <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-2xl text-zinc-600 font-semibold tracking-wide">
-                {profile.studentNumber || profile.employeeNumber || "—"}
+                {profile.studentNumber || profile.employeeNumber || "â€”"}
               </code>
             )}
             {kioskState === "UNREGISTERED" && (
@@ -201,7 +201,7 @@ export default function RfidKioskPage() {
 
           </div>
 
-          {/* Name — directly under the picture */}
+          {/* Name â€” directly under the picture */}
           <div className="min-h-[20px] flex items-center justify-center">
             {kioskState === "DISPLAY" && profile && (
               <code className="bg-zinc-100 px-2 py-0.5 rounded font-mono text-2xl text-zinc-600 font-semibold tracking-wide">
@@ -210,7 +210,7 @@ export default function RfidKioskPage() {
             )}
           </div>
 
-          {/* Scan input — same field, always present, so the next tap works instantly */}
+          {/* Scan input â€” same field, always present, so the next tap works instantly */}
           <form onSubmit={handleScan} className="w-80 space-y-1">
             <Input
               ref={inputRef}
