@@ -1,300 +1,835 @@
-import type { LucideIcon } from "lucide-react"
+import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
-  Bell,
   CalendarDays,
-  ClipboardList,
-  CreditCard,
+  ClipboardCheck,
   FileCheck,
   FileText,
   HeartPulse,
+  History,
   LayoutDashboard,
-  ListOrdered,
   Megaphone,
   Package,
   Pill,
-  Settings,
+  Scan,
   Shield,
   ShieldAlert,
-  ShieldCheck,
   Stethoscope,
   UserCheck,
   UserCog,
   UserPlus,
   Users,
-  GraduationCap,
-  History,
-  AlertTriangle,
-  Syringe,
-  BookOpen,
-  ScrollText,
-  Search,
-  ClipboardCheck,
-  Stethoscope as StethoscopeAlt,
-  Scan,
-} from "lucide-react"
+} from "lucide-react";
 
 export type NavItem = {
-  title: string
-  href: string
-  icon: LucideIcon
-  target?: "_self" | "_blank"
-  roles?: string[]
-}
-
+  title: string;
+  href: string;
+  icon: LucideIcon;
+  target?: "_self" | "_blank";
+  roles?: string[];
+};
 export type NavGroup = {
-  label: string
-  items: NavItem[]
-}
+  label: string;
+  items: NavItem[];
+  collapsible?: boolean;
+};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Admin navigation (SAD §4.2)
-// ─────────────────────────────────────────────────────────────────────────────
+// Creates the role-specific dashboard section.
+const dashboard = (role: "admin" | "doctor" | "nurse"): NavGroup => ({
+  label: "Dashboard",
+  collapsible: false,
+  items: [
+    {
+      title: "Dashboard",
+      href: `/${role}`,
+      icon: LayoutDashboard,
+      roles: [role],
+    },
+  ],
+});
+
 export const adminNavigation: NavGroup[] = [
+  dashboard("admin"),
   {
-    label: "Dashboard",
+    label: "System",
     items: [
-      { title: "Dashboard", href: "/admin", icon: LayoutDashboard, roles: ["admin"] },
+      { title: "Announcements", href: "/admin/announcement", icon: Megaphone },
+      { title: "RFID Kiosk", href: "/admin/rfid-kiosk", icon: Scan },
+      {
+        title: "RFID Registration",
+        href: "/admin/rfid-registration",
+        icon: UserPlus,
+      },
     ],
   },
   {
-    label: "Records",
+    label: "Medical Records",
     items: [
-      { title: "Medical Records", href: "/admin/records/view", icon: HeartPulse, roles: ["admin"] },
-      { title: "RFID Kiosk", href: "/admin/rfid-kiosk", icon: Scan, roles: ["admin"] },
-    ],
-  },
-  { label: "Clinical Operations", items: [
-    { title: "Visits", href: "/admin/visits/history", icon: Stethoscope, roles: ["admin"] },
-    { title: "Follow-ups", href: "/admin/visits/followup", icon: ClipboardCheck, roles: ["admin"] },
-    { title: "Medicine", href: "/admin/medicine/stock", icon: Pill, roles: ["admin"] },
-    { title: "Appointments", href: "/admin/appointments/calendar", icon: CalendarDays, roles: ["admin"] },
-    { title: "Incidents", href: "/admin/incidents/log", icon: AlertTriangle, roles: ["admin"] },
-  ] },
-  {
-    label: "Portal Management",
-    items: [
-      { title: "Announcements", href: "/admin/announcement", icon: Megaphone, roles: ["admin"] },
-      { title: "Audit Logs", href: "/admin/useraccess/activity_logs", icon: ShieldAlert, roles: ["admin"] },
-      { title: "Roles & Permissions", href: "/admin/useraccess/roles", icon: Shield, roles: ["admin"] },
-      { title: "User Approvals", href: "/admin/useraccess/approval", icon: UserCheck, roles: ["admin"] },
-      { title: "Password Resets", href: "/admin/useraccess/password_reset", icon: UserCog, roles: ["admin"] },
+      { title: "View Records", href: "/admin/records/view", icon: HeartPulse },
+      {
+        title: "Medical History",
+        href: "/admin/records/history",
+        icon: History,
+      },
+      {
+        title: "Immunizations",
+        href: "/admin/records/immunization",
+        icon: Activity,
+      },
+      {
+        title: "Record Attachments",
+        href: "/admin/records/attachments",
+        icon: FileText,
+      },
     ],
   },
   {
-    label: "Services",
+    label: "Staff Health",
     items: [
-      { title: "Health Programs", href: "/admin/healthprograms/list", icon: FileCheck, roles: ["admin"] },
-      { title: "Program Schedule", href: "/admin/healthprograms/schedule", icon: CalendarDays, roles: ["admin"] },
-      { title: "Program Reports", href: "/admin/healthprograms/reports", icon: BarChart3, roles: ["admin"] },
-      { title: "Staff Health", href: "/admin/staffhealth/record", icon: HeartPulse, roles: ["admin"] },
-      { title: "Clearances", href: "/admin/clearance/request", icon: FileText, roles: ["admin"] },
-      { title: "Reports", href: "/admin/reports/generate", icon: BarChart3, roles: ["admin"] },
+      {
+        title: "Staff Health Record",
+        href: "/admin/staffhealth/record",
+        icon: HeartPulse,
+      },
+      {
+        title: "Staff Consultations",
+        href: "/admin/staffhealth/consultation",
+        icon: Stethoscope,
+      },
+      {
+        title: "Check-up Schedule",
+        href: "/admin/staffhealth/checkup_schedule",
+        icon: CalendarDays,
+      },
+      {
+        title: "Certificate Requests",
+        href: "/admin/staffhealth/certificate_request",
+        icon: FileCheck,
+      },
     ],
   },
   {
-    label: "RFID",
+    label: "Consultations",
     items: [
-      { title: "RFID Registration", href: "/admin/rfid-registration", icon: UserPlus, roles: ["admin"] },
+      { title: "New Visit", href: "/admin/visits/new_entry", icon: UserPlus },
+      { title: "Visit History", href: "/admin/visits/history", icon: History },
+      { title: "Vitals", href: "/admin/visits/vitals", icon: Activity },
+      { title: "Clinical Notes", href: "/admin/visits/notes", icon: FileText },
+      {
+        title: "Diagnosis",
+        href: "/admin/visits/diagnosis",
+        icon: Stethoscope,
+      },
+      {
+        title: "Prescriptions",
+        href: "/admin/visits/prescription",
+        icon: Pill,
+      },
+      {
+        title: "Follow-ups",
+        href: "/admin/visits/followup",
+        icon: ClipboardCheck,
+      },
     ],
   },
-]
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Doctor navigation (SAD §4.3)
-// ─────────────────────────────────────────────────────────────────────────────
-export const doctorNavigation: NavGroup[] = [
-  {
-    label: "Dashboard",
-    items: [
-      { title: "Dashboard", href: "/doctor", icon: LayoutDashboard, roles: ["doctor"] },
-    ],
-  },
-  {
-    label: "Records",
-    items: [
-      { title: "Medical Records", href: "/doctor/records/view", icon: HeartPulse, roles: ["doctor"] },
-      { title: "RFID Kiosk", href: "/doctor/rfid-kiosk", icon: Scan, roles: ["doctor"] },
-    ],
-  },
-  { label: "Clinical", items: [
-    { title: "Visits", href: "/doctor/visits/history", icon: Stethoscope, roles: ["doctor"] },
-    { title: "Appointments", href: "/doctor/appointments/calendar", icon: CalendarDays, roles: ["doctor"] },
-    { title: "Clearances", href: "/doctor/clearance/history", icon: FileCheck, roles: ["doctor"] },
-    { title: "Reports", href: "/doctor/reports/generate", icon: BarChart3, roles: ["doctor"] },
-    { title: "Export Data", href: "/doctor/reports/export", icon: FileText, roles: ["doctor"] },
-  ] },
-  {
-    label: "Incidents",
-    items: [
-      { title: "Case Status", href: "/doctor/incidents/status", icon: AlertTriangle, roles: ["doctor"] },
-    ],
-  },
-  {
-    label: "Services",
-    items: [
-      { title: "Health Programs", href: "/doctor/healthprograms/list", icon: FileCheck, roles: ["doctor"] },
-      { title: "Program Participants", href: "/doctor/healthprograms/participants", icon: Users, roles: ["doctor"] },
-      { title: "Program Reports", href: "/doctor/healthprograms/reports", icon: BarChart3, roles: ["doctor"] },
-      { title: "Staff Health Record", href: "/doctor/staffhealth/record", icon: HeartPulse, roles: ["doctor"] },
-      { title: "Staff Consultations", href: "/doctor/staffhealth/consultation", icon: Stethoscope, roles: ["doctor"] },
-      { title: "Certificates", href: "/doctor/staffhealth/certificate_request", icon: FileText, roles: ["doctor"] },
-    ],
-  },
-]
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Nurse navigation (SAD §4.4)
-// ─────────────────────────────────────────────────────────────────────────────
-export const nurseNavigation: NavGroup[] = [
-  {
-    label: "Dashboard",
-    items: [
-      { title: "Dashboard", href: "/nurse", icon: LayoutDashboard, roles: ["nurse"] },
-    ],
-  },
-  {
-    label: "Visits",
-    items: [
-      { title: "New Walk-in", href: "/nurse/visits/new_entry", icon: UserPlus, roles: ["nurse"] },
-    ],
-  },
-  { label: "Records", items: [
-    { title: "Medical Records", href: "/nurse/records/view", icon: HeartPulse, roles: ["nurse"] },
-    { title: "RFID Kiosk", href: "/nurse/rfid-kiosk", icon: Scan, roles: ["nurse"] },
-  ] },
   {
     label: "Medicine",
     items: [
-      { title: "Dispense Medicine", href: "/nurse/medicine/dispense", icon: Pill, roles: ["nurse"] },
-      { title: "Inventory Status", href: "/nurse/medicine/stock", icon: Package, roles: ["nurse"] },
-      { title: "Low Stock Alerts", href: "/nurse/medicine/low_stock_alerts", icon: AlertTriangle, roles: ["nurse"] },
+      {
+        title: "Inventory Status",
+        href: "/admin/medicine/stock",
+        icon: Package,
+      },
+      {
+        title: "Restock Medicine",
+        href: "/admin/medicine/restock",
+        icon: Package,
+      },
+      {
+        title: "Dispense Medicine",
+        href: "/admin/medicine/dispense",
+        icon: Pill,
+      },
+      {
+        title: "Dispense Log",
+        href: "/admin/medicine/dispense_log",
+        icon: History,
+      },
+      {
+        title: "Low Stock Alerts",
+        href: "/admin/medicine/low_stock_alerts",
+        icon: AlertTriangle,
+      },
+      {
+        title: "Expiry Monitoring",
+        href: "/admin/medicine/expiry",
+        icon: CalendarDays,
+      },
     ],
   },
   {
     label: "Appointments",
     items: [
-      { title: "Today's Schedule", href: "/nurse/appointments/calendar", icon: CalendarDays, roles: ["nurse"] },
+      {
+        title: "Calendar",
+        href: "/admin/appointments/calendar",
+        icon: CalendarDays,
+      },
+      {
+        title: "Book Appointment",
+        href: "/admin/appointments/book",
+        icon: UserPlus,
+      },
+      {
+        title: "Reschedule",
+        href: "/admin/appointments/reschedule",
+        icon: CalendarDays,
+      },
+      { title: "Waitlist", href: "/admin/appointments/waitlist", icon: Users },
+      {
+        title: "Reminders",
+        href: "/admin/appointments/reminders",
+        icon: ClipboardCheck,
+      },
     ],
   },
   {
     label: "Incidents",
     items: [
-      { title: "Report Incident", href: "/nurse/incidents/report", icon: AlertTriangle, roles: ["nurse"] },
+      {
+        title: "Incident Log",
+        href: "/admin/incidents/log",
+        icon: AlertTriangle,
+      },
+      {
+        title: "Report Incident",
+        href: "/admin/incidents/report",
+        icon: UserPlus,
+      },
+      {
+        title: "Case Status",
+        href: "/admin/incidents/status",
+        icon: ClipboardCheck,
+      },
+      { title: "Referrals", href: "/admin/incidents/referral", icon: FileText },
+      {
+        title: "Emergency Contacts",
+        href: "/admin/incidents/emergency_contacts",
+        icon: Users,
+      },
     ],
   },
-  { label: "Clearances", items: [{ title: "Clearance Requests", href: "/nurse/clearance/history", icon: FileCheck, roles: ["nurse"] }] },
+
   {
-    label: "Services",
+    label: "Health Programs",
     items: [
-      { title: "Health Programs", href: "/nurse/healthprograms/list", icon: FileCheck, roles: ["nurse"] },
-      { title: "Program Participants", href: "/nurse/healthprograms/participants", icon: Users, roles: ["nurse"] },
-      { title: "Staff Health Record", href: "/nurse/staffhealth/record", icon: HeartPulse, roles: ["nurse"] },
-      { title: "Staff Consultations", href: "/nurse/staffhealth/consultation", icon: Stethoscope, roles: ["nurse"] },
+      {
+        title: "Health Programs",
+        href: "/admin/healthprograms/list",
+        icon: HeartPulse,
+      },
+      {
+        title: "Program Setup",
+        href: "/admin/healthprograms/programs",
+        icon: ClipboardCheck,
+      },
+      {
+        title: "Participants",
+        href: "/admin/healthprograms/participants",
+        icon: Users,
+      },
+      {
+        title: "Enrollment",
+        href: "/admin/healthprograms/enrollment",
+        icon: UserPlus,
+      },
+      {
+        title: "Program Schedule",
+        href: "/admin/healthprograms/schedule",
+        icon: CalendarDays,
+      },
+      {
+        title: "Program Reports",
+        href: "/admin/healthprograms/reports",
+        icon: BarChart3,
+      },
+    ],
+  },
+  {
+    label: "Clearances",
+    items: [
+      {
+        title: "Clearance Requests",
+        href: "/admin/clearance/request",
+        icon: FileText,
+      },
+      {
+        title: "Issue Clearance",
+        href: "/admin/clearance/issue",
+        icon: FileCheck,
+      },
+      {
+        title: "Clearance History",
+        href: "/admin/clearance/history",
+        icon: History,
+      },
+      {
+        title: "Requirements",
+        href: "/admin/clearance/requirements",
+        icon: ClipboardCheck,
+      },
+      {
+        title: "Certificate Templates",
+        href: "/admin/clearance/templates",
+        icon: FileText,
+      },
     ],
   },
   {
     label: "Reports",
     items: [
-      { title: "View Reports", href: "/nurse/reports/view_only", icon: BarChart3, roles: ["nurse"] },
+      {
+        title: "Reports & Analytics",
+        href: "/admin/reports/generate",
+        icon: BarChart3,
+      },
+      { title: "Export Data", href: "/admin/reports/export", icon: FileText },
+      {
+        title: "Report Templates",
+        href: "/admin/reports/templates",
+        icon: FileCheck,
+      },
+      {
+        title: "Compliance Checklist",
+        href: "/admin/reports/checklist",
+        icon: ClipboardCheck,
+      },
+      {
+        title: "Audit Trail",
+        href: "/admin/reports/audit_trail",
+        icon: ShieldAlert,
+      },
     ],
   },
-]
+  {
+    label: "Access Control",
+    items: [
+      { title: "Roles", href: "/admin/useraccess/roles", icon: Shield },
+      {
+        title: "Permissions",
+        href: "/admin/useraccess/permissions",
+        icon: Shield,
+      },
+      {
+        title: "User Approval",
+        href: "/admin/useraccess/approval",
+        icon: UserCheck,
+      },
+      {
+        title: "Password Reset",
+        href: "/admin/useraccess/password_reset",
+        icon: UserCog,
+      },
+      {
+        title: "Activity Logs",
+        href: "/admin/useraccess/activity_logs",
+        icon: ShieldAlert,
+      },
+    ],
+  },
+];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Student navigation (SAD §4.5)
-// ─────────────────────────────────────────────────────────────────────────────
+export const doctorNavigation: NavGroup[] = [
+  dashboard("doctor"),
+  {
+    label: "System",
+    items: [{ title: "RFID Kiosk", href: "/doctor/rfid-kiosk", icon: Scan }],
+  },
+  {
+    label: "Medical Records",
+    items: [
+      { title: "View Records", href: "/doctor/records/view", icon: HeartPulse },
+      { title: "Edit Records", href: "/doctor/records/edit", icon: HeartPulse },
+      {
+        title: "Immunizations",
+        href: "/doctor/records/immunization",
+        icon: Activity,
+      },
+    ],
+  },
+  {
+    label: "Consultations",
+    items: [
+      { title: "New Visit", href: "/doctor/visits/new_entry", icon: UserPlus },
+      { title: "Visit History", href: "/doctor/visits/history", icon: History },
+      { title: "Vitals", href: "/doctor/visits/vitals", icon: Activity },
+      { title: "Clinical Notes", href: "/doctor/visits/notes", icon: FileText },
+      {
+        title: "Diagnosis",
+        href: "/doctor/visits/diagnosis",
+        icon: Stethoscope,
+      },
+      {
+        title: "Prescriptions",
+        href: "/doctor/visits/prescription",
+        icon: Pill,
+      },
+      {
+        title: "Follow-ups",
+        href: "/doctor/visits/followup",
+        icon: ClipboardCheck,
+      },
+    ],
+  },
+  {
+    label: "Medicine",
+    items: [
+      {
+        title: "Inventory Status",
+        href: "/doctor/medicine/stock",
+        icon: Package,
+      },
+      {
+        title: "Dispense Medicine",
+        href: "/doctor/medicine/dispense",
+        icon: Pill,
+      },
+      {
+        title: "Dispense Log",
+        href: "/doctor/medicine/dispense_log",
+        icon: History,
+      },
+    ],
+  },
+  {
+    label: "Appointments",
+    items: [
+      {
+        title: "Calendar",
+        href: "/doctor/appointments/calendar",
+        icon: CalendarDays,
+      },
+      {
+        title: "Reschedule",
+        href: "/doctor/appointments/reschedule",
+        icon: CalendarDays,
+      },
+      {
+        title: "Reminders",
+        href: "/doctor/appointments/reminders",
+        icon: ClipboardCheck,
+      },
+    ],
+  },
+  {
+    label: "Incidents",
+    items: [
+      {
+        title: "Incident Log",
+        href: "/doctor/incidents/log",
+        icon: AlertTriangle,
+      },
+      {
+        title: "Case Status",
+        href: "/doctor/incidents/status",
+        icon: ClipboardCheck,
+      },
+      {
+        title: "Referrals",
+        href: "/doctor/incidents/referral",
+        icon: FileText,
+      },
+      {
+        title: "Emergency Contacts",
+        href: "/doctor/incidents/emergency_contacts",
+        icon: Users,
+      },
+      {
+        title: "Report Incident",
+        href: "/doctor/incidents",
+        icon: AlertTriangle,
+      },
+    ],
+  },
+  {
+    label: "Staff Health",
+    items: [
+      {
+        title: "Staff Health Record",
+        href: "/doctor/staffhealth/record",
+        icon: HeartPulse,
+      },
+      {
+        title: "Staff Consultations",
+        href: "/doctor/staffhealth/consultation",
+        icon: Stethoscope,
+      },
+      {
+        title: "Certificate Requests",
+        href: "/doctor/staffhealth/certificate_request",
+        icon: FileCheck,
+      },
+    ],
+  },
+  {
+    label: "Health Programs",
+    items: [
+      {
+        title: "Health Programs",
+        href: "/doctor/healthprograms/list",
+        icon: HeartPulse,
+      },
+      {
+        title: "Participants",
+        href: "/doctor/healthprograms/participants",
+        icon: Users,
+      },
+      {
+        title: "Program Reports",
+        href: "/doctor/healthprograms/reports",
+        icon: BarChart3,
+      },
+    ],
+  },
+  {
+    label: "Clearances",
+    items: [
+      {
+        title: "Clearance History",
+        href: "/doctor/clearance/history",
+        icon: History,
+      },
+      {
+        title: "Issue Clearance",
+        href: "/doctor/clearance/issue",
+        icon: FileCheck,
+      },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
+      {
+        title: "Reports & Analytics",
+        href: "/doctor/reports/generate",
+        icon: BarChart3,
+      },
+      { title: "Export Data", href: "/doctor/reports/export", icon: FileText },
+    ],
+  },
+];
+
+export const nurseNavigation: NavGroup[] = [
+  dashboard("nurse"),
+  {
+    label: "System",
+    items: [{ title: "RFID Kiosk", href: "/nurse/rfid-kiosk", icon: Scan }],
+  },
+  {
+    label: "Medical Records",
+    items: [
+      { title: "View Records", href: "/nurse/records/view", icon: HeartPulse },
+      { title: "Edit Records", href: "/nurse/records/edit", icon: HeartPulse },
+      {
+        title: "Immunizations",
+        href: "/nurse/records/immunization",
+        icon: Activity,
+      },
+    ],
+  },
+  {
+    label: "Consultations",
+    items: [
+      { title: "New Visit", href: "/nurse/visits/new_entry", icon: UserPlus },
+      { title: "Visit History", href: "/nurse/visits/history", icon: History },
+      { title: "Vitals", href: "/nurse/visits/vitals", icon: Activity },
+      { title: "Clinical Notes", href: "/nurse/visits/notes", icon: FileText },
+      {
+        title: "Prescriptions",
+        href: "/nurse/visits/prescription",
+        icon: Pill,
+      },
+    ],
+  },
+  {
+    label: "Medicine",
+    items: [
+      {
+        title: "Inventory Status",
+        href: "/nurse/medicine/stock",
+        icon: Package,
+      },
+      {
+        title: "Restock Medicine",
+        href: "/nurse/medicine/restock",
+        icon: Package,
+      },
+      {
+        title: "Dispense Medicine",
+        href: "/nurse/medicine/dispense",
+        icon: Pill,
+      },
+      {
+        title: "Dispense Log",
+        href: "/nurse/medicine/dispense_log",
+        icon: History,
+      },
+      {
+        title: "Low Stock Alerts",
+        href: "/nurse/medicine/low_stock_alerts",
+        icon: AlertTriangle,
+      },
+      {
+        title: "Expiry Monitoring",
+        href: "/nurse/medicine/expiry",
+        icon: CalendarDays,
+      },
+    ],
+  },
+  {
+    label: "Appointments",
+    items: [
+      {
+        title: "Calendar",
+        href: "/nurse/appointments/calendar",
+        icon: CalendarDays,
+      },
+      {
+        title: "Appointments",
+        href: "/nurse/appointments",
+        icon: ClipboardCheck,
+      },
+      {
+        title: "Reminders",
+        href: "/nurse/appointments/reminders",
+        icon: ClipboardCheck,
+      },
+    ],
+  },
+  {
+    label: "Incidents",
+    items: [
+      {
+        title: "Incident Log",
+        href: "/nurse/incidents/log",
+        icon: AlertTriangle,
+      },
+      {
+        title: "Report Incident",
+        href: "/nurse/incidents/report",
+        icon: UserPlus,
+      },
+      {
+        title: "Case Status",
+        href: "/nurse/incidents/status",
+        icon: ClipboardCheck,
+      },
+      { title: "Referrals", href: "/nurse/incidents/referral", icon: FileText },
+      {
+        title: "Emergency Contacts",
+        href: "/nurse/incidents/emergency_contacts",
+        icon: Users,
+      },
+      {
+        title: "Incident Dashboard",
+        href: "/nurse/incidents",
+        icon: AlertTriangle,
+      },
+    ],
+  },
+  {
+    label: "Staff Health",
+    items: [
+      {
+        title: "Staff Health Record",
+        href: "/nurse/staffhealth/record",
+        icon: HeartPulse,
+      },
+      {
+        title: "Staff Consultations",
+        href: "/nurse/staffhealth/consultation",
+        icon: Stethoscope,
+      },
+    ],
+  },
+  {
+    label: "Health Programs",
+    items: [
+      {
+        title: "Health Programs",
+        href: "/nurse/healthprograms/list",
+        icon: HeartPulse,
+      },
+      {
+        title: "Participants",
+        href: "/nurse/healthprograms/participants",
+        icon: Users,
+      },
+    ],
+  },
+  {
+    label: "Clearances",
+    items: [
+      {
+        title: "Clearance History",
+        href: "/nurse/clearance/history",
+        icon: History,
+      },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
+      {
+        title: "View Reports",
+        href: "/nurse/reports/view_only",
+        icon: BarChart3,
+      },
+    ],
+  },
+];
+
 export const studentNavigation: NavGroup[] = [
   {
     label: "Dashboard",
     items: [
       { title: "My Dashboard", href: "/student", icon: LayoutDashboard },
-      { title: "Announcements", href: "/student/announcements", icon: Megaphone },
+      {
+        title: "Announcements",
+        href: "/student/announcements",
+        icon: Megaphone,
+      },
     ],
+    collapsible: false,
   },
   {
     label: "Appointments",
     items: [
-      { title: "Request Appointment", href: "/student/appointments/book", icon: CalendarDays },
+      {
+        title: "Request Appointment",
+        href: "/student/appointments/book",
+        icon: CalendarDays,
+      },
     ],
   },
   {
     label: "Health Records",
     items: [
-      { title: "My Health Records", href: "/student/records/my_record", icon: HeartPulse },
-      { title: "Consultations", href: "/student/visits/my_history", icon: Stethoscope },
+      {
+        title: "My Health Records",
+        href: "/student/records/my_record",
+        icon: HeartPulse,
+      },
+      {
+        title: "Consultations",
+        href: "/student/visits/my_history",
+        icon: Stethoscope,
+      },
     ],
   },
   {
     label: "Clearances",
     items: [
-      { title: "My Clearances", href: "/student/clearance/my_history", icon: FileCheck },
-      { title: "Request Clearance", href: "/student/clearance/request", icon: FileText },
+      {
+        title: "My Clearances",
+        href: "/student/clearance/my_history",
+        icon: FileCheck,
+      },
+      {
+        title: "Request Clearance",
+        href: "/student/clearance/request",
+        icon: FileText,
+      },
     ],
   },
-]
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Faculty navigation (SAD §4.6)
-// ─────────────────────────────────────────────────────────────────────────────
+];
 export const facultyNavigation: NavGroup[] = [
   {
     label: "Dashboard",
     items: [
       { title: "My Dashboard", href: "/faculty", icon: LayoutDashboard },
-      { title: "Announcements", href: "/faculty/announcements", icon: Megaphone },
+      {
+        title: "Announcements",
+        href: "/faculty/announcements",
+        icon: Megaphone,
+      },
     ],
+    collapsible: false,
   },
   {
     label: "Appointments",
     items: [
-      { title: "Request Appointment", href: "/faculty/appointments/book", icon: CalendarDays },
+      {
+        title: "Request Appointment",
+        href: "/faculty/appointments/book",
+        icon: CalendarDays,
+      },
     ],
   },
   {
     label: "Health Records",
     items: [
-      { title: "My Health Records", href: "/faculty/staffhealth/my_record", icon: HeartPulse },
-      { title: "Consultations", href: "/faculty/visits/my_history", icon: Stethoscope },
+      {
+        title: "My Health Records",
+        href: "/faculty/staffhealth/my_record",
+        icon: HeartPulse,
+      },
+      {
+        title: "Consultations",
+        href: "/faculty/visits/my_history",
+        icon: Stethoscope,
+      },
     ],
   },
   {
     label: "Clearances",
     items: [
-      { title: "My Clearances", href: "/faculty/clearance/my_history", icon: FileCheck },
-      { title: "Request Clearance", href: "/faculty/clearance/request", icon: FileText },
+      {
+        title: "My Clearances",
+        href: "/faculty/clearance/my_history",
+        icon: FileCheck,
+      },
+      {
+        title: "Request Clearance",
+        href: "/faculty/clearance/request",
+        icon: FileText,
+      },
     ],
   },
-]
+];
 
-// Helper function to get navigation based on role
+// Returns the navigation that is permitted for the active portal role.
 export function getNavigationForRole(role: string | null | undefined) {
   if (role === "admin") {
-    return adminNavigation
+    return adminNavigation;
   }
   if (role === "doctor") {
-    return doctorNavigation
+    return doctorNavigation;
   }
   if (role === "nurse") {
-    return nurseNavigation
+    return nurseNavigation;
   }
   if (role === "faculty") {
-    return facultyNavigation
+    return facultyNavigation;
   }
-  // Default: student navigation for student, staff fallback to nurse
-  return studentNavigation
+  if (role === "staff") {
+    return facultyNavigation;
+  }
+  return studentNavigation;
 }
-
-// For backward compatibility with imports that reference staffNavigation
-export const staffNavigation: NavGroup[] = nurseNavigation
-
-// Keep backward compatibility with existing code
-export const navigation = [...adminNavigation, ...staffNavigation]
-
-export const allNavItems = navigation.flatMap((group) => group.items)
-
+export const staffNavigation = nurseNavigation;
+export const navigation = [
+  ...adminNavigation,
+  ...doctorNavigation,
+  ...nurseNavigation,
+  ...studentNavigation,
+  ...facultyNavigation,
+];
+export const allNavItems = navigation.flatMap((group) => group.items);
+// Resolves a human-readable page title from a static route.
 export function getPageTitle(pathname: string): string {
-  const item = allNavItems.find((nav) => nav.href === pathname)
-  return item?.title ?? "Zentraq"
+  const item = allNavItems.find((nav) => nav.href === pathname);
+  return item?.title ?? "Zentraq";
 }
