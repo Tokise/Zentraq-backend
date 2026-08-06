@@ -1,148 +1,140 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Loader2, Shield } from "lucide-react"
-import { toast } from "sonner"
-import { getSettingsAction, updateSettingAction } from "@/actions/admin/settings"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { useEffect, useState } from "react";
+import { Plus, Shield } from "lucide-react";
+import { toast } from "sonner";
+import {
+  createRoleAction,
+  getRolesAction,
+  type RoleWithPermissionsDTO,
+} from "@/actions/admin/useraccess/roles";
+import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-interface Role {
-  id: string
-  name: string
-  description: string
-  permissions: string[]
-}
-
+// Displays roles and the permissions currently assigned from the RBAC tables.
 export default function AdminRolesPage() {
-  const [roles, setRoles] = useState<Role[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: "", description: "", permissions: "" })
-  const [saving, setSaving] = useState(false)
+  const [roles, setRoles] = useState<RoleWithPermissionsDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  // Loads authoritative role and permission assignments for the cards.
+  async function loadRoles() {
+    setLoading(true);
     try {
-      const res = await getSettingsAction()
-      if (res.error) {
-        toast.error(res.error)
-        return
+      const result = await getRolesAction();
+      if (result.error) {
+        toast.error(result.error);
+        return;
       }
-      const existing = res.settings.find((s) => s.key === "user_roles")
-      if (existing?.value && Array.isArray(existing.value.roles)) {
-        setRoles(existing.value.roles as Role[])
-      } else {
-        setRoles([
-          { id: "admin", name: "Admin", description: "Full system access", permissions: ["all"] },
-          { id: "doctor", name: "Doctor", description: "Medical consultations and prescriptions", permissions: ["consultations", "prescriptions", "records"] },
-          { id: "nurse", name: "Nurse", description: "Triage and vital signs", permissions: ["triage", "vitals"] },
-          { id: "staff", name: "Staff", description: "Limited access", permissions: ["appointments", "records"] },
-        ])
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load roles")
+      setRoles(result.roles);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    void Promise.resolve().then(loadRoles);
+  }, []);
 
-  const saveRoles = async (next: Role[]) => {
-    setSaving(true)
+  // Creates a role without allowing role details to be edited on this screen.
+  async function createRole() {
+    if (!name.trim()) {
+      toast.error("A role name is required");
+      return;
+    }
+    setSaving(true);
     try {
-      const res = await updateSettingAction({ key: "user_roles", value: { roles: next } })
-      if (res.error) {
-        toast.error(res.error)
-      } else {
-        setRoles(next)
-        toast.success("Roles saved")
+      const result = await createRoleAction({ name, description });
+      if (result.error) {
+        toast.error(result.error);
+        return;
       }
+      toast.success("Role created. Configure its permissions next.");
+      setName("");
+      setDescription("");
+      setShowCreateDialog(false);
+      await loadRoles();
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
-
-  const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      toast.error("Role name is required")
-      return
-    }
-    const permissions = form.permissions.split(",").map((s) => s.trim()).filter(Boolean)
-    if (editingId) {
-      await saveRoles(roles.map((r) =>
-        r.id === editingId ? { ...r, name: form.name.trim(), description: form.description.trim(), permissions } : r
-      ))
-    } else {
-      await saveRoles([
-        ...roles,
-        { id: `role-${Date.now()}`, name: form.name.trim(), description: form.description.trim(), permissions },
-      ])
-    }
-    setShowForm(false)
-    setForm({ name: "", description: "", permissions: "" })
-    setEditingId(null)
-  }
-
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this role?")) return
-    await saveRoles(roles.filter((r) => r.id !== id))
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="User Roles & Permissions"
-        description="Manage access roles and their permissions."
+        title="Roles"
+        description="Create roles and review their assigned permissions."
       >
-        <Button size="sm" onClick={() => { setEditingId(null); setForm({ name: "", description: "", permissions: "" }); setShowForm(true) }} className="cursor-pointer">
-          New Role
+        <Button
+          size="sm"
+          onClick={() => setShowCreateDialog(true)}
+          className="cursor-pointer"
+        >
+          <Plus className="size-4" /> New Role
         </Button>
       </PageHeader>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          Loading roles…
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {roles.map((r) => (
-            <Card key={r.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex size-8 items-center justify-center border border-primary/20 bg-primary-soft text-primary">
+          {roles.map((role) => (
+            <Card key={role.id} className="shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
                     <Shield className="size-4" />
                   </div>
-                  <div>
-                    <CardTitle className="text-sm font-semibold">{r.name}</CardTitle>
-                    <CardDescription className="text-xs">{r.description}</CardDescription>
+                  <div className="min-w-0">
+                    <CardTitle className="capitalize">{role.name}</CardTitle>
+                    <CardDescription className="mt-1 line-clamp-2">
+                      {role.description || "No description provided."}
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-1">
-                  {r.permissions.map((p) => (
-                    <span key={p} className="border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                      {p}
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-1.5">
+                  {role.permissions.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">
+                      No permissions assigned
                     </span>
-                  ))}
+                  ) : (
+                    role.permissions.map((permission) => (
+                      <Badge
+                        key={permission.id}
+                        variant="outline"
+                        className="font-normal"
+                      >
+                        {permission.name}
+                      </Badge>
+                    ))
+                  )}
                 </div>
-                <div className="flex items-center gap-1 pt-2 border-t border-border">
-                  <div className="flex-1" />
-                  <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { setEditingId(r.id); setForm({ name: r.name, description: r.description, permissions: r.permissions.join(", ") }); setShowForm(true) }}>
-                    Edit
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => handleDelete(r.id)}>
-                    Delete
-                  </Button>
+                <div className="border-t border-border pt-3 text-xs text-muted-foreground">
+                  Permissions are managed from the Permissions page.
                 </div>
               </CardContent>
             </Card>
@@ -150,38 +142,44 @@ export default function AdminRolesPage() {
         </div>
       )}
 
-      {/* Role form modal */}
-      <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Role" : "New Role"}</DialogTitle>
-            <DialogDescription>
-              Configure role details and permissions.
-            </DialogDescription>
+            <DialogTitle>Create role</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="role-name" className="text-xs font-medium">Role Name</Label>
-              <Input id="role-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Pharmacist" />
+            <div className="space-y-2">
+              <Label htmlFor="role-name">Role name</Label>
+              <Input
+                id="role-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Pharmacist"
+              />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="role-desc" className="text-xs font-medium">Description</Label>
-              <Input id="role-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Role description" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="role-perms" className="text-xs font-medium">Permissions</Label>
-              <Input id="role-perms" value={form.permissions} onChange={(e) => setForm({ ...form, permissions: e.target.value })} placeholder="consultations, prescriptions, records" />
-              <p className="text-xs text-muted-foreground">Comma-separated permission keys.</p>
+            <div className="space-y-2">
+              <Label htmlFor="role-description">Description</Label>
+              <Input
+                id="role-description"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Brief access description"
+              />
             </div>
           </div>
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={saving}>{saving ? "Saving..." : editingId ? "Save Changes" : "Create Role"}</Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={createRole} disabled={saving}>
+              {saving ? "Creating…" : "Create Role"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

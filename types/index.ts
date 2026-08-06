@@ -7,7 +7,7 @@
 // Core Auth Types
 // ──────────────────────────────────────────────
 
-export type UserRole = 'admin' | 'doctor' | 'nurse' | 'student' | 'faculty';
+export type UserRole = 'admin' | 'doctor' | 'nurse' | 'student' | 'faculty' | 'staff';
 
 export interface User {
     id: string;
