@@ -44,6 +44,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-field: var(--field);
   --color-surface: var(--surface);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -55,93 +56,97 @@
 }
 
 :root {
-  /* Neutral base */
-  --background: #f0f7f4;
-  --foreground: #111827;
-  --card: #f0f7f4;
-  --card-foreground: #111827;
-  --popover: #ffffff;
-  --popover-foreground: #111827;
-  --secondary: #ffffff;
-  --secondary-foreground: #111827;
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  --accent: #eef2f1;
-  --accent-foreground: #111827;
-  --border: #e5e7eb;
-  --input: #d1d5db;
-  --ring: #157f5a;
-  --surface: #f3f4f6;
+  /* Calm, clinical light surfaces reduce glare while preserving clear hierarchy. */
+  --background: #f3f5f2;
+  --foreground: #202722;
+  --card: #f0f3ef;
+  --card-foreground: #202722;
+  --popover: #f4f7f4;
+  --popover-foreground: #202722;
+  --secondary: #e8ede8;
+  --secondary-foreground: #202722;
+  --muted: #e2e9e3;
+  --muted-foreground: #526058;
+  --accent: #dcefe2;
+  --accent-foreground: #174b37;
+  --border: #d1ddd4;
+  --input: #bdcbbf;
+  --field: #f8faf7;
+  --ring: #1f7a58;
+  --surface: #eef3ef;
 
   /* Healthcare green primary (muted) */
-  --primary: #0f6647;
+  --primary: #1f7a58;
   --primary-foreground: #ffffff;
-  --primary-hover: #098666;
-  --primary-soft: #eaf5ef;
+  --primary-hover: #176246;
+  --primary-soft: #ddf0e5;
 
   /* Semantic status colors */
-  --success: #16803c;
-  --warning: #b45309;
-  --destructive: #b91c1c;
-  --info: #2563eb;
+  --success: #237a48;
+  --warning: #9a5b09;
+  --destructive: #b42318;
+  --info: #2563c7;
 
   /* Charts */
-  --chart-1: #157f5a;
-  --chart-2: #6b7280;
-  --chart-3: #16803c;
-  --chart-4: #2563eb;
-  --chart-5: #e5e7eb;
+  --chart-1: #1f7a58;
+  --chart-2: #52615a;
+  --chart-3: #237a48;
+  --chart-4: #2563c7;
+  --chart-5: #cbd8d0;
 
-  /* Sharp edges - minimal radius */
-  --radius: 0.1875rem;
+  --radius: 0;
 
   /* Sidebar */
-  --sidebar: #f0f7f4;
-  --sidebar-foreground: #111827;
-  --sidebar-primary: #188b63;
-  --sidebar-primary-foreground: #f8f9fa;
-  --sidebar-accent: #f0f7f4;
-  --sidebar-accent-foreground: #157f5a;
-  --sidebar-border: #e5e7eb;
-  --sidebar-ring: #157f5a;
+  --sidebar: #edf2ee;
+  --sidebar-foreground: #202722;
+  --sidebar-primary: #1f7a58;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e3f0e8;
+  --sidebar-accent-foreground: #174b37;
+  --sidebar-border: #cbd8d0;
+  --sidebar-ring: #1f7a58;
 }
 
 .dark {
-  --background: #09090b;
-  --foreground: #fafafa;
-  --card: #18181b;
-  --card-foreground: #fafafa;
-  --popover: #18181b;
-  --popover-foreground: #fafafa;
-  --primary: #2f9e73;
-  --primary-foreground: #ffffff;
-  --secondary: #18181b;
-  --secondary-foreground: #fafafa;
-  --muted: #18181b;
-  --muted-foreground: #a1a1aa;
-  --accent: #1f4438;
-  --accent-foreground: #fafafa;
-  --destructive: #dc2626;
-  --success: #34d399;
-  --warning: #fbbf24;
-  --info: #60a5fa;
-  --border: #27272a;
-  --input: #27272a;
-  --ring: #2f9e73;
-  --surface: #18181b;
-  --chart-1: #2f9e73;
-  --chart-2: #71717a;
-  --chart-3: #34d399;
-  --chart-4: #60a5fa;
-  --chart-5: #27272a;
-  --sidebar: #09090b;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #2f9e73;
-  --sidebar-primary-foreground: #111111;
-  --sidebar-accent: #1f4438;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #27272a;
-  --sidebar-ring: #2f9e73;
+  /* Neutral near-black surfaces reserve green for meaningful action and state. */
+  --background: #151716;
+  --foreground: #edf1ee;
+  --card: #1d201f;
+  --card-foreground: #edf1ee;
+  --popover: #252927;
+  --popover-foreground: #edf1ee;
+  --primary: #5ac88f;
+  --primary-foreground: #102419;
+  --primary-hover: #76d6a3;
+  --primary-soft: #1d3d2b;
+  --secondary: #242825;
+  --secondary-foreground: #edf1ee;
+  --muted: #292e2b;
+  --muted-foreground: #bbc5be;
+  --accent: #1d3829;
+  --accent-foreground: #e7f6ec;
+  --destructive: #ffb4ab;
+  --success: #78d8a5;
+  --warning: #f5c66d;
+  --info: #9bc5ff;
+  --border: #353b37;
+  --input: #4d5750;
+  --field: #202422;
+  --ring: #76d6a3;
+  --surface: #252927;
+  --chart-1: #5ac88f;
+  --chart-2: #bbc5be;
+  --chart-3: #76d6a3;
+  --chart-4: #9bc5ff;
+  --chart-5: #353b37;
+  --sidebar: #181c1a;
+  --sidebar-foreground: #edf1ee;
+  --sidebar-primary: #5ac88f;
+  --sidebar-primary-foreground: #102419;
+  --sidebar-accent: #1d3829;
+  --sidebar-accent-foreground: #e7f6ec;
+  --sidebar-border: #353b37;
+  --sidebar-ring: #76d6a3;
 }
 
 @layer base {
@@ -158,6 +163,68 @@
   }
 }
 
+@layer utilities {
+  /* Normalize legacy hard-coded neutrals so every existing route follows the theme. */
+  .bg-white,
+  .bg-zinc-50 {
+    background-color: var(--card);
+  }
+
+  .bg-zinc-100,
+  .bg-zinc-200 {
+    background-color: var(--muted);
+  }
+
+  .bg-zinc-800 {
+    background-color: var(--surface);
+  }
+
+  .bg-zinc-900 {
+    background-color: var(--background);
+  }
+
+  .text-zinc-900,
+  .text-zinc-800,
+  .text-zinc-700,
+  .text-zinc-600 {
+    color: var(--foreground);
+  }
+
+  .text-zinc-500,
+  .text-zinc-400,
+  .text-zinc-350,
+  .text-zinc-300 {
+    color: var(--muted-foreground);
+  }
+
+  .border-zinc-100,
+  .border-zinc-200,
+  .border-zinc-300,
+  .border-zinc-400 {
+    border-color: var(--border);
+  }
+
+  input.bg-background,
+  input.bg-white,
+  textarea.bg-background,
+  textarea.bg-white,
+  select.bg-background,
+  select.bg-white {
+    background-color: var(--field);
+  }
+
+  .border-border.bg-card {
+    border-color: transparent;
+  }
+
+  [data-slot="card"],
+  [data-slot="dialog-content"],
+  [data-slot="table-container"],
+  [data-slot="dropdown-menu-content"] {
+    border-radius: 0;
+  }
+}
+
 /* Modern scrollbar styles */
 ::-webkit-scrollbar {
   width: 6px;
@@ -169,17 +236,17 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 0;
+  background: #aebfb4;
+  border-radius: 999px;
   transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #7f9688;
 }
 
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #d4d4d8 transparent;
+  scrollbar-color: #aebfb4 transparent;
 }

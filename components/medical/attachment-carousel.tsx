@@ -24,6 +24,7 @@ export type AttachmentCarouselItem = {
 type AttachmentCarouselProps = {
   attachments: AttachmentCarouselItem[];
   className?: string;
+  compact?: boolean;
 };
 
 function isImageAttachment(attachment: AttachmentCarouselItem) {
@@ -36,6 +37,7 @@ function isImageAttachment(attachment: AttachmentCarouselItem) {
 export function AttachmentCarousel({
   attachments,
   className,
+  compact = false,
 }: AttachmentCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -66,10 +68,12 @@ export function AttachmentCarousel({
   }
 
   const isImage = isImageAttachment(attachment);
+  const isPdf = attachment.mime_type === "application/pdf" || attachment.file_name?.toLowerCase().endsWith(".pdf");
+
   return (
     <div className={className}>
       <div
-        className="relative flex min-h-80 items-center justify-center overflow-hidden rounded-md border bg-muted/30 sm:min-h-[32rem]"
+        className={`relative flex items-center justify-center overflow-hidden border bg-muted/30 ${compact ? "min-h-36" : "min-h-80 sm:min-h-[32rem]"}`}
         onTouchEnd={(event) => handleTouchEnd(event.changedTouches[0].clientX)}
         onTouchStart={(event) => setTouchStartX(event.touches[0].clientX)}
       >
@@ -100,7 +104,10 @@ export function AttachmentCarousel({
                     alignItems: "center",
                     justifyContent: "center",
                   }}
-                  wrapperStyle={{ height: "62vh", width: "100%" }}
+                  wrapperStyle={{
+                    height: compact ? "9rem" : "62vh",
+                    width: "100%",
+                  }}
                 >
                   {/* Signed remote URLs cannot use Next Image without a configured hostname. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -153,6 +160,12 @@ export function AttachmentCarousel({
               </>
             )}
           </TransformWrapper>
+        ) : isPdf && attachment.file_url ? (
+          <iframe
+            src={attachment.file_url}
+            className="h-full w-full border-0"
+            title={attachment.file_name || "PDF Document"}
+          />
         ) : (
           <div className="flex flex-col items-center gap-2 p-6 text-center text-muted-foreground">
             <FileText className="size-9" />

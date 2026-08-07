@@ -6,18 +6,22 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 import { cn } from "@/lib/utils"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
+// Coordinates an accessible dropdown menu root.
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />
 }
 
+// Places menu content above surrounding page content.
 function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
 }
 
+// Renders the control that opens a dropdown menu.
 function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
   return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />
 }
 
+// Renders an elevated, constrained menu surface.
 function DropdownMenuContent({
   align = "start",
   alignOffset = 0,
@@ -41,7 +45,7 @@ function DropdownMenuContent({
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
-          className={cn("z-50 max-h-(--available-height) w-(--anchor-width) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto border border-border bg-popover p-1.5 text-popover-foreground duration-100 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+          className={cn("z-50 max-h-(--available-height) w-(--anchor-width) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl duration-150 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95", className )}
           {...props}
         />
       </MenuPrimitive.Positioner>
@@ -49,10 +53,12 @@ function DropdownMenuContent({
   )
 }
 
+// Groups related menu items for assistive technologies.
 function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
 }
 
+// Renders a contextual label within a menu group.
 function DropdownMenuLabel({
   className,
   inset,
@@ -73,6 +79,7 @@ function DropdownMenuLabel({
   )
 }
 
+// Renders an actionable menu item with a clear focus state.
 function DropdownMenuItem({
   className,
   inset,
@@ -96,10 +103,12 @@ function DropdownMenuItem({
   )
 }
 
+// Coordinates a nested dropdown menu.
 function DropdownMenuSub({ ...props }: MenuPrimitive.SubmenuRoot.Props) {
   return <MenuPrimitive.SubmenuRoot data-slot="dropdown-menu-sub" {...props} />
 }
 
+// Renders a menu item that opens a nested menu.
 function DropdownMenuSubTrigger({
   className,
   inset,
@@ -124,6 +133,7 @@ function DropdownMenuSubTrigger({
   )
 }
 
+// Renders the panel for a nested dropdown menu.
 function DropdownMenuSubContent({
   align = "start",
   alignOffset = -3,
@@ -135,7 +145,7 @@ function DropdownMenuSubContent({
   return (
     <DropdownMenuContent
       data-slot="dropdown-menu-sub-content"
-      className={cn("w-auto min-w-36 border border-border bg-popover p-1.5 text-popover-foreground duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+      className={cn("w-auto min-w-36 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl duration-150 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
       align={align}
       alignOffset={alignOffset}
       side={side}
@@ -145,6 +155,7 @@ function DropdownMenuSubContent({
   )
 }
 
+// Renders a selectable checkbox item in a menu.
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -179,6 +190,7 @@ function DropdownMenuCheckboxItem({
   )
 }
 
+// Groups mutually exclusive menu choices.
 function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
   return (
     <MenuPrimitive.RadioGroup
@@ -188,6 +200,7 @@ function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
   )
 }
 
+// Renders a radio-style menu choice.
 function DropdownMenuRadioItem({
   className,
   children,
@@ -220,6 +233,7 @@ function DropdownMenuRadioItem({
   )
 }
 
+// Separates menu item groups visually and semantically.
 function DropdownMenuSeparator({
   className,
   ...props
@@ -233,6 +247,7 @@ function DropdownMenuSeparator({
   )
 }
 
+// Renders an optional keyboard shortcut hint.
 function DropdownMenuShortcut({
   className,
   ...props

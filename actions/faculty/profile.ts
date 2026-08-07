@@ -29,8 +29,8 @@ async function requireFacultyUser() {
     }
 
     const role = await getUserRole(user.id)
-    if (role !== "faculty") {
-        return { error: "Access Denied: Faculty portal only", user: null }
+    if (role !== "faculty" && role !== "staff") {
+        return { error: "Access Denied: Faculty or staff portal only", user: null }
     }
 
     return { error: null, user }

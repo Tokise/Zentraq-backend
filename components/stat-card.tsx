@@ -1,15 +1,15 @@
-import type { LucideIcon } from "lucide-react"
-import { TrendingUp, TrendingDown } from "lucide-react"
-import { cn } from "@/lib/utils"
+import type { LucideIcon } from "lucide-react";
+import { TrendingUp, TrendingDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type StatCardProps = {
-  label: string
-  value: string | number
-  icon?: LucideIcon
-  trend?: number
-  comparisonText?: string
-  className?: string
-}
+  label: string;
+  value: string | number;
+  icon?: LucideIcon;
+  trend?: number;
+  comparisonText?: string;
+  className?: string;
+};
 
 export function StatCard({
   label,
@@ -19,10 +19,10 @@ export function StatCard({
   comparisonText,
   className,
 }: StatCardProps) {
-  const hasTrend = trend !== undefined
+  const hasTrend = trend !== undefined;
 
   return (
-    <div className={cn("border border-border bg-card p-5 shadow-sm", className)}>
+    <div className={cn("rounded-xl bg-card p-5 shadow-sm", className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -45,7 +45,7 @@ export function StatCard({
             <span
               className={cn(
                 "inline-flex items-center gap-0.5 text-xs font-medium",
-                trend! >= 0 ? "text-success" : "text-destructive"
+                trend! >= 0 ? "text-success" : "text-destructive",
               )}
             >
               {trend! >= 0 ? (
@@ -58,10 +58,12 @@ export function StatCard({
             </span>
           )}
           {comparisonText && (
-            <span className="text-xs text-muted-foreground">{comparisonText}</span>
+            <span className="text-xs text-muted-foreground">
+              {comparisonText}
+            </span>
           )}
         </div>
       )}
     </div>
-  )
+  );
 }

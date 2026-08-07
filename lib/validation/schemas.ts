@@ -189,6 +189,24 @@ export const UpdateConsultationSchema = z.object({
     status: z.enum(['in-progress', 'completed']).optional(),
 });
 
+export const SetVitalsDispositionSchema = z.object({
+    consultation_id: UUIDSchema,
+    disposition: z.enum(['required', 'not_required']),
+    skip_reason: z.string().trim().min(3).max(500).optional(),
+}).superRefine((value, context) => {
+    if (value.disposition === 'not_required' && !value.skip_reason) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['skip_reason'],
+            message: 'A reason is required when vital signs are not needed',
+        });
+    }
+});
+
+export const ConsultationIdSchema = z.object({
+    consultation_id: UUIDSchema,
+});
+
 export const DiagnosisSchema = z.object({
     consultation_id: UUIDSchema,
     icd10_code: z.string().max(20).optional(),
@@ -278,14 +296,15 @@ export const UpdateRestockRequestSchema = z.object({
 // ──────────────────────────────────────────────
 
 export const CreateAppointmentSchema = z.object({
-    patient_type: z.enum(['student', 'faculty']),
+    patient_type: z.enum(['student', 'faculty', 'staff']),
     student_id: UUIDSchema.optional(),
     faculty_id: UUIDSchema.optional(),
     reason: z.string().min(1, 'Reason is required').max(500),
     symptoms: z.string().max(2000).optional(),
 }).refine(
     (data) => (data.patient_type === 'student' && data.student_id) ||
-        (data.patient_type === 'faculty' && data.faculty_id),
+        (data.patient_type === 'faculty' && data.faculty_id) ||
+        (data.patient_type === 'staff' && data.faculty_id),
     { message: 'Either student_id or faculty_id is required based on patient_type', path: ['patient_type'] }
 );
 
@@ -372,13 +391,14 @@ export const IncidentFollowupSchema = z.object({
 // ──────────────────────────────────────────────
 
 export const CreateHealthClearanceSchema = z.object({
-    requester_type: z.enum(['student', 'faculty']),
+    requester_type: z.enum(['student', 'faculty', 'staff']),
     student_id: UUIDSchema.optional(),
     faculty_id: UUIDSchema.optional(),
     purpose: z.string().max(500).optional(),
 }).refine(
     (data) => (data.requester_type === 'student' && data.student_id) ||
-        (data.requester_type === 'faculty' && data.faculty_id),
+        (data.requester_type === 'faculty' && data.faculty_id) ||
+        (data.requester_type === 'staff' && data.faculty_id),
     { message: 'Either student_id or faculty_id is required based on requester_type', path: ['requester_type'] }
 );
 
