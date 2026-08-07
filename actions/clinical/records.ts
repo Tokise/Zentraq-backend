@@ -149,7 +149,7 @@ export async function getOwnMedicalRecord() {
     return { error: null, record: data as PatientMedicalRecord | null }
   }
 
-  if (actor.role === "faculty") {
+  if (actor.role === "faculty" || actor.role === "staff") {
     const { data: facultyData } = await adminClient
       .from("faculty")
       .select("id")

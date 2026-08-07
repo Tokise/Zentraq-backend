@@ -6,7 +6,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 type StaffRole = "admin" | "doctor" | "nurse";
 
 const STUDENT_DOCUMENTS_BUCKET = "student-documents";
-const MAX_DOCUMENT_SIZE_BYTES = 6 * 1024 * 1024;
+const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED_DOCUMENT_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
@@ -179,12 +179,12 @@ export async function getEmergencyContactsAction(): Promise<{
 export async function uploadStudentDocumentAction(
   formData: FormData,
 ): Promise<{ success?: boolean; error?: string }> {
-  const actor = await staff(["admin", "nurse"]);
-  if (!actor) return { error: "Access denied" };
+  const actor = await staff(["admin", "nurse"])
+  if (!actor) return { error: "Access denied" }
 
-  const studentId = String(formData.get("studentId") || "");
-  const documentType = String(formData.get("documentType") || "");
-  const file = formData.get("file");
+  const studentId = String(formData.get("studentId") || "")
+  const documentType = String(formData.get("documentType") || "")
+  const file = formData.get("file")
 
   if (
     !studentId ||
@@ -192,47 +192,59 @@ export async function uploadStudentDocumentAction(
     !(file instanceof File) ||
     file.size === 0
   ) {
-    return { error: "Student, document type, and a file are required" };
+    return { error: "Student, document type, and a file are required" }
   }
 
   if (!ALLOWED_DOCUMENT_TYPES.has(file.type)) {
-    return { error: "Upload a PDF, JPEG, or PNG file" };
+    return { error: "Upload a PDF, JPEG, or PNG file" }
   }
 
   if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
-    return { error: "Files must be 6 MB or smaller" };
+    return { error: "Files must be 10 MB or smaller" }
   }
 
-  const extension = file.name.split(".").pop()?.toLowerCase();
+  // Compress image files before upload
+  let uploadFile = file
+  if (file.type.startsWith("image/")) {
+    try {
+      const { compressImage } = await import("@/lib/utils/file-compression")
+      const compressedBlob = await compressImage(file)
+      uploadFile = new File([compressedBlob], file.name, { type: "image/webp" })
+    } catch (err) {
+      console.error("Image compression failed, uploading original:", err)
+    }
+  }
+
+  const extension = uploadFile.name.split(".").pop()?.toLowerCase()
   const safeExtension =
-    extension && /^[a-z0-9]{1,8}$/.test(extension) ? extension : "bin";
-  const storagePath = `${studentId}/${crypto.randomUUID()}.${safeExtension}`;
-  const admin = createAdminClient();
+    extension && /^[a-z0-9]{1,8}$/.test(extension) ? extension : "bin"
+  const storagePath = `${studentId}/${crypto.randomUUID()}.${safeExtension}`
+  const admin = createAdminClient()
   const { error: uploadError } = await admin.storage
     .from(STUDENT_DOCUMENTS_BUCKET)
-    .upload(storagePath, await file.arrayBuffer(), {
-      contentType: file.type,
+    .upload(storagePath, await uploadFile.arrayBuffer(), {
+      contentType: uploadFile.type,
       upsert: false,
-    });
+    })
 
-  if (uploadError) return { error: uploadError.message };
+  if (uploadError) return { error: uploadError.message }
 
   const { error } = await admin.from("student_documents").insert({
     student_id: studentId,
     document_type: documentType,
     file_url: storagePath,
-    file_name: file.name,
-    mime_type: file.type,
-    file_size: file.size,
+    file_name: uploadFile.name,
+    mime_type: uploadFile.type,
+    file_size: uploadFile.size,
     uploaded_by: actor.id,
-  });
+  })
 
   if (error) {
-    await admin.storage.from(STUDENT_DOCUMENTS_BUCKET).remove([storagePath]);
-    return { error: error.message };
+    await admin.storage.from(STUDENT_DOCUMENTS_BUCKET).remove([storagePath])
+    return { error: error.message }
   }
 
-  return { success: true };
+  return { success: true }
 }
 
 function isStoredDocumentPath(fileUrl: string) {

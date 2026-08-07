@@ -72,8 +72,12 @@ export function AppSidebar({
         {visibleNavigation.map((group) => {
           const isCollapsible =
             group.collapsible !== false && group.items.length > 4;
-          const hasActiveItem = group.items.some(
-            (item) => item.href === pathname,
+          const hasActiveItem = group.items.some((item) =>
+            item.href === "/admin" ||
+            item.href === "/doctor" ||
+            item.href === "/nurse"
+              ? pathname === item.href
+              : pathname === item.href || pathname.startsWith(`${item.href}/`),
           );
           const isExpanded =
             !isCollapsible ||
@@ -104,7 +108,7 @@ export function AppSidebar({
                     });
                   }}
                   className={cn(
-                    "flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    "flex w-full cursor-pointer items-center justify-between px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                     hasActiveItem &&
                       !isExpanded &&
                       "bg-primary/10 text-primary",
@@ -127,7 +131,17 @@ export function AppSidebar({
               )}
               <ul className={cn("space-y-0.5", !isExpanded && "hidden")}>
                 {group.items.map((item) => {
-                  const isActive = pathname === item.href;
+                  const isVisitRoot = item.href.endsWith("/visits");
+                  const isActive =
+                    item.href === "/admin" ||
+                    item.href === "/doctor" ||
+                    item.href === "/nurse"
+                      ? pathname === item.href
+                      : isVisitRoot
+                        ? pathname === item.href ||
+                          pathname.startsWith(`${item.href}/consultation/`)
+                        : pathname === item.href ||
+                          pathname.startsWith(`${item.href}/`);
                   const Icon = item.icon;
                   return (
                     <li key={item.href}>
@@ -144,7 +158,7 @@ export function AppSidebar({
                           if (onNavigate) onNavigate();
                         }}
                         className={cn(
-                          "flex items-center gap-3 px-2 py-2 text-sm transition-colors duration-150 rounded-md",
+                          "flex items-center gap-3 px-2 py-2 text-sm transition-colors duration-150",
                           isActive
                             ? "bg-primary/10 text-primary font-medium"
                             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",

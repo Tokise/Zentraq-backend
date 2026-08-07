@@ -31,6 +31,115 @@ export interface KioskStudentDTO {
   clinicPhotoUrl: string | null;
 }
 
+export interface RfidCheckInResult {
+  queueEntryId: string;
+  consultationId: string;
+  patientType: "student" | "faculty";
+  patientId: string;
+  firstName: string;
+  lastName: string;
+  clinicPhotoUrl: string | null;
+  createdNew: boolean;
+}
+
+export interface RfidQueueItem {
+  id: string;
+  consultationId: string;
+  patientId: string;
+  patientName: string;
+  patientType: "student" | "faculty";
+  checkedInAt: string;
+  status: "waiting" | "claimed";
+  priority: number;
+}
+
+// Returns the current clinical worklist ordered by priority and arrival time.
+export async function getRfidQueue(): Promise<{
+  error: string | null;
+  queue: RfidQueueItem[];
+}> {
+  const auth = await requireClinicStaff();
+  if (auth.error || !auth.user) return { error: auth.error, queue: [] };
+
+  const { data, error } = await createAdminClient()
+    .from("clinic_queue_entries")
+    .select(
+      "id, status, priority, created_at, clinic_visits(patient_type, student_id, faculty_id, consultations(id), students(first_name, last_name), faculty(first_name, last_name))",
+    )
+    .in("status", ["waiting", "claimed"])
+    .order("priority", { ascending: false })
+    .order("created_at", { ascending: true });
+
+  if (error) return { error: error.message, queue: [] };
+
+  return {
+    error: null,
+    queue: (data ?? []).map((item: any) => {
+      const visit = item.clinic_visits;
+      const patient =
+        visit?.patient_type === "student" ? visit.students : visit.faculty;
+      return {
+        id: item.id,
+        consultationId: visit?.consultations?.[0]?.id ?? "",
+        patientId:
+          visit?.patient_type === "student"
+            ? visit?.student_id
+            : visit?.faculty_id,
+        patientName:
+          `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() ||
+          "Unknown patient",
+        patientType: visit?.patient_type === "student" ? "student" : "faculty",
+        checkedInAt: item.created_at,
+        status: item.status,
+        priority: item.priority,
+      };
+    }),
+  };
+}
+
+// Atomically queues an RFID patient or returns their existing active check-in.
+export async function checkInRfid(
+  rfidUid: string,
+): Promise<{ error: string | null; result: RfidCheckInResult | null }> {
+  const auth = await requireClinicStaff();
+  if (auth.error || !auth.user) return { error: auth.error, result: null };
+
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const { data, error } = await supabase.rpc("check_in_rfid", {
+    p_rfid_uid: rfidUid.trim(),
+  });
+
+  if (error || !data?.[0]) {
+    return {
+      error: error?.message || "Unable to check in patient",
+      result: null,
+    };
+  }
+
+  const item = data[0];
+  const result: RfidCheckInResult = {
+    queueEntryId: item.queue_entry_id,
+    consultationId: item.consultation_id,
+    patientType: item.patient_type,
+    patientId: item.patient_id,
+    firstName: item.first_name,
+    lastName: item.last_name,
+    clinicPhotoUrl: item.clinic_photo_url,
+    createdNew: item.created_new,
+  };
+
+  await logAuditEvent({
+    action: "RFID_SCAN",
+    userId: auth.user.id,
+    email: auth.user.email,
+    resource: result.queueEntryId,
+    details: { createdNew: result.createdNew, patientType: result.patientType },
+  });
+
+  return { error: null, result };
+}
+
 /**
  * Server Action: Look up a student profile by RFID UID for the kiosk.
  * Uses Service Role via createAdminClient() — NEVER exposes full student records.
@@ -151,34 +260,46 @@ export interface KioskConsultationSummary {
   notes: string | null;
 }
 
-/** Returns only the scanned student's past consultation summaries for the protected kiosk modal. */
-export async function getKioskConsultationHistory(studentId: string) {
+/** Returns past consultation summaries for a patient (student or faculty). */
+export async function getPatientConsultationHistory(
+  patientId: string,
+  patientType: "student" | "faculty",
+) {
   const auth = await requireClinicStaff();
   if (auth.error || !auth.user)
     return {
       error: auth.error,
       consultations: [] as KioskConsultationSummary[],
     };
-  if (!studentId)
+  if (!patientId)
     return {
-      error: "Student ID is required",
+      error: "Patient ID is required",
       consultations: [] as KioskConsultationSummary[],
     };
 
-  const { data, error } = await createAdminClient()
+  const admin = createAdminClient();
+  const visitsQuery = admin
     .from("clinic_visits")
     .select(
       "id, check_in_time, visit_type, consultations(id, chief_complaint, consultation_notes, status)",
     )
-    .eq("student_id", studentId)
     .order("check_in_time", { ascending: false })
     .limit(10);
+
+  if (patientType === "student") {
+    visitsQuery.eq("student_id", patientId);
+  } else {
+    visitsQuery.eq("faculty_id", patientId);
+  }
+
+  const { data, error } = await visitsQuery;
 
   if (error)
     return {
       error: error.message,
       consultations: [] as KioskConsultationSummary[],
     };
+
   const consultations = (data ?? []).flatMap((visit: any) => {
     const entries = Array.isArray(visit.consultations)
       ? visit.consultations
@@ -192,6 +313,7 @@ export async function getKioskConsultationHistory(studentId: string) {
       notes: consultation.consultation_notes ?? null,
     }));
   });
+
   return {
     error: null,
     consultations: consultations as KioskConsultationSummary[],

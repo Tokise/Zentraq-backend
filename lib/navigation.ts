@@ -68,21 +68,6 @@ export const adminNavigation: NavGroup[] = [
     label: "Medical Records",
     items: [
       { title: "View Records", href: "/admin/records/view", icon: HeartPulse },
-      {
-        title: "Medical History",
-        href: "/admin/records/history",
-        icon: History,
-      },
-      {
-        title: "Immunizations",
-        href: "/admin/records/immunization",
-        icon: Activity,
-      },
-      {
-        title: "Record Attachments",
-        href: "/admin/records/attachments",
-        icon: FileText,
-      },
     ],
   },
   {
@@ -113,20 +98,8 @@ export const adminNavigation: NavGroup[] = [
   {
     label: "Consultations",
     items: [
-      { title: "New Visit", href: "/admin/visits/new_entry", icon: UserPlus },
+      { title: "Visit", href: "/admin/visits", icon: Stethoscope },
       { title: "Visit History", href: "/admin/visits/history", icon: History },
-      { title: "Vitals", href: "/admin/visits/vitals", icon: Activity },
-      { title: "Clinical Notes", href: "/admin/visits/notes", icon: FileText },
-      {
-        title: "Diagnosis",
-        href: "/admin/visits/diagnosis",
-        icon: Stethoscope,
-      },
-      {
-        title: "Prescriptions",
-        href: "/admin/visits/prescription",
-        icon: Pill,
-      },
       {
         title: "Follow-ups",
         href: "/admin/visits/followup",
@@ -799,6 +772,65 @@ export const facultyNavigation: NavGroup[] = [
     ],
   },
 ];
+export const staffNavigation: NavGroup[] = [
+  {
+    label: "Dashboard",
+    items: [
+      { title: "My Dashboard", href: "/staff", icon: LayoutDashboard },
+      {
+        title: "Announcements",
+        href: "/staff/announcements",
+        icon: Megaphone,
+      },
+    ],
+    collapsible: false,
+  },
+  {
+    label: "Appointments",
+    items: [
+      {
+        title: "Request Appointment",
+        href: "/staff/appointments/book",
+        icon: CalendarDays,
+      },
+      {
+        title: "My Appointments",
+        href: "/staff/appointments/reschedule",
+        icon: CalendarDays,
+      },
+    ],
+  },
+  {
+    label: "Health Records",
+    items: [
+      {
+        title: "My Health Records",
+        href: "/staff/staffhealth/my_record",
+        icon: HeartPulse,
+      },
+      {
+        title: "Consultations",
+        href: "/staff/visits/my_history",
+        icon: Stethoscope,
+      },
+    ],
+  },
+  {
+    label: "Clearances",
+    items: [
+      {
+        title: "My Clearances",
+        href: "/staff/clearance/my_history",
+        icon: FileCheck,
+      },
+      {
+        title: "Request Clearance",
+        href: "/staff/clearance/request",
+        icon: FileText,
+      },
+    ],
+  },
+];
 
 // Returns the navigation that is permitted for the active portal role.
 export function getNavigationForRole(role: string | null | undefined) {
@@ -815,17 +847,17 @@ export function getNavigationForRole(role: string | null | undefined) {
     return facultyNavigation;
   }
   if (role === "staff") {
-    return facultyNavigation;
+    return staffNavigation;
   }
   return studentNavigation;
 }
-export const staffNavigation = nurseNavigation;
 export const navigation = [
   ...adminNavigation,
   ...doctorNavigation,
   ...nurseNavigation,
   ...studentNavigation,
   ...facultyNavigation,
+  ...staffNavigation,
 ];
 export const allNavItems = navigation.flatMap((group) => group.items);
 // Resolves a human-readable page title from a static route.
