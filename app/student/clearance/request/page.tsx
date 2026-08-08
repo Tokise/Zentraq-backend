@@ -8,24 +8,31 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { FileText, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { submitMyClearanceRequestAction } from "@/actions/patient/portal"
 
 export default function StudentClearanceRequestPage() {
   const [purpose, setPurpose] = useState("")
   const [notes, setNotes] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!purpose.trim()) {
       toast.error("Please enter a purpose for the clearance")
       return
     }
     setSubmitting(true)
-    setTimeout(() => {
+    try {
+      const result = await submitMyClearanceRequestAction(purpose)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
       toast.success("Clearance request submitted")
       setPurpose("")
       setNotes("")
+    } finally {
       setSubmitting(false)
-    }, 800)
+    }
   }
 
   return (

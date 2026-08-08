@@ -31,7 +31,11 @@ export default function AdminVisitsPage() {
   // Loads the protected clinical worklist.
   async function loadConsultations() {
     setLoading(true);
-    const result = await getConsultationQueue(["queued", "in-progress"]);
+    const result = await getConsultationQueue([
+      "queued",
+      "in-progress",
+      "awaiting_doctor_review",
+    ]);
     if (result.error) toast.error(result.error);
     setConsultations(result.consultations);
     setLoading(false);

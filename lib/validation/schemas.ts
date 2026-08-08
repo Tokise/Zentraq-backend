@@ -228,6 +228,52 @@ export const FollowUpSchema = z.object({
     status: z.enum(['scheduled', 'completed', 'cancelled']).default('scheduled'),
 });
 
+export const FinalizeConsultationWorkflowSchema = z.object({
+    consultation_id: UUIDSchema,
+    vitals_disposition: z.enum(['required', 'not_required']),
+    vitals_skip_reason: z.string().trim().min(3).max(500).optional(),
+    vitals: z.object({
+        temperature: z.number().min(20).max(50).optional(),
+        blood_pressure: z.string().trim().max(30).optional(),
+        heart_rate: z.number().int().min(20).max(300).optional(),
+        respiratory_rate: z.number().int().min(4).max(100).optional(),
+        oxygen_saturation: z.number().int().min(0).max(100).optional(),
+    }).default({}),
+    outcome_note: z.string().trim().max(5000).optional(),
+    diagnosis: z.object({
+        icd10_code: z.string().trim().max(20).optional(),
+        description: z.string().trim().min(1).max(500),
+        is_primary: z.boolean().default(true),
+    }).optional(),
+    prescriptions: z.array(z.object({
+        medicine_id: UUIDSchema,
+        dosage: z.string().trim().max(100).optional(),
+        frequency: z.string().trim().max(100).optional(),
+        duration_days: z.number().int().min(1).max(365).optional(),
+        quantity: z.number().int().min(1).max(1000).optional(),
+        instructions: z.string().trim().max(1000).optional(),
+    })).max(20).default([]),
+    follow_up: z.object({
+        scheduled_date: z.string().date(),
+        reason: z.string().trim().max(500).optional(),
+    }).optional(),
+}).superRefine((value, context) => {
+    if (value.vitals_disposition === 'not_required' && !value.vitals_skip_reason) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['vitals_skip_reason'],
+            message: 'A reason is required when vital signs are not needed',
+        });
+    }
+    if (value.vitals_disposition === 'required' && Object.keys(value.vitals).length === 0) {
+        context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['vitals'],
+            message: 'Record at least one vital sign',
+        });
+    }
+});
+
 // ──────────────────────────────────────────────
 // Pharmacy / Medicine Inventory Schemas
 // ──────────────────────────────────────────────
@@ -299,13 +345,17 @@ export const CreateAppointmentSchema = z.object({
     patient_type: z.enum(['student', 'faculty', 'staff']),
     student_id: UUIDSchema.optional(),
     faculty_id: UUIDSchema.optional(),
+    staff_id: UUIDSchema.optional(),
     reason: z.string().min(1, 'Reason is required').max(500),
     symptoms: z.string().max(2000).optional(),
+    doctor_id: UUIDSchema,
+    scheduled_date: z.string().date(),
+    scheduled_time: z.string().time(),
 }).refine(
     (data) => (data.patient_type === 'student' && data.student_id) ||
         (data.patient_type === 'faculty' && data.faculty_id) ||
-        (data.patient_type === 'staff' && data.faculty_id),
-    { message: 'Either student_id or faculty_id is required based on patient_type', path: ['patient_type'] }
+        (data.patient_type === 'staff' && data.staff_id),
+    { message: 'A matching patient profile is required', path: ['patient_type'] }
 );
 
 export const UpdateAppointmentSchema = z.object({

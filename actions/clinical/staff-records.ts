@@ -181,3 +181,57 @@ export async function addStaffImmunization(staffId: string, data: { vaccine_name
   await logAuditEvent({ userId: actor.id, action: "MEDICAL_RECORD_MODIFY", resource: staffId, details: { vaccine: data.vaccine_name, action: "add_immunization" } })
   return { error: null, immunization }
 }
+
+export interface StaffMedicalRecord {
+  profile: {
+    id: string
+    first_name: string
+    last_name: string
+    employee_number: string
+    department: string | null
+    position: string | null
+    email: string | null
+    phone: string | null
+    profile_photo_url: string | null
+  }
+  history: StaffMedicalHistory[]
+  allergies: StaffAllergy[]
+  medications: StaffMedication[]
+  immunizations: StaffImmunization[]
+}
+
+// Returns a staff member's clinical record for the Staff Health workspace.
+export async function getStaffMedicalRecord(staffId: string) {
+  const actor = await staff(["admin", "doctor", "nurse"])
+  if (!actor) return { error: "Access denied", record: null }
+
+  const admin = createAdminClient()
+  const [{ data: profile, error }, history, allergies, medications, immunizations] =
+    await Promise.all([
+      admin
+        .from("staff")
+        .select("id, first_name, last_name, employee_number, department, position, email, phone, profile_photo_url")
+        .eq("id", staffId)
+        .maybeSingle(),
+      getStaffMedicalHistory(staffId),
+      getStaffAllergies(staffId),
+      getStaffMedications(staffId),
+      getStaffImmunizations(staffId),
+    ])
+
+  if (error || !profile) return { error: error?.message ?? "Staff record not found", record: null }
+  if (history.error || allergies.error || medications.error || immunizations.error) {
+    return { error: "Unable to load the staff medical record", record: null }
+  }
+
+  return {
+    error: null,
+    record: {
+      profile,
+      history: history.history,
+      allergies: allergies.allergies,
+      medications: medications.medications,
+      immunizations: immunizations.immunizations,
+    } as StaffMedicalRecord,
+  }
+}

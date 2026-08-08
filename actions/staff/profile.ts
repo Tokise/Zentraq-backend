@@ -12,6 +12,7 @@ export interface StaffProfileDTO {
   position: string | null
   email: string | null
   phone: string | null
+  profilePhotoUrl: string | null
 }
 
 async function requireStaffUser() {
@@ -30,7 +31,7 @@ async function requireStaffUser() {
   const admin = createAdminClient()
   const { data: staff } = await admin
     .from("staff")
-    .select("id, user_id, first_name, last_name, employee_number, department, position, email, phone")
+    .select("id, user_id, first_name, last_name, employee_number, department, position, email, phone, profile_photo_url")
     .eq("user_id", user.id)
     .maybeSingle()
 
@@ -58,6 +59,7 @@ export async function getStaffProfileAction(): Promise<{ error: string | null; p
       position: staff.position,
       email: staff.email,
       phone: staff.phone,
+      profilePhotoUrl: staff.profile_photo_url,
     },
   }
 }

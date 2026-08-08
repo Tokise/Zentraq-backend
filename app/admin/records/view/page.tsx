@@ -42,7 +42,12 @@ import {
   uploadStudentDocumentAction,
 } from "@/actions/admin/records-admin";
 
-export default function AdminMedicalRecordsViewPage() {
+// Renders the medical-record workspace for a clinical role.
+export function MedicalRecordsViewPage({
+  canUpload = true,
+}: {
+  canUpload?: boolean;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
@@ -381,7 +386,7 @@ export default function AdminMedicalRecordsViewPage() {
           <section className="bg-card p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Files & attachments</h2>
-              {selectedPatient[0]?.type === "student" && (
+              {canUpload && selectedPatient[0]?.type === "student" && (
                 <form
                   onSubmit={handleUpload}
                   className="flex items-center gap-2"
@@ -482,3 +487,5 @@ export default function AdminMedicalRecordsViewPage() {
     </div>
   );
 }
+
+export default MedicalRecordsViewPage;

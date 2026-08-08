@@ -61,8 +61,18 @@ export async function submitAppointmentRequest(
       code: "RATE_LIMIT",
     };
 
-  const profileTable = actor.role === "student" ? "students" : "faculty";
-  const profileIdField = actor.role === "student" ? "student_id" : "faculty_id";
+  const profileTable =
+    actor.role === "student"
+      ? "students"
+      : actor.role === "faculty"
+        ? "faculty"
+        : "staff";
+  const profileIdField =
+    actor.role === "student"
+      ? "student_id"
+      : actor.role === "faculty"
+        ? "faculty_id"
+        : "staff_id";
   const admin = createAdminClient();
   const { data: profile } = await admin
     .from(profileTable)
@@ -87,9 +97,62 @@ export async function submitAppointmentRequest(
       code: "VALIDATION",
     };
 
+  if (parsed.data.scheduled_date < clinicTomorrow()) {
+    return {
+      success: false,
+      error: "Appointments must be booked for tomorrow or later.",
+      code: "VALIDATION",
+    };
+  }
+
+  const appointmentDate = new Date(`${parsed.data.scheduled_date}T00:00:00`);
+  const dayOfWeek = appointmentDate.getDay();
+  const [{ data: clinician }, { data: availability }, { data: block }, { data: existing }] = await Promise.all([
+    admin
+      .from("clinic_accounts")
+      .select("id, user_id, display_name, role")
+      .eq("id", parsed.data.doctor_id)
+      .eq("is_active", true)
+      .in("role", ["doctor", "nurse"])
+      .maybeSingle(),
+    admin
+      .from("staff_availability")
+      .select("start_time, end_time")
+      .eq("clinic_account_id", parsed.data.doctor_id)
+      .eq("day_of_week", dayOfWeek)
+      .eq("is_active", true),
+    admin
+      .from("clinician_schedule_blocks")
+      .select("id")
+      .eq("clinic_account_id", parsed.data.doctor_id)
+      .eq("blocked_date", parsed.data.scheduled_date)
+      .lte("start_time", parsed.data.scheduled_time)
+      .gt("end_time", parsed.data.scheduled_time)
+      .maybeSingle(),
+    admin
+      .from("appointments")
+      .select("id")
+      .eq("doctor_id", parsed.data.doctor_id)
+      .eq("scheduled_date", parsed.data.scheduled_date)
+      .eq("scheduled_time", parsed.data.scheduled_time)
+      .in("status", ["scheduled", "reminded", "checked_in", "in_consultation"])
+      .maybeSingle(),
+  ]);
+  const fitsAvailability = (availability ?? []).some((window) =>
+    parsed.data.scheduled_time >= window.start_time &&
+    parsed.data.scheduled_time.slice(0, 5) < window.end_time.slice(0, 5),
+  );
+  if (!clinician || !fitsAvailability || block || existing) {
+    return {
+      success: false,
+      error: "That time is no longer available. Choose another available time on this date.",
+      code: "SLOT_TAKEN",
+    };
+  }
+
   const { data, error } = await admin
     .from("appointments")
-    .insert({ ...parsed.data, status: "pending" })
+    .insert({ ...parsed.data, status: "scheduled" })
     .select(
       "id, patient_type, reason, symptoms, priority, scheduled_date, scheduled_time, status, created_at",
     )
@@ -97,12 +160,36 @@ export async function submitAppointmentRequest(
   if (error || !data)
     return {
       success: false,
-      error: "Unable to create appointment",
-      code: "DATABASE",
+      error: error?.code === "23505"
+        ? "That time was just taken. Choose another available time on this date."
+        : "Unable to create appointment",
+      code: error?.code === "23505" ? "SLOT_TAKEN" : "DATABASE",
     };
 
-  await writeAuditLog(actor, "appointment.requested", "appointment", data.id);
+  await writeAuditLog(actor, "appointment.scheduled", "appointment", data.id);
+  await sendNotification(actor, {
+    receiver_id: clinician.user_id,
+    title: "New appointment booked",
+    message: `A patient booked ${parsed.data.scheduled_date} at ${parsed.data.scheduled_time.slice(0, 5)}.`,
+    type: "appointment",
+    entity_type: "appointment",
+    entity_id: data.id,
+  });
+  await sendNotification(null, {
+    receiver_id: actor.id,
+    title: "Appointment confirmed",
+    message: `Your appointment with ${clinician.display_name} is scheduled for ${parsed.data.scheduled_date} at ${parsed.data.scheduled_time.slice(0, 5)}.`,
+    type: "appointment",
+    entity_type: "appointment",
+    entity_id: data.id,
+  });
+  revalidatePath(`/${actor.role}/appointments`);
+  revalidatePath("/admin/appointments/calendar");
+  revalidatePath("/doctor/appointments/calendar");
+  revalidatePath("/nurse/appointments/calendar");
+  return { success: true, data: toAppointmentDTO(data) };
 
+  /*
   // ──── AI EVALUATION & AUTO ASSIGNMENT ────
   let priorityScore = 3;
   let assignedStaffId: string | null = null;
@@ -232,6 +319,7 @@ export async function submitAppointmentRequest(
 
   revalidatePath(`/${actor.role}/appointments`);
   return { success: true, data: toAppointmentDTO(finalAppointment || data) };
+  */
 }
 
 /** Runs the advisory-only evaluator. It never approves or schedules an appointment. */
@@ -601,6 +689,22 @@ function invalidTransition(): ActionResult<never> {
 function forbidden(message = "Forbidden"): ActionResult<never> {
   return { success: false, error: message, code: "FORBIDDEN" };
 }
+
+// Returns tomorrow using the clinic's configured operating timezone.
+function clinicTomorrow() {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const today = new Date(`${values.year}-${values.month}-${values.day}T00:00:00`);
+  today.setDate(today.getDate() + 1);
+  return today.toISOString().slice(0, 10);
+}
+
 async function getPatientUserId(
   admin: ReturnType<typeof createAdminClient>,
   patientType: string,

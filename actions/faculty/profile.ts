@@ -13,6 +13,7 @@ export interface FacultyProfileDTO {
     position: string | null
     email: string | null
     phone: string | null
+    profilePhotoUrl: string | null
 }
 
 async function requireFacultyUser() {
@@ -72,7 +73,7 @@ export async function getFacultyProfileDTO() {
         const admin = createAdminClient()
         const { data, error } = await admin
             .from("faculty")
-            .select("first_name, last_name, employee_number, department, position, email, phone")
+            .select("first_name, last_name, employee_number, department, position, email, phone, profile_photo_url")
             .eq("user_id", auth.user.id)
             .maybeSingle()
 
@@ -93,6 +94,7 @@ export async function getFacultyProfileDTO() {
             position: data.position || null,
             email: data.email || auth.user.email || null,
             phone: data.phone || null,
+            profilePhotoUrl: data.profile_photo_url || null,
         }
 
         return { error: null, profile }

@@ -39,7 +39,8 @@ function formatStatus(status: string): string {
   return status?.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "—"
 }
 
-export default function AdminAppointmentsCalendarPage() {
+// Renders the role-filtered appointment calendar used by every clinical portal.
+export function AppointmentsCalendarPage() {
   const [appointments, setAppointments] = useState<AppointmentOverviewRow[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<string | undefined>(() => new Date().toISOString().split("T")[0])
@@ -160,3 +161,5 @@ export default function AdminAppointmentsCalendarPage() {
     </div>
   )
 }
+
+export default AppointmentsCalendarPage

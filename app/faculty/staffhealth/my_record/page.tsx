@@ -6,7 +6,21 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Heart } from "lucide-react"
 import { toast } from "sonner"
-import { getPatientMedicalRecord } from "@/actions/clinical/records"
+import { getOwnMedicalRecord } from "@/actions/clinical/records"
+
+// Converts structured allergy data into readable patient-facing text.
+function formatAllergies(allergies: unknown): string {
+  if (!Array.isArray(allergies)) return typeof allergies === "string" ? allergies : "None"
+  if (allergies.length === 0) return "None"
+  return allergies
+    .map((allergy) => {
+      if (!allergy || typeof allergy !== "object") return ""
+      const item = allergy as { allergen?: string; severity?: string | null }
+      return item.severity ? `${item.allergen ?? "Unknown"} (${item.severity})` : item.allergen ?? "Unknown"
+    })
+    .filter(Boolean)
+    .join(", ") || "None"
+}
 
 export default function FacultyStaffHealthMyRecordPage() {
   const [record, setRecord] = useState<any>(null)
@@ -15,7 +29,7 @@ export default function FacultyStaffHealthMyRecordPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getPatientMedicalRecord("self", "faculty")
+      const res = await getOwnMedicalRecord()
       if (res.error) {
         toast.error(res.error)
         setRecord(null)
@@ -67,7 +81,7 @@ export default function FacultyStaffHealthMyRecordPage() {
                   </div>
                   <div>
                     <p className="text-xs text-zinc-500">Allergies</p>
-                    <p className="font-medium">{record.allergies || "None"}</p>
+                    <p className="font-medium">{formatAllergies(record.allergies)}</p>
                   </div>
                 </div>
                 {record.chronic_conditions && (

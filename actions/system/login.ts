@@ -8,6 +8,7 @@ import { randomBytes } from "crypto";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logAuditEvent } from "@/lib/audit-logger";
 import { getUserRole } from "@/lib/auth/get-user-role";
+import { getDefaultRouteForRole } from "@/lib/auth/role-routes";
 
 const COOKIE_NAME = "zentraq_session_token";
 const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7;
@@ -83,8 +84,7 @@ export async function login(formData: FormData) {
   revalidatePath("/", "layout");
   return {
     success: true,
-    redirectTo:
-      role === "admin" ? "/admin" : role === "staff" ? "/faculty" : `/${role}`,
+    redirectTo: getDefaultRouteForRole(role),
   };
 }
 

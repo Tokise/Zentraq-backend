@@ -1,6 +1,7 @@
 "use client"
 
-import { Check, ChevronLeft, ChevronRight, X } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -10,142 +11,127 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+export type ClinicalWorkflowRole = "doctor" | "nurse"
 export type ConsultationWizardStep =
   | "details"
   | "vitals"
   | "notes"
-  | "diagnosis"
-  | "prescription"
-  | "follow_up"
+  | "clinical_plan"
   | "review"
 
-const steps: Array<{ key: ConsultationWizardStep; label: string }> = [
+const doctorSteps: Array<{ key: ConsultationWizardStep; label: string }> = [
   { key: "details", label: "Visit" },
   { key: "vitals", label: "Vitals" },
   { key: "notes", label: "Notes" },
-  { key: "diagnosis", label: "Diagnosis" },
-  { key: "prescription", label: "Prescription" },
-  { key: "follow_up", label: "Follow-up" },
+  { key: "clinical_plan", label: "Clinical plan" },
+  { key: "review", label: "Review" },
+]
+
+const nurseSteps: Array<{ key: ConsultationWizardStep; label: string }> = [
+  { key: "details", label: "Visit" },
+  { key: "vitals", label: "Vitals" },
+  { key: "notes", label: "Notes" },
   { key: "review", label: "Review" },
 ]
 
 interface ConsultationWizardShellProps {
   open: boolean
   patientName: string
+  role: ClinicalWorkflowRole
   step: ConsultationWizardStep
   onOpenChange: (open: boolean) => void
   onStepChange: (step: ConsultationWizardStep) => void
-  onSaveAndExit: () => void
-  onComplete?: () => void
+  onRequestClose: () => void
+  onSubmitReview: () => void
+  submitting: boolean
   children: React.ReactNode
 }
 
-// Renders the reusable modal frame and navigation for clinical consultation steps.
+// Renders role-safe steps and a single review submission control.
 export function ConsultationWizardShell({
   open,
   patientName,
+  role,
   step,
   onOpenChange,
   onStepChange,
-  onSaveAndExit,
-  onComplete,
+  onRequestClose,
+  onSubmitReview,
+  submitting,
   children,
 }: ConsultationWizardShellProps) {
+  const steps = role === "doctor" ? doctorSteps : nurseSteps
   const index = steps.findIndex((item) => item.key === step)
   const isLastStep = index === steps.length - 1
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[98vw] max-w-[98vw] sm:w-[95vw] sm:max-w-[95vw] md:w-[90vw] md:max-w-[90vw] overflow-y-auto p-6 sm:p-8">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) onOpenChange(true)
+        else onRequestClose()
+      }}
+    >
+      <DialogContent className="max-h-[92vh] w-[96vw] max-w-4xl overflow-y-auto p-5 sm:p-7">
         <DialogHeader>
           <DialogTitle>Consultation</DialogTitle>
           <DialogDescription>{patientName}</DialogDescription>
         </DialogHeader>
 
-        <ol
-          className="flex items-center justify-center gap-0 py-2"
-          aria-label="Consultation progress"
-        >
+        <ol className="flex items-start gap-1 overflow-x-auto pb-2" aria-label="Consultation progress">
           {steps.map((item, itemIndex) => {
             const isCurrent = itemIndex === index
             const isComplete = itemIndex < index
             return (
-              <li key={item.key} className="flex items-center">
+              <li key={item.key} className="flex min-w-14 flex-1 items-center">
                 {itemIndex > 0 && (
-                  <div
-                    className={`h-px w-8 mx-1 ${
-                      isComplete ? "bg-primary" : "bg-border"
-                    }`}
-                  />
+                  <div className={`mt-[-18px] h-px flex-1 ${isComplete ? "bg-primary" : "bg-border"}`} />
                 )}
-                <div className="flex flex-col items-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => onStepChange(item.key)}
-                    className={`size-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-colors cursor-pointer ${
-                      isComplete
-                        ? "bg-primary text-primary-foreground"
-                        : isCurrent
-                          ? "bg-primary text-primary-foreground ring-2 ring-primary/30"
-                          : "bg-field text-muted-foreground border border-border"
-                    }`}
-                    aria-current={isCurrent ? "step" : undefined}
-                    aria-label={`Step ${itemIndex + 1}: ${item.label}`}
-                  >
-                    {isComplete ? <Check className="size-3" /> : itemIndex + 1}
-                  </button>
-                  <span
-                    className={`text-[10px] leading-4 whitespace-nowrap ${
-                      isCurrent || isComplete
-                        ? "text-foreground font-medium"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {item.label}
+                <button
+                  aria-current={isCurrent ? "step" : undefined}
+                  aria-label={`Step ${itemIndex + 1}: ${item.label}`}
+                  className="flex min-w-14 flex-col items-center gap-1 text-xs focus-visible:outline-none"
+                  key={item.key}
+                  onClick={() => onStepChange(item.key)}
+                  type="button"
+                >
+                  <span className={`flex size-7 items-center justify-center rounded-full border text-xs font-semibold ${isComplete || isCurrent ? "border-primary bg-primary text-primary-foreground" : "border-border bg-field text-muted-foreground"}`}>
+                    {isComplete ? <Check className="size-3.5" /> : itemIndex + 1}
                   </span>
-                </div>
+                  <span className={isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"}>{item.label}</span>
+                </button>
               </li>
             )
           })}
         </ol>
 
-        <section className="min-h-72 border-y border-border py-6">
-          {children}
-        </section>
+        <section className="min-h-72 border-y border-border py-5">{children}</section>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           {index > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onStepChange(steps[index - 1].key)}
-            >
-              <ChevronLeft className="size-4" /> Back
+            <Button onClick={() => onStepChange(steps[index - 1].key)} type="button" variant="outline">
+              <ChevronLeft className="size-4" />
+              Back
             </Button>
           ) : (
-            <span />
+            <Button onClick={onRequestClose} type="button" variant="ghost">
+              Cancel
+            </Button>
           )}
-          <div className="flex gap-2">
-            {!isLastStep && (
-              <Button type="button" variant="outline" onClick={onSaveAndExit}>
-                <X className="size-4" /> Save and exit
-              </Button>
-            )}
-            {isLastStep && onComplete ? (
-              <Button type="button" onClick={onComplete}>
-                Complete consultation
-              </Button>
-            ) : (
-              !isLastStep && (
-                <Button
-                  type="button"
-                  onClick={() => onStepChange(steps[index + 1].key)}
-                >
-                  Next <ChevronRight className="size-4" />
-                </Button>
-              )
-            )}
-          </div>
+          {isLastStep ? (
+            <Button disabled={submitting} onClick={onSubmitReview} type="button">
+              {submitting
+                ? "Submitting..."
+                : role === "doctor"
+                  ? "Complete consultation"
+                  : "Submit for doctor review"}
+            </Button>
+          ) : (
+            <Button onClick={() => onStepChange(steps[index + 1].key)} type="button">
+              Next
+              <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Clock } from "lucide-react"
 import { toast } from "sonner"
-import { getConsultationQueue } from "@/actions/inventory/workflow-queries"
+import { getMyConsultationsAction } from "@/actions/patient/portal"
 
 export default function StudentVisitHistoryPage() {
   const [consultations, setConsultations] = useState<any[]>([])
@@ -15,7 +15,7 @@ export default function StudentVisitHistoryPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getConsultationQueue()
+      const res = await getMyConsultationsAction()
       if (res.error) {
         toast.error(res.error)
         setConsultations([])

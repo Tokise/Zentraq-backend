@@ -14,15 +14,16 @@ async function requireClinicStaff() {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
-  if (authError || !user) return { error: "Not authenticated", user: null };
+  if (authError || !user) return { error: "Not authenticated", user: null, role: null };
   const role = await getUserRole(user.id);
   if (!role || !["admin", "doctor", "nurse"].includes(role))
-    return { error: "Access Denied", user: null };
-  return { error: null, user };
+    return { error: "Access Denied", user: null, role: null };
+  return { error: null, user, role: role as "admin" | "doctor" | "nurse" };
 }
 
 export interface KioskStudentDTO {
   id: string;
+  patientType: "student" | "faculty" | "staff";
   firstName: string;
   lastName: string;
   studentNumber: string | null;
@@ -34,7 +35,7 @@ export interface KioskStudentDTO {
 export interface RfidCheckInResult {
   queueEntryId: string;
   consultationId: string;
-  patientType: "student" | "faculty";
+  patientType: "student" | "faculty" | "staff";
   patientId: string;
   firstName: string;
   lastName: string;
@@ -47,10 +48,11 @@ export interface RfidQueueItem {
   consultationId: string;
   patientId: string;
   patientName: string;
-  patientType: "student" | "faculty";
+  patientType: "student" | "faculty" | "staff";
   checkedInAt: string;
   status: "waiting" | "claimed";
   priority: number;
+  profilePhotoUrl: string | null;
 }
 
 // Returns the current clinical worklist ordered by priority and arrival time.
@@ -64,7 +66,7 @@ export async function getRfidQueue(): Promise<{
   const { data, error } = await createAdminClient()
     .from("clinic_queue_entries")
     .select(
-      "id, status, priority, created_at, clinic_visits(patient_type, student_id, faculty_id, consultations(id), students(first_name, last_name), faculty(first_name, last_name))",
+      "id, status, priority, created_at, clinic_visits(patient_type, student_id, faculty_id, staff_id, consultations(id, doctor_id, nurse_id), students(first_name, last_name, profile_photo_url), faculty(first_name, last_name, profile_photo_url), staff(first_name, last_name, profile_photo_url))",
     )
     .in("status", ["waiting", "claimed"])
     .order("priority", { ascending: false })
@@ -72,28 +74,70 @@ export async function getRfidQueue(): Promise<{
 
   if (error) return { error: error.message, queue: [] };
 
-  return {
-    error: null,
-    queue: (data ?? []).map((item: any) => {
-      const visit = item.clinic_visits;
-      const patient =
-        visit?.patient_type === "student" ? visit.students : visit.faculty;
+  let assignedClinicianId: string | null = null;
+  if (auth.role !== "admin") {
+    const { data: account } = await createAdminClient()
+      .from("clinic_accounts")
+      .select("id")
+      .eq("user_id", auth.user.id)
+      .eq("is_active", true)
+      .maybeSingle();
+    assignedClinicianId = account?.id ?? null;
+    if (!assignedClinicianId) {
+      return { error: "Active clinic account not found", queue: [] };
+    }
+  }
+
+  const queue = (data ?? [])
+    .filter((item: any) => {
+      if (!assignedClinicianId) return true;
+      const visit = Array.isArray(item.clinic_visits)
+        ? item.clinic_visits[0]
+        : item.clinic_visits;
+      const consultations = Array.isArray(visit?.consultations)
+        ? visit.consultations
+        : [];
+      return consultations.some(
+        (consultation: { doctor_id: string | null; nurse_id: string | null }) =>
+          consultation.doctor_id === assignedClinicianId ||
+          consultation.nurse_id === assignedClinicianId,
+      );
+    })
+    .map((item: any) => {
+      const visit = Array.isArray(item.clinic_visits)
+        ? item.clinic_visits[0]
+        : item.clinic_visits;
+      const patient = visit?.patient_type === "student"
+        ? (Array.isArray(visit.students) ? visit.students[0] : visit.students)
+        : visit?.patient_type === "faculty"
+          ? (Array.isArray(visit.faculty) ? visit.faculty[0] : visit.faculty)
+          : (Array.isArray(visit.staff) ? visit.staff[0] : visit.staff);
+      const consultation = Array.isArray(visit?.consultations)
+        ? visit.consultations[0]
+        : visit?.consultations;
       return {
         id: item.id,
-        consultationId: visit?.consultations?.[0]?.id ?? "",
+        consultationId: consultation?.id ?? "",
         patientId:
           visit?.patient_type === "student"
             ? visit?.student_id
-            : visit?.faculty_id,
+            : visit?.patient_type === "faculty"
+              ? visit?.faculty_id
+              : visit?.staff_id,
         patientName:
           `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() ||
           "Unknown patient",
-        patientType: visit?.patient_type === "student" ? "student" : "faculty",
+        patientType: visit?.patient_type ?? "student",
         checkedInAt: item.created_at,
         status: item.status,
         priority: item.priority,
+        profilePhotoUrl: patient?.profile_photo_url ?? null,
       };
-    }),
+    });
+
+  return {
+    error: null,
+    queue,
   };
 }
 
@@ -118,6 +162,12 @@ export async function checkInRfid(
   }
 
   const item = data[0];
+  const { data: profile } = await createAdminClient()
+    .from("v_rfid_patient_profiles")
+    .select("profile_photo_url")
+    .eq("patient_type", item.patient_type)
+    .eq("patient_id", item.patient_id)
+    .maybeSingle();
   const result: RfidCheckInResult = {
     queueEntryId: item.queue_entry_id,
     consultationId: item.consultation_id,
@@ -125,7 +175,7 @@ export async function checkInRfid(
     patientId: item.patient_id,
     firstName: item.first_name,
     lastName: item.last_name,
-    clinicPhotoUrl: item.clinic_photo_url,
+    clinicPhotoUrl: profile?.profile_photo_url ?? item.clinic_photo_url ?? null,
     createdNew: item.created_new,
   };
 
@@ -141,7 +191,7 @@ export async function checkInRfid(
 }
 
 /**
- * Server Action: Look up a student profile by RFID UID for the kiosk.
+ * Server Action: Look up a patient profile by RFID UID for the kiosk.
  * Uses Service Role via createAdminClient() — NEVER exposes full student records.
  * Requires clinic staff authentication.
  */
@@ -158,12 +208,12 @@ export async function getKioskStudentProfile(rfidUid: string) {
       return { error: auth.error, profile: null };
     }
 
-    // 3. Authorized admin client lookup with MINIMUM fields the kiosk UI needs
+    // 3. Authorized lookup with only the fields the kiosk UI needs.
     const admin = createAdminClient();
     const { data, error } = await admin
-      .from("students")
+      .from("v_rfid_patient_profiles")
       .select(
-        "id, first_name, last_name, student_number, department, profile_photo_url",
+        "patient_id, patient_type, first_name, last_name, identifier, department, profile_photo_url",
       )
       .eq("rfid_uid", rfidUid.trim())
       .maybeSingle();
@@ -180,11 +230,12 @@ export async function getKioskStudentProfile(rfidUid: string) {
 
     // 4. Return ONLY the fields the kiosk UI renders (data minimization)
     const profile: KioskStudentDTO = {
-      id: data.id,
+      id: data.patient_id,
+      patientType: data.patient_type,
       firstName: data.first_name || "",
       lastName: data.last_name || "",
-      studentNumber: data.student_number || null,
-      employeeNumber: null,
+      studentNumber: data.patient_type === "student" ? data.identifier || null : null,
+      employeeNumber: data.patient_type !== "student" ? data.identifier || null : null,
       department: data.department || null,
       clinicPhotoUrl: data.profile_photo_url || null,
     };
@@ -260,10 +311,10 @@ export interface KioskConsultationSummary {
   notes: string | null;
 }
 
-/** Returns past consultation summaries for a patient (student or faculty). */
+/** Returns past consultation summaries for a patient across all patient roles. */
 export async function getPatientConsultationHistory(
   patientId: string,
-  patientType: "student" | "faculty",
+  patientType: "student" | "faculty" | "staff",
 ) {
   const auth = await requireClinicStaff();
   if (auth.error || !auth.user)
@@ -288,8 +339,10 @@ export async function getPatientConsultationHistory(
 
   if (patientType === "student") {
     visitsQuery.eq("student_id", patientId);
-  } else {
+  } else if (patientType === "faculty") {
     visitsQuery.eq("faculty_id", patientId);
+  } else {
+    visitsQuery.eq("staff_id", patientId);
   }
 
   const { data, error } = await visitsQuery;

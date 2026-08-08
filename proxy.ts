@@ -1,5 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  getDefaultRouteForRole,
+  isRoleRoute,
+} from "@/lib/auth/role-routes";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
@@ -18,7 +22,7 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   response.headers.set(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "camera=(self), microphone=(), geolocation=(), payment=(), usb=()",
   );
   response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
   return response;
@@ -163,16 +167,15 @@ export async function proxy(request: NextRequest) {
     return setSecurityHeaders(redirectResponse);
   }
 
-  // If user is authenticated and trying to access /login, redirect to their role dashboard
+  // Redirect authenticated users away from login to their own dashboard.
   if (isAuthPage) {
-    let defaultRoute = "/nurse";
-    if (userRole === "student") defaultRoute = "/student";
-    else if (userRole === "faculty" || userRole === "staff")
-      defaultRoute = "/faculty";
-    else if (userRole === "admin") defaultRoute = "/admin";
-    else if (userRole === "doctor") defaultRoute = "/doctor";
+    if (!userRole) {
+      return setSecurityHeaders(supabaseResponse);
+    }
     return setSecurityHeaders(
-      NextResponse.redirect(new URL(defaultRoute, request.url)),
+      NextResponse.redirect(
+        new URL(getDefaultRouteForRole(userRole), request.url),
+      ),
     );
   }
 
@@ -184,53 +187,14 @@ export async function proxy(request: NextRequest) {
     return setSecurityHeaders(supabaseResponse);
   }
 
-  // Students can ONLY access /student routes
-  if (userRole === "student") {
-    if (!pathname.startsWith("/student")) {
-      return setSecurityHeaders(
-        NextResponse.redirect(new URL("/student", request.url)),
-      );
-    }
-    return setSecurityHeaders(supabaseResponse);
-  }
-
-  // Faculty can ONLY access /faculty routes
-  if (userRole === "faculty" || userRole === "staff") {
-    if (!pathname.startsWith("/faculty")) {
-      return setSecurityHeaders(
-        NextResponse.redirect(new URL("/faculty", request.url)),
-      );
-    }
-    return setSecurityHeaders(supabaseResponse);
-  }
-
-  // Doctors can ONLY access /doctor routes
-  if (userRole === "doctor") {
-    if (!pathname.startsWith("/doctor")) {
-      return setSecurityHeaders(
-        NextResponse.redirect(new URL("/doctor", request.url)),
-      );
-    }
-    return setSecurityHeaders(supabaseResponse);
-  }
-
-  // Nurses can ONLY access /nurse routes
-  if (userRole === "nurse") {
-    if (!pathname.startsWith("/nurse")) {
-      return setSecurityHeaders(
-        NextResponse.redirect(new URL("/nurse", request.url)),
-      );
-    }
-    return setSecurityHeaders(supabaseResponse);
-  }
-
-  // Admin can access /admin routes
-  if (userRole === "admin") {
-    if (pathname.startsWith("/admin")) {
+  if (userRole) {
+    if (isRoleRoute(userRole, pathname)) {
       return setSecurityHeaders(supabaseResponse);
     }
     return setSecurityHeaders(
-      NextResponse.redirect(new URL("/admin/rfid-registration", request.url)),
+      NextResponse.redirect(
+        new URL(getDefaultRouteForRole(userRole), request.url),
+      ),
     );
   }
 

@@ -10,10 +10,9 @@ import {
   CreateHealthProgramSchema,
   CreateIncidentSchema,
   CreateMedicineSchema,
-  CreateTriageAssessmentSchema,
   DispenseMedicineSchema,
+  FinalizeConsultationWorkflowSchema,
   IssueCertificateSchema,
-  SetVitalsDispositionSchema,
 } from "@/lib/validation/schemas";
 import { cookies } from "next/headers";
 import {
@@ -49,35 +48,12 @@ export async function createWalkInVisit(
 export async function createTriageAssessment(
   input: unknown,
 ): Promise<ActionResult<{ id: string }>> {
-  const actor = await staff(["admin", "doctor", "nurse"]);
-  if (!actor || !(await assertSameOrigin())) return forbidden();
-  const parsed = CreateTriageAssessmentSchema.safeParse(input);
-  if (!parsed.success) return invalid();
-  const admin = createAdminClient();
-  const nurseId = await clinicAccountId(admin, actor.id);
-  const { data, error } = await admin
-    .from("triage_assessments")
-    .insert({ ...parsed.data, nurse_id: nurseId })
-    .select("id")
-    .single();
-  if (error || !data) return databaseError();
-  await admin
-    .from("consultations")
-    .update({
-      vitals_disposition: "recorded",
-      vitals_skip_reason: null,
-      vitals_assessed_by: actor.id,
-      vitals_assessed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", parsed.data.consultation_id);
-  await writeAuditLog(
-    actor,
-    "triage.recorded",
-    "consultation",
-    parsed.data.consultation_id,
-  );
-  return { success: true, data };
+  void input;
+  return {
+    success: false,
+    error: "Vital signs are saved from the final consultation review.",
+    code: "INVALID_STATE",
+  };
 }
 
 // Claims a waiting RFID consultation using the authenticated operator session.
@@ -115,68 +91,87 @@ export async function claimConsultation(
 export async function setVitalsDisposition(
   input: unknown,
 ): Promise<ActionResult<null>> {
-  const actor = await staff(["admin", "doctor", "nurse"]);
-  if (!actor || !(await assertSameOrigin())) return forbidden();
-  const parsed = SetVitalsDispositionSchema.safeParse(input);
-  if (!parsed.success) return invalid();
-
-  const { error } = await createAdminClient()
-    .from("consultations")
-    .update({
-      vitals_disposition: parsed.data.disposition,
-      vitals_skip_reason:
-        parsed.data.disposition === "not_required"
-          ? parsed.data.skip_reason?.trim()
-          : null,
-      vitals_assessed_by: actor.id,
-      vitals_assessed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", parsed.data.consultation_id)
-    .eq("status", "in-progress");
-
-  if (error) return databaseError();
-  await writeAuditLog(
-    actor,
-    "consultation.vitals_assessed",
-    "consultation",
-    parsed.data.consultation_id,
-    {
-      disposition: parsed.data.disposition,
-    },
-  );
-  return { success: true, data: null };
+  void input;
+  return {
+    success: false,
+    error: "Vitals are saved from the final consultation review.",
+    code: "INVALID_STATE",
+  };
 }
 
 // Completes a consultation after database-side documentation checks pass.
 export async function completeClinicalConsultation(
   input: unknown,
 ): Promise<ActionResult<null>> {
-  const actor = await staff(["admin", "doctor", "nurse"]);
+  void input;
+  return {
+    success: false,
+    error: "Complete the consultation from its final review.",
+    code: "INVALID_STATE",
+  };
+}
+
+// Atomically persists the final doctor review or a nurse handoff.
+export async function finalizeConsultationWorkflow(
+  input: unknown,
+): Promise<ActionResult<{ status: "completed" | "awaiting_doctor_review" }>> {
+  const actor = await staff(["doctor", "nurse"]);
   if (!actor || !(await assertSameOrigin())) return forbidden();
-  const parsed = ConsultationIdSchema.safeParse(input);
+
+  const parsed = FinalizeConsultationWorkflowSchema.safeParse(input);
   if (!parsed.success) return invalid();
 
-  const supabase = createClient(await cookies());
-  const { error } = await supabase.rpc("complete_consultation", {
-    p_consultation_id: parsed.data.consultation_id,
-  });
+  if (
+    actor.role === "nurse" &&
+    (parsed.data.diagnosis ||
+      parsed.data.prescriptions.length > 0 ||
+      parsed.data.follow_up)
+  ) {
+    return forbidden();
+  }
 
-  if (error) {
+  const { data, error } = await createAdminClient().rpc(
+    "finalize_consultation_workflow",
+    {
+      p_consultation_id: parsed.data.consultation_id,
+      p_actor_id: actor.id,
+      p_actor_role: actor.role,
+      p_vitals_disposition: parsed.data.vitals_disposition,
+      p_vitals_skip_reason: parsed.data.vitals_skip_reason ?? null,
+      p_vitals: parsed.data.vitals,
+      p_notes: parsed.data.outcome_note ?? null,
+      p_diagnosis: parsed.data.diagnosis ?? null,
+      p_prescriptions: parsed.data.prescriptions,
+      p_follow_up: parsed.data.follow_up ?? null,
+    },
+  );
+
+  if (error || !data) {
     return {
       success: false,
-      error: error.message,
+      error: error?.message ?? "Unable to finalize the consultation",
       code: "INVALID_STATE",
     };
   }
 
+  const status = data as "completed" | "awaiting_doctor_review";
   await writeAuditLog(
     actor,
-    "consultation.completed",
+    status === "completed"
+      ? "consultation.completed"
+      : "consultation.submitted_for_review",
     "consultation",
     parsed.data.consultation_id,
   );
-  return { success: true, data: null };
+  return { success: true, data: { status } };
+}
+
+// Returns the current clinic role for role-specific consultation controls.
+export async function getClinicalWorkflowRole(): Promise<
+  "admin" | "doctor" | "nurse" | null
+> {
+  const actor = await staff(["admin", "doctor", "nurse"]);
+  return (actor?.role ?? null) as "admin" | "doctor" | "nurse" | null;
 }
 
 // Adds an optional diagnosis while an authorized clinician is handling a consultation.
