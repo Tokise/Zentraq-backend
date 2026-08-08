@@ -13,7 +13,7 @@ async function staff(roles: readonly StaffRole[]) {
 
 export interface AppointmentOverviewRow {
   id: string
-  patient_type: "student" | "faculty"
+  patient_type: "student" | "faculty" | "staff"
   patient_name: string | null
   patient_identifier: string | null
   reason: string
@@ -22,6 +22,7 @@ export interface AppointmentOverviewRow {
   scheduled_time: string | null
   status: string
   doctor_name: string | null
+  assigned_clinician_id: string | null
   created_at: string
 }
 
@@ -37,7 +38,7 @@ export async function getAppointmentsOverviewAction(params?: {
   const admin = createAdminClient()
   let query = admin
     .from("v_appointment_overview")
-    .select("id, patient_type, patient_first_name, patient_last_name, scheduled_date, scheduled_time, priority, status, created_at")
+    .select("id, patient_type, patient_first_name, patient_last_name, scheduled_date, scheduled_time, priority, status, doctor_id, doctor_name, created_at")
     .order("created_at", { ascending: false })
     .limit(200)
 
@@ -46,6 +47,20 @@ export async function getAppointmentsOverviewAction(params?: {
   }
   if (params?.fromDate) query = query.gte("scheduled_date", params.fromDate)
   if (params?.toDate) query = query.lte("scheduled_date", params.toDate)
+
+  if (actor.role === "doctor" || actor.role === "nurse") {
+    const { data: clinicAccount } = await admin
+      .from("clinic_accounts")
+      .select("id")
+      .eq("user_id", actor.id)
+      .eq("is_active", true)
+      .maybeSingle()
+
+    if (!clinicAccount) {
+      return { error: "Active clinic account not found", appointments: [] }
+    }
+    query = query.eq("doctor_id", clinicAccount.id)
+  }
 
   const { data, error } = await query
   if (error) return { error: error.message, appointments: [] as AppointmentOverviewRow[] }
@@ -60,7 +75,8 @@ export async function getAppointmentsOverviewAction(params?: {
     scheduled_date: item.scheduled_date,
     scheduled_time: item.scheduled_time,
     status: item.status,
-    doctor_name: null,
+    doctor_name: item.doctor_name,
+    assigned_clinician_id: item.doctor_id,
     created_at: item.created_at,
   }))
 
@@ -73,20 +89,19 @@ export async function getAppointmentsOverviewAction(params?: {
         id, reason,
         students(student_number),
         faculty(employee_number),
-        clinic_accounts(display_name)
+        staff(employee_number)
       `)
       .in("id", ids)
 
     const detailMap = new Map((details ?? []).map((d: any) => {
       const student = Array.isArray(d.students) ? d.students[0] : d.students
       const faculty = Array.isArray(d.faculty) ? d.faculty[0] : d.faculty
-      const doctor = Array.isArray(d.clinic_accounts) ? d.clinic_accounts[0] : d.clinic_accounts
+      const staff = Array.isArray(d.staff) ? d.staff[0] : d.staff
       return [
         d.id,
         {
           reason: d.reason ?? "",
-          identifier: student?.student_number ?? faculty?.employee_number ?? null,
-          doctorName: doctor?.display_name ?? null,
+          identifier: student?.student_number ?? faculty?.employee_number ?? staff?.employee_number ?? null,
         },
       ]
     }))
@@ -96,7 +111,6 @@ export async function getAppointmentsOverviewAction(params?: {
       if (detail) {
         a.reason = detail.reason
         a.patient_identifier = detail.identifier
-        a.doctor_name = detail.doctorName
       }
     }
   }

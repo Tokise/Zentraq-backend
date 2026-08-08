@@ -1,10 +1,6 @@
 "use server";
 
-import {
-  assertSameOrigin,
-  getActionActor,
-  hasAnyRole,
-} from "@/lib/security/action-guard";
+import { getActionActor, hasAnyRole } from "@/lib/security/action-guard";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 type StaffRole = "admin" | "doctor" | "nurse";
@@ -82,7 +78,7 @@ export async function getClinicVisitsAction(params?: {
 
 export interface ConsultationDetailRow {
   id: string;
-  patient_type: "student" | "faculty";
+  patient_type: "student" | "faculty" | "staff";
   patient_name: string | null;
   chief_complaint: string | null;
   consultation_notes: string | null;
@@ -136,7 +132,19 @@ export async function getConsultationDetailAction(
   if (!actor) return { error: "Access denied", consultation: null };
 
   const admin = createAdminClient();
-  const { data, error } = await admin
+  let assignedId: string | null = null;
+  if (actor.role !== "admin") {
+    const { data: account } = await admin
+      .from("clinic_accounts")
+      .select("id")
+      .eq("user_id", actor.id)
+      .eq("is_active", true)
+      .maybeSingle();
+    assignedId = account?.id ?? null;
+    if (!assignedId) return { error: "Active clinic account not found", consultation: null };
+  }
+
+  let query = admin
     .from("consultations")
     .select(
       `
@@ -145,7 +153,8 @@ export async function getConsultationDetailAction(
       clinic_visits(
         patient_type,
         students(first_name, last_name, student_number),
-        faculty(first_name, last_name, employee_number)
+        faculty(first_name, last_name, employee_number),
+        staff(first_name, last_name, employee_number)
       ),
       doctor:clinic_accounts!consultations_doctor_id_fkey(display_name),
       nurse:clinic_accounts!consultations_nurse_id_fkey(display_name),
@@ -167,8 +176,10 @@ export async function getConsultationDetailAction(
       )
     `,
     )
-    .eq("id", consultationId)
-    .maybeSingle();
+    .eq("id", consultationId);
+
+  if (assignedId) query = query.or(`doctor_id.eq.${assignedId},nurse_id.eq.${assignedId}`);
+  const { data, error } = await query.maybeSingle();
 
   if (error) return { error: error.message, consultation: null };
   if (!data) return { error: null, consultation: null };
@@ -181,6 +192,8 @@ export async function getConsultationDetailAction(
     (Array.isArray(visit.students) ? visit.students[0] : visit.students);
   const faculty =
     visit && (Array.isArray(visit.faculty) ? visit.faculty[0] : visit.faculty);
+  const staffProfile =
+    visit && (Array.isArray(visit.staff) ? visit.staff[0] : visit.staff);
   const doctor: any = Array.isArray(data.doctor) ? data.doctor[0] : data.doctor;
   const nurse: any = Array.isArray(data.nurse) ? data.nurse[0] : data.nurse;
   const triageRaw: any = Array.isArray(data.triage_assessments)
@@ -194,6 +207,8 @@ export async function getConsultationDetailAction(
       ? `${student.first_name} ${student.last_name} (${student.student_number})`
       : faculty
         ? `${faculty.first_name} ${faculty.last_name} (${faculty.employee_number})`
+        : staffProfile
+          ? `${staffProfile.first_name} ${staffProfile.last_name} (${staffProfile.employee_number})`
         : null,
     chief_complaint: data.chief_complaint,
     consultation_notes: data.consultation_notes,
@@ -253,19 +268,7 @@ export async function updateConsultationNotesAction(
   consultationId: string,
   notes: string,
 ): Promise<{ error: string | null }> {
-  const actor = await staff(["admin", "doctor", "nurse"]);
-  if (!actor || !(await assertSameOrigin())) return { error: "Access denied" };
-
-  if (!notes.trim() || notes.length > 5000) {
-    return { error: "Provide an outcome note of up to 5,000 characters" };
-  }
-
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("consultations")
-    .update({ consultation_notes: notes })
-    .eq("id", consultationId);
-
-  if (error) return { error: error.message };
-  return { error: null };
+  void consultationId;
+  void notes;
+  return { error: "Outcome notes are saved from the final consultation review." };
 }

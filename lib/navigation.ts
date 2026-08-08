@@ -1,6 +1,5 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity,
   AlertTriangle,
   BarChart3,
   CalendarDays,
@@ -67,31 +66,20 @@ export const adminNavigation: NavGroup[] = [
   {
     label: "Medical Records",
     items: [
-      { title: "View Records", href: "/admin/records/view", icon: HeartPulse },
+      {
+        title: "Student Records",
+        href: "/admin/records/view",
+        icon: HeartPulse,
+      },
     ],
   },
   {
     label: "Staff Health",
     items: [
       {
-        title: "Staff Health Record",
+        title: "Faculty & Staff Records",
         href: "/admin/staffhealth/record",
         icon: HeartPulse,
-      },
-      {
-        title: "Staff Consultations",
-        href: "/admin/staffhealth/consultation",
-        icon: Stethoscope,
-      },
-      {
-        title: "Check-up Schedule",
-        href: "/admin/staffhealth/checkup_schedule",
-        icon: CalendarDays,
-      },
-      {
-        title: "Certificate Requests",
-        href: "/admin/staffhealth/certificate_request",
-        icon: FileCheck,
       },
     ],
   },
@@ -148,6 +136,11 @@ export const adminNavigation: NavGroup[] = [
       {
         title: "Calendar",
         href: "/admin/appointments/calendar",
+        icon: CalendarDays,
+      },
+      {
+        title: "My Schedule",
+        href: "/admin/my-schedule",
         icon: CalendarDays,
       },
       {
@@ -323,32 +316,18 @@ export const doctorNavigation: NavGroup[] = [
   {
     label: "Medical Records",
     items: [
-      { title: "View Records", href: "/doctor/records/view", icon: HeartPulse },
-      { title: "Edit Records", href: "/doctor/records/edit", icon: HeartPulse },
       {
-        title: "Immunizations",
-        href: "/doctor/records/immunization",
-        icon: Activity,
+        title: "Student Records",
+        href: "/doctor/records/view",
+        icon: HeartPulse,
       },
     ],
   },
   {
     label: "Consultations",
     items: [
-      { title: "New Visit", href: "/doctor/visits/new_entry", icon: UserPlus },
+      { title: "Visit", href: "/doctor/visits", icon: Stethoscope },
       { title: "Visit History", href: "/doctor/visits/history", icon: History },
-      { title: "Vitals", href: "/doctor/visits/vitals", icon: Activity },
-      { title: "Clinical Notes", href: "/doctor/visits/notes", icon: FileText },
-      {
-        title: "Diagnosis",
-        href: "/doctor/visits/diagnosis",
-        icon: Stethoscope,
-      },
-      {
-        title: "Prescriptions",
-        href: "/doctor/visits/prescription",
-        icon: Pill,
-      },
       {
         title: "Follow-ups",
         href: "/doctor/visits/followup",
@@ -382,6 +361,11 @@ export const doctorNavigation: NavGroup[] = [
       {
         title: "Calendar",
         href: "/doctor/appointments/calendar",
+        icon: CalendarDays,
+      },
+      {
+        title: "My Schedule",
+        href: "/doctor/my-schedule",
         icon: CalendarDays,
       },
       {
@@ -430,19 +414,9 @@ export const doctorNavigation: NavGroup[] = [
     label: "Staff Health",
     items: [
       {
-        title: "Staff Health Record",
+        title: "Faculty & Staff Records",
         href: "/doctor/staffhealth/record",
         icon: HeartPulse,
-      },
-      {
-        title: "Staff Consultations",
-        href: "/doctor/staffhealth/consultation",
-        icon: Stethoscope,
-      },
-      {
-        title: "Certificate Requests",
-        href: "/doctor/staffhealth/certificate_request",
-        icon: FileCheck,
       },
     ],
   },
@@ -503,27 +477,18 @@ export const nurseNavigation: NavGroup[] = [
   {
     label: "Medical Records",
     items: [
-      { title: "View Records", href: "/nurse/records/view", icon: HeartPulse },
-      { title: "Edit Records", href: "/nurse/records/edit", icon: HeartPulse },
       {
-        title: "Immunizations",
-        href: "/nurse/records/immunization",
-        icon: Activity,
+        title: "Student Records",
+        href: "/nurse/records/view",
+        icon: HeartPulse,
       },
     ],
   },
   {
     label: "Consultations",
     items: [
-      { title: "New Visit", href: "/nurse/visits/new_entry", icon: UserPlus },
+      { title: "Visit", href: "/nurse/visits", icon: Stethoscope },
       { title: "Visit History", href: "/nurse/visits/history", icon: History },
-      { title: "Vitals", href: "/nurse/visits/vitals", icon: Activity },
-      { title: "Clinical Notes", href: "/nurse/visits/notes", icon: FileText },
-      {
-        title: "Prescriptions",
-        href: "/nurse/visits/prescription",
-        icon: Pill,
-      },
     ],
   },
   {
@@ -567,6 +532,11 @@ export const nurseNavigation: NavGroup[] = [
       {
         title: "Calendar",
         href: "/nurse/appointments/calendar",
+        icon: CalendarDays,
+      },
+      {
+        title: "My Schedule",
+        href: "/nurse/my-schedule",
         icon: CalendarDays,
       },
       {
@@ -616,14 +586,9 @@ export const nurseNavigation: NavGroup[] = [
     label: "Staff Health",
     items: [
       {
-        title: "Staff Health Record",
+        title: "Faculty & Staff Records",
         href: "/nurse/staffhealth/record",
         icon: HeartPulse,
-      },
-      {
-        title: "Staff Consultations",
-        href: "/nurse/staffhealth/consultation",
-        icon: Stethoscope,
       },
     ],
   },

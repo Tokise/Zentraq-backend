@@ -31,6 +31,7 @@ type PageMode = "WIZARD" | "VERIFIED" | "EDIT" | "SUCCESS"
 
 interface PatientProfile {
   id: string
+  role: "student" | "faculty" | "staff"
   rfid_uid: string
   first_name: string
   last_name: string
@@ -109,6 +110,20 @@ export default function RfidRegistrationPage() {
       stopCamera()
     }
   }, [mode, step])
+
+  // Attaches a newly acquired stream only after the video element is mounted.
+  useEffect(() => {
+    if (!cameraActive || !streamRef.current || !videoRef.current) return
+    const video = videoRef.current
+    video.srcObject = streamRef.current
+    void video.play().catch(() => {
+      toast.error("Camera preview could not start. Use the file upload option.")
+      stopCamera()
+    })
+  }, [cameraActive])
+
+  // Releases the camera if the registration page is closed or navigated away from.
+  useEffect(() => () => stopCamera(), [])
 
   // Auto-reset timer for verified/success screens
   useEffect(() => {
@@ -240,7 +255,7 @@ export default function RfidRegistrationPage() {
     setSearchedProfile(data)
     setRfidUid(data.rfid_uid)
 
-    const initialRole: "student" | "faculty" | "staff" = data.student_number ? "student" : "staff"
+    const initialRole = data.role
     setRole(initialRole)
     setFirstName(data.first_name || "")
     setLastName(data.last_name || "")
@@ -287,20 +302,39 @@ export default function RfidRegistrationPage() {
       return
     }
     setStep(3)
-    startCamera()
   }
 
   async function startCamera() {
+    if (!window.isSecureContext) {
+      toast.error("Camera access requires HTTPS or localhost. Use the file upload option.")
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error("This browser does not support camera capture. Use the file upload option.")
+      return
+    }
+
     try {
-      setCameraActive(true)
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 400, height: 400, facingMode: "user" }, audio: false
+        video: {
+          width: { ideal: 400 },
+          height: { ideal: 400 },
+          facingMode: { ideal: "user" },
+        },
+        audio: false,
       })
       streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
-    } catch {
+      setCameraActive(true)
+    } catch (error) {
       setCameraActive(false)
-      toast.error("Camera access denied. Use the file upload option.")
+      const name = error instanceof DOMException ? error.name : ""
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        toast.error("Camera permission was denied. Allow access or use the file upload option.")
+      } else if (name === "NotFoundError") {
+        toast.error("No camera was found. Use the file upload option.")
+      } else {
+        toast.error("Unable to start the camera. Use the file upload option.")
+      }
     }
   }
 

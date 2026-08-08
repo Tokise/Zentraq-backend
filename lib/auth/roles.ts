@@ -23,7 +23,7 @@ export function isStudent(role: UserRole | null | undefined): boolean {
 }
 
 export function isFaculty(role: UserRole | null | undefined): boolean {
-  return role === "faculty" || role === "staff";
+  return role === "faculty";
 }
 
 export function isStaff(role: UserRole | null | undefined): boolean {

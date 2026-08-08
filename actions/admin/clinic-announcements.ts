@@ -18,6 +18,15 @@ async function requireAdmin() {
     return { error: null, user }
 }
 
+// Confirms that the caller has an authenticated clinic portal session.
+async function requireAuthenticatedUser() {
+    const cookieStore = await cookies()
+    const supabase = createClient(cookieStore)
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) return { error: "Not authenticated", user: null }
+    return { error: null, user }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DTOs
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,7 +51,7 @@ export interface AnnouncementDTO {
  */
 export async function getAnnouncementsAction(): Promise<{ error: string | null; announcements: AnnouncementDTO[] }> {
     try {
-        const auth = await requireAdmin()
+        const auth = await requireAuthenticatedUser()
         if (auth.error || !auth.user) return { error: auth.error, announcements: [] }
 
         const admin = createAdminClient()

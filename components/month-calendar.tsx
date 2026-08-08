@@ -244,9 +244,9 @@ export function MonthCalendar({
                                     ? "bg-muted/30 cursor-default"
                                     : isPast
                                       ? "cursor-not-allowed bg-card"
-                                      : "cursor-pointer hover:bg-primary-soft/50"
+                                      : "cursor-pointer hover:bg-muted"
                                 }
-                                ${isSelected && inCurrentMonth ? "bg-primary-soft hover:bg-primary-soft/70" : ""}
+                                ${isSelected && inCurrentMonth ? "bg-muted hover:bg-muted" : ""}
                             `}
             >
               {/* Day number */}

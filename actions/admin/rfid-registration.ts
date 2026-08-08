@@ -9,7 +9,9 @@ import { logAuditEvent } from "@/lib/audit-logger"
 
 const MIN_PASSWORD_LENGTH = 12
 const STUDENT_ID_PREFIX = "23011"
-type ProfileRole = "student" | "faculty"
+const MAX_PROFILE_PHOTO_BYTES = 150 * 1024
+const PROFILE_PHOTO_DATA_URL = /^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/
+type ProfileRole = "student" | "faculty" | "staff"
 type Profile = {
   id: string; role: ProfileRole; user_id: string | null; rfid_uid: string; first_name: string; last_name: string; email: string | null;
   department: string | null; course: string | null; year_level: string | null; position: string | null; student_number: string | null;
@@ -23,64 +25,117 @@ async function requireAdmin() {
   return user
 }
 
+// Validates a compact raster-image data URL before it reaches the database.
+function parseProfilePhoto(value: FormDataEntryValue | null): {
+  error: string | null
+  photoUrl: string | null
+} {
+  const photoUrl = typeof value === "string" ? value.trim() : ""
+  if (!photoUrl) return { error: null, photoUrl: null }
+
+  const match = PROFILE_PHOTO_DATA_URL.exec(photoUrl)
+  if (!match) {
+    return {
+      error: "Profile photos must be JPEG, PNG, or WebP image data.",
+      photoUrl: null,
+    }
+  }
+
+  const padding = match[1].endsWith("==") ? 2 : match[1].endsWith("=") ? 1 : 0
+  const byteLength = (match[1].length * 3) / 4 - padding
+  if (byteLength > MAX_PROFILE_PHOTO_BYTES) {
+    return {
+      error: "Profile photo must be 150 KB or smaller.",
+      photoUrl: null,
+    }
+  }
+
+  return { error: null, photoUrl }
+}
+
+// Normalizes student, faculty, and staff rows for the registration UI.
 function normalizeProfile(row: Record<string, unknown>, role: ProfileRole): Profile {
   return {
     id: String(row.id), role, user_id: (row.user_id as string | null) ?? null, rfid_uid: String(row.rfid_uid ?? ""), first_name: String(row.first_name ?? ""), last_name: String(row.last_name ?? ""), email: (row.email as string | null) ?? null,
     department: (row.department as string | null) ?? null, course: role === "student" ? (row.course as string | null) ?? null : null, year_level: role === "student" && row.year_level != null ? String(row.year_level) : null,
-    position: role === "faculty" ? (row.position as string | null) ?? null : null, student_number: role === "student" ? (row.student_number as string | null) ?? null : null, employee_number: role === "faculty" ? (row.employee_number as string | null) ?? null : null,
-    clinic_photo_url: role === "student" ? (row.profile_photo_url as string | null) ?? null : null, active_status: row.status === "active",
+    position: role !== "student" ? (row.position as string | null) ?? null : null,
+    student_number: role === "student" ? (row.student_number as string | null) ?? null : null,
+    employee_number: role !== "student" ? (row.employee_number as string | null) ?? null : null,
+    clinic_photo_url: (row.profile_photo_url as string | null) ?? null,
+    active_status: row.status === "active",
   }
 }
 
+// Finds a profile without guessing the patient's role from form input.
 async function findProfile(admin: ReturnType<typeof createAdminClient>, id: string): Promise<Profile | null> {
   const { data: student } = await admin.from("students").select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").eq("id", id).maybeSingle()
   if (student) return normalizeProfile(student, "student")
-  const { data: faculty } = await admin.from("faculty").select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, status").eq("id", id).maybeSingle()
-  return faculty ? normalizeProfile(faculty, "faculty") : null
+  const { data: faculty } = await admin.from("faculty").select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").eq("id", id).maybeSingle()
+  if (faculty) return normalizeProfile(faculty, "faculty")
+  const { data: staff } = await admin.from("staff").select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").eq("id", id).maybeSingle()
+  return staff ? normalizeProfile(staff, "staff") : null
 }
 
+// Registers a profile in the table matching its requested role.
 export async function registerStudentProfile(formData: FormData) {
   const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized" }
-  const role = String(formData.get("role") ?? "student") === "student" ? "student" : "faculty" as ProfileRole
+  const requestedRole = String(formData.get("role") ?? "student")
+  const role: ProfileRole = requestedRole === "faculty" || requestedRole === "staff"
+    ? requestedRole
+    : "student"
   const rfidUid = String(formData.get("rfidUid") ?? "").trim(); const firstName = String(formData.get("firstName") ?? "").trim(); const lastName = String(formData.get("lastName") ?? "").trim()
   const identifier = String(formData.get(role === "student" ? "studentNumber" : "employeeNumber") ?? "").trim()
   if (!rfidUid || !firstName || !lastName || !identifier) return { error: "RFID UID, name, and ID number are required" }
   const admin = createAdminClient()
-  const [{ data: studentRfid }, { data: facultyRfid }] = await Promise.all([admin.from("students").select("id").eq("rfid_uid", rfidUid).maybeSingle(), admin.from("faculty").select("id").eq("rfid_uid", rfidUid).maybeSingle()])
-  if (studentRfid || facultyRfid) return { error: "RFID card is already registered" }
+  const [{ data: studentRfid }, { data: facultyRfid }, { data: staffRfid }] = await Promise.all([admin.from("students").select("id").eq("rfid_uid", rfidUid).maybeSingle(), admin.from("faculty").select("id").eq("rfid_uid", rfidUid).maybeSingle(), admin.from("staff").select("id").eq("rfid_uid", rfidUid).maybeSingle()])
+  if (studentRfid || facultyRfid || staffRfid) return { error: "RFID card is already registered" }
   const email = String(formData.get("email") ?? "").trim().toLowerCase() || null
   const shared = { rfid_uid: rfidUid, first_name: firstName, last_name: lastName, email, department: String(formData.get("department") ?? "").trim() || null, status: "active" }
+  const photo = parseProfilePhoto(formData.get("clinicPhotoUrl"))
+  if (photo.error) return { error: photo.error }
   const result = role === "student"
-    ? await admin.from("students").insert({ ...shared, student_number: identifier, course: String(formData.get("course") ?? "").trim() || null, year_level: Number(formData.get("yearLevel")) || null, profile_photo_url: String(formData.get("clinicPhotoUrl") ?? "").trim() || null }).select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").single()
-    : await admin.from("faculty").insert({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null }).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, status").single()
+    ? await admin.from("students").insert({ ...shared, student_number: identifier, course: String(formData.get("course") ?? "").trim() || null, year_level: Number(formData.get("yearLevel")) || null, profile_photo_url: photo.photoUrl }).select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").single()
+    : role === "faculty"
+      ? await admin.from("faculty").insert({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null, profile_photo_url: photo.photoUrl }).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
+      : await admin.from("staff").insert({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null, profile_photo_url: photo.photoUrl }).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
   if (result.error || !result.data) return { error: result.error?.message ?? "Unable to register profile" }
   await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: result.data.id, details: { role } })
   revalidatePath("/admin/rfid-registration")
   return { success: true, data: normalizeProfile(result.data, role) }
 }
 
+// Updates a profile only in the table matching its recorded role.
 export async function updateStudentProfile(formData: FormData) {
   const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized" }
-  const id = String(formData.get("profileId") ?? "").trim(); const role = String(formData.get("role") ?? "student") === "student" ? "student" : "faculty" as ProfileRole
+  const id = String(formData.get("profileId") ?? "").trim(); const requestedRole = String(formData.get("role") ?? "student")
+  const role: ProfileRole = requestedRole === "faculty" || requestedRole === "staff" ? requestedRole : "student"
   const firstName = String(formData.get("firstName") ?? "").trim(); const lastName = String(formData.get("lastName") ?? "").trim(); const identifier = String(formData.get(role === "student" ? "studentNumber" : "employeeNumber") ?? "").trim()
   if (!id || !firstName || !lastName || !identifier) return { error: "Name and ID number are required" }
   const admin = createAdminClient(); const shared = { first_name: firstName, last_name: lastName, email: String(formData.get("email") ?? "").trim().toLowerCase() || null, department: String(formData.get("department") ?? "").trim() || null }
+  const photo = parseProfilePhoto(formData.get("clinicPhotoUrl"))
+  if (photo.error) return { error: photo.error }
+  const photoUpdate = photo.photoUrl ? { profile_photo_url: photo.photoUrl } : {}
   const result = role === "student"
-    ? await admin.from("students").update({ ...shared, student_number: identifier, course: String(formData.get("course") ?? "").trim() || null, year_level: Number(formData.get("yearLevel")) || null, profile_photo_url: String(formData.get("clinicPhotoUrl") ?? "").trim() || null }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").single()
-    : await admin.from("faculty").update({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, status").single()
+    ? await admin.from("students").update({ ...shared, student_number: identifier, course: String(formData.get("course") ?? "").trim() || null, year_level: Number(formData.get("yearLevel")) || null, ...photoUpdate }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").single()
+    : role === "faculty"
+      ? await admin.from("faculty").update({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null, ...photoUpdate }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
+      : await admin.from("staff").update({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null, ...photoUpdate }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
   if (result.error || !result.data) return { error: result.error?.message ?? "Unable to update profile" }
   await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: id, details: { action: "PROFILE_UPDATED", role } })
   return { success: true, data: normalizeProfile(result.data, role) }
 }
 
+// Finds a profile by RFID across all patient roles.
 export async function lookupStudentByRfid(formData: FormData) {
   const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized", data: null }
   const uid = String(formData.get("rfidUid") ?? "").trim(); if (!uid) return { error: "RFID UID is required", data: null }
   const admin = createAdminClient()
   const { data: student } = await admin.from("students").select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").eq("rfid_uid", uid).maybeSingle()
   if (student) return { error: null, data: normalizeProfile(student, "student") }
-  const { data: faculty } = await admin.from("faculty").select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, status").eq("rfid_uid", uid).maybeSingle()
-  return { error: null, data: faculty ? normalizeProfile(faculty, "faculty") : null }
+  const { data: faculty } = await admin.from("faculty").select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").eq("rfid_uid", uid).maybeSingle()
+  if (faculty) return { error: null, data: normalizeProfile(faculty, "faculty") }
+  const { data: staff } = await admin.from("staff").select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").eq("rfid_uid", uid).maybeSingle()
+  return { error: null, data: staff ? normalizeProfile(staff, "staff") : null }
 }
 
 export async function generateStudentId() {
@@ -103,7 +158,7 @@ export async function createStudentAccount(formData: FormData) {
   if (!roleRow) { await admin.auth.admin.deleteUser(created.user.id); return { error: `The ${profile.role} role has not been seeded` } }
   const { error: userError } = await admin.from("users").insert({ id: created.user.id, email })
   if (!userError) await admin.from("user_roles").insert({ user_id: created.user.id, role_id: roleRow.id })
-  const table = profile.role === "student" ? "students" : "faculty"; const { error: linkError } = await admin.from(table).update({ user_id: created.user.id, email }).eq("id", profile.id)
+  const table = profile.role === "student" ? "students" : profile.role === "faculty" ? "faculty" : "staff"; const { error: linkError } = await admin.from(table).update({ user_id: created.user.id, email }).eq("id", profile.id)
   if (userError || linkError) { await admin.auth.admin.deleteUser(created.user.id); return { error: userError?.message ?? linkError?.message ?? "Unable to link account" } }
   await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: created.user.id, details: { profile_id: profile.id, role: profile.role } })
   return { success: true, userId: created.user.id, email, password }

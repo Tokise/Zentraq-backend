@@ -12,6 +12,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { createClient } from "@/utils/supabase/client"
 import type { UserRole } from "@/lib/auth/roles"
 import {
     getNotifications,
@@ -127,6 +128,40 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
         const interval = setInterval(refreshUnreadCount, 30000)
         return () => clearInterval(interval)
     }, [refreshUnreadCount])
+
+    // Subscribes only to the signed-in user's notification inserts.
+    useEffect(() => {
+        const supabase = createClient()
+        let channel: ReturnType<typeof supabase.channel> | null = null
+        let active = true
+
+        async function subscribe() {
+            const { data } = await supabase.auth.getUser()
+            if (!active || !data.user) return
+            channel = supabase
+                .channel(`notifications:${data.user.id}`)
+                .on(
+                    "postgres_changes",
+                    {
+                        event: "INSERT",
+                        schema: "public",
+                        table: "notifications",
+                        filter: `receiver_id=eq.${data.user.id}`,
+                    },
+                    () => {
+                        void refreshUnreadCount()
+                        if (open) void loadNotifications()
+                    },
+                )
+                .subscribe()
+        }
+
+        void subscribe()
+        return () => {
+            active = false
+            if (channel) void supabase.removeChannel(channel)
+        }
+    }, [loadNotifications, open, refreshUnreadCount])
 
     // When dropdown opens, fetch the latest notifications (if not already fetched recently)
     useEffect(() => {

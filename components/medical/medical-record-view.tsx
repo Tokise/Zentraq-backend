@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { SensitiveField } from "@/components/sensitive-field";
 import {
@@ -20,6 +19,7 @@ interface MedicalRecordViewProps {
   record: PatientMedicalRecord;
   canEdit: boolean;
   onUpdated?: () => Promise<void> | void;
+  profilePhotoUrl?: string | null;
 }
 
 // Renders a patient profile with reusable clinical summary cards.
@@ -27,7 +27,10 @@ export function MedicalRecordView({
   record,
   canEdit,
   onUpdated,
+  profilePhotoUrl,
 }: MedicalRecordViewProps) {
+  const photoUrl = record.profile_photo_url ?? profilePhotoUrl;
+
   return (
     <div className="space-y-6">
       {/* Patient Profile Card */}
@@ -37,13 +40,22 @@ export function MedicalRecordView({
         </CardHeader>
         <CardContent>
           <div className="flex items-start gap-6">
-            <Avatar className="h-24 w-24">
-              <AvatarImage src={record.profile_photo_url || undefined} />
-              <AvatarFallback className="text-2xl">
-                {record.first_name[0]}
-                {record.last_name[0]}
-              </AvatarFallback>
-            </Avatar>
+            <div className="size-24 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+              {photoUrl ? (
+                // Profile images may be signed URLs or validated database data URLs.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  alt="Patient profile"
+                  className="size-full object-cover"
+                  src={photoUrl}
+                />
+              ) : (
+                <div className="flex size-full items-center justify-center text-2xl text-muted-foreground">
+                  {record.first_name[0]}
+                  {record.last_name[0]}
+                </div>
+              )}
+            </div>
             <div className="flex-1 space-y-4">
               <div>
                 <h2 className="text-2xl font-bold">

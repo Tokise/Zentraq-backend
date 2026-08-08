@@ -111,7 +111,7 @@ export function AppSidebar({
                     "flex w-full cursor-pointer items-center justify-between px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                     hasActiveItem &&
                       !isExpanded &&
-                      "bg-primary/10 text-primary",
+                      "bg-sidebar-accent text-primary",
                   )}
                   aria-expanded={isExpanded}
                 >
@@ -160,7 +160,7 @@ export function AppSidebar({
                         className={cn(
                           "flex items-center gap-3 px-2 py-2 text-sm transition-colors duration-150",
                           isActive
-                            ? "bg-primary/10 text-primary font-medium"
+                            ? "bg-sidebar-accent text-primary font-medium"
                             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                           collapsed && "justify-center px-2",
                         )}

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { FileText, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { submitMyClearanceRequestAction } from "@/actions/patient/portal"
 
 export default function FacultyClearanceRequestPage() {
   const [purpose, setPurpose] = useState("")
@@ -20,12 +21,18 @@ export default function FacultyClearanceRequestPage() {
       return
     }
     setSubmitting(true)
-    setTimeout(() => {
+    try {
+      const result = await submitMyClearanceRequestAction(purpose)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
       toast.success("Clearance request submitted")
       setPurpose("")
       setNotes("")
+    } finally {
       setSubmitting(false)
-    }, 800)
+    }
   }
 
   return (

@@ -49,9 +49,7 @@ export default function FacultyDashboard() {
                     ) : profile ? (
                         <div className="flex items-center gap-4">
                             <div className="size-16 overflow-hidden border border-border bg-muted shrink-0 flex items-center justify-center">
-                                <span className="text-lg font-bold text-muted-foreground">
-                                    {profile.firstName?.[0]}{profile.lastName?.[0]}
-                                </span>
+                                {profile.profilePhotoUrl ? <img alt="Faculty profile" className="size-full object-cover" src={profile.profilePhotoUrl} /> : <span className="text-lg font-bold text-muted-foreground">{profile.firstName?.[0]}{profile.lastName?.[0]}</span>}
                             </div>
                             <div className="min-w-0 flex-1 space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
