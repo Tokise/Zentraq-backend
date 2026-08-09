@@ -5,15 +5,18 @@ import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { DataTablePagination, useTablePagination } from "@/components/ui/pagination"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import { Loader2, CalendarClock } from "lucide-react"
+import { CalendarClock } from "lucide-react"
 import { toast } from "sonner"
 import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments/overview"
 import { rescheduleAppointment } from "@/actions/scheduling/review"
@@ -27,6 +30,7 @@ export default function AdminAppointmentReschedulePage() {
   const [newDate, setNewDate] = useState("")
   const [newTime, setNewTime] = useState("")
   const [processing, setProcessing] = useState(false)
+  const pagination = useTablePagination(appointments)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -99,8 +103,10 @@ export default function AdminAppointmentReschedulePage() {
       <Card className="shadow-sm">
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 5 }, (_, index) => (
+                <Skeleton className="h-10 w-full" key={index} />
+              ))}
             </div>
           ) : appointments.length === 0 ? (
             <div className="py-16 text-center">
@@ -120,7 +126,7 @@ export default function AdminAppointmentReschedulePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {appointments.map((a) => (
+                  {pagination.paginatedItems.map((a) => (
                     <TableRow key={a.id} className="hover:bg-zinc-50/50">
                       <TableCell className="font-medium">{a.patient_name || "—"}</TableCell>
                       <TableCell className="text-sm text-zinc-600 max-w-[240px] truncate">{a.reason || "—"}</TableCell>
@@ -142,6 +148,13 @@ export default function AdminAppointmentReschedulePage() {
           )}
         </CardContent>
       </Card>
+      <DataTablePagination
+        currentPage={pagination.currentPage}
+        onPageChange={pagination.setCurrentPage}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        totalPages={pagination.totalPages}
+      />
 
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="sm:max-w-md">
@@ -157,7 +170,11 @@ export default function AdminAppointmentReschedulePage() {
               <div className="grid gap-3 grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">New Date</Label>
-                  <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-9" />
+                  <Calendar
+                    className="h-9"
+                    onSelect={setNewDate}
+                    selected={newDate}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">New Time</Label>

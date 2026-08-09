@@ -3,16 +3,19 @@
 import { useState, useEffect, useCallback } from "react"
 import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
+import { DataTablePagination, useTablePagination } from "@/components/ui/pagination"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Loader2, History } from "lucide-react"
+import { History } from "lucide-react"
 import { toast } from "sonner"
 import { getDispensingLogsAction, type DispensingLogRow } from "@/actions/admin/medicine/operations"
 
 export default function AdminDispenseLogPage() {
   const [logs, setLogs] = useState<DispensingLogRow[]>([])
   const [loading, setLoading] = useState(true)
+  const pagination = useTablePagination(logs)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -45,8 +48,10 @@ export default function AdminDispenseLogPage() {
       <Card className="shadow-sm">
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 5 }, (_, index) => (
+                <Skeleton className="h-10 w-full" key={index} />
+              ))}
             </div>
           ) : logs.length === 0 ? (
             <div className="py-16 text-center">
@@ -65,7 +70,7 @@ export default function AdminDispenseLogPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {logs.map((log) => (
+                  {pagination.paginatedItems.map((log) => (
                     <TableRow key={log.id} className="hover:bg-zinc-50/50">
                       <TableCell className="font-medium">{log.medicine_name || "—"}</TableCell>
                       <TableCell className="text-sm text-zinc-600">{log.patient_name || "—"}</TableCell>
@@ -81,6 +86,13 @@ export default function AdminDispenseLogPage() {
           )}
         </CardContent>
       </Card>
+      <DataTablePagination
+        currentPage={pagination.currentPage}
+        onPageChange={pagination.setCurrentPage}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        totalPages={pagination.totalPages}
+      />
     </div>
   )
 }

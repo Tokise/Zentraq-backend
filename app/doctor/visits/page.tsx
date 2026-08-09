@@ -2,13 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   getConsultationQueue,
   type QueueConsultation,
 } from "@/actions/inventory/workflow-queries";
 import { PageHeader } from "@/components/common/page-header";
+import {
+  DataTablePagination,
+  useTablePagination,
+} from "@/components/ui/pagination";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -27,6 +31,7 @@ export default function DoctorVisitsPage() {
   const [selectedConsultationId, setSelectedConsultationId] = useState<
     string | null
   >(null);
+  const pagination = useTablePagination(consultations);
 
   // Loads the active clinical worklist.
   async function loadConsultations() {
@@ -56,8 +61,10 @@ export default function DoctorVisitsPage() {
 
       <div className="bg-card shadow-sm">
         {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="size-5 animate-spin" />
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 5 }, (_, index) => (
+              <Skeleton className="h-10 w-full" key={index} />
+            ))}
           </div>
         ) : (
           <Table>
@@ -70,7 +77,7 @@ export default function DoctorVisitsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {consultations.map((consultation) => (
+              {pagination.paginatedItems.map((consultation) => (
                 <TableRow
                   key={consultation.id}
                   className="cursor-pointer hover:bg-muted"
@@ -91,6 +98,13 @@ export default function DoctorVisitsPage() {
             </TableBody>
           </Table>
         )}
+        <DataTablePagination
+          currentPage={pagination.currentPage}
+          onPageChange={pagination.setCurrentPage}
+          pageSize={pagination.pageSize}
+          totalItems={pagination.totalItems}
+          totalPages={pagination.totalPages}
+        />
       </div>
 
       {selectedConsultationId && (

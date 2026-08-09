@@ -19,7 +19,12 @@ async function getPatientProfile(): Promise<
     return { error: "Access denied", profile: null };
   }
 
-  const table = actor.role === "student" ? "students" : actor.role === "faculty" ? "faculty" : "staff";
+  const table =
+    actor.role === "student"
+      ? "students"
+      : actor.role === "faculty"
+        ? "faculty"
+        : "staff";
   const { data: profile } = await createAdminClient()
     .from(table)
     .select("id")
@@ -27,7 +32,10 @@ async function getPatientProfile(): Promise<
     .maybeSingle();
 
   if (!profile) return { error: "Patient profile not found", profile: null };
-  return { error: null, profile: { id: profile.id, role: actor.role as PatientRole } };
+  return {
+    error: null,
+    profile: { id: profile.id, role: actor.role as PatientRole },
+  };
 }
 
 // Returns only consultations belonging to the signed-in patient.
@@ -39,7 +47,9 @@ export async function getMyConsultationsAction() {
 
   const { data, error } = await createAdminClient()
     .from("v_consultation_summary")
-    .select("consultation_id, chief_complaint, consultation_status, check_in_time")
+    .select(
+      "consultation_id, chief_complaint, consultation_status, check_in_time",
+    )
     .eq("patient_type", identity.profile.role)
     .eq("patient_id", identity.profile.id)
     .order("check_in_time", { ascending: false })
@@ -83,12 +93,14 @@ export async function submitMyClearanceRequestAction(purpose: string) {
   if (!normalizedPurpose) return { error: "Purpose is required" };
 
   const idColumn = `${identity.profile.role}_id`;
-  const { error } = await createAdminClient().from("health_clearances").insert({
-    requester_type: identity.profile.role,
-    [idColumn]: identity.profile.id,
-    purpose: normalizedPurpose,
-    status: "pending",
-  });
+  const { error } = await createAdminClient()
+    .from("health_clearances")
+    .insert({
+      requester_type: identity.profile.role,
+      [idColumn]: identity.profile.id,
+      purpose: normalizedPurpose,
+      status: "pending",
+    });
 
   return error ? { error: error.message } : { error: null };
 }
@@ -98,43 +110,60 @@ type ClinicianAvailabilityRow = {
   start_time: string;
   end_time: string;
   day_of_week: number;
-  clinic_accounts: {
-    display_name: string;
-    role: "doctor" | "nurse";
-  } | Array<{
-    display_name: string;
-    role: "doctor" | "nurse";
-  }>;
+  clinic_accounts:
+    | {
+        display_name: string;
+        role: "doctor" | "nurse";
+      }
+    | Array<{
+        display_name: string;
+        role: "doctor" | "nurse";
+      }>;
 };
 
-type AppointmentAvailabilityRow = Omit<
-  ClinicianAvailabilityRow,
-  "day_of_week"
->;
+type AppointmentAvailabilityRow = Omit<ClinicianAvailabilityRow, "day_of_week">;
 
 // Returns clinician cards and their recurring weekly schedule without patient data.
 export async function getAppointmentCliniciansAction() {
   const identity = await getPatientProfile();
   if (identity.error || !identity.profile) {
-    return { error: identity.error, clinicians: [], minBookableDate: clinicTomorrow() };
+    return {
+      error: identity.error,
+      clinicians: [],
+      minBookableDate: clinicTomorrow(),
+    };
   }
 
   const { data, error } = await createAdminClient()
     .from("staff_availability")
-    .select("clinic_account_id, day_of_week, start_time, end_time, clinic_accounts!inner(display_name, role)")
+    .select(
+      "clinic_account_id, day_of_week, start_time, end_time, clinic_accounts!inner(display_name, role)",
+    )
     .eq("is_active", true)
     .in("clinic_accounts.role", ["doctor", "nurse"])
     .order("day_of_week", { ascending: true })
     .order("start_time", { ascending: true });
 
-  if (error) return { error: error.message, clinicians: [], minBookableDate: clinicTomorrow() };
+  if (error)
+    return {
+      error: error.message,
+      clinicians: [],
+      minBookableDate: clinicTomorrow(),
+    };
 
-  const grouped = new Map<string, {
-    id: string;
-    name: string;
-    role: "doctor" | "nurse";
-    weeklyAvailability: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
-  }>();
+  const grouped = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      role: "doctor" | "nurse";
+      weeklyAvailability: Array<{
+        dayOfWeek: number;
+        startTime: string;
+        endTime: string;
+      }>;
+    }
+  >();
   for (const row of (data ?? []) as ClinicianAvailabilityRow[]) {
     const account = Array.isArray(row.clinic_accounts)
       ? row.clinic_accounts[0]
@@ -167,10 +196,14 @@ export async function getAppointmentAvailabilityAction(input: {
   selectedDate: string;
 }) {
   const identity = await getPatientProfile();
-  if (identity.error || !identity.profile) return { error: identity.error, availability: [] };
+  if (identity.error || !identity.profile)
+    return { error: identity.error, availability: [] };
 
   const { clinicianId, selectedDate } = input;
-  if (!/^[0-9a-f-]{36}$/i.test(clinicianId) || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+  if (
+    !/^[0-9a-f-]{36}$/i.test(clinicianId) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)
+  ) {
     return { error: "Select a valid appointment date", availability: [] };
   }
 
@@ -181,7 +214,12 @@ export async function getAppointmentAvailabilityAction(input: {
 
   const admin = createAdminClient();
   const dayOfWeek = date.getDay();
-  const [{ data: clinician }, { data: availability, error }, { data: appointments }, { data: blocks }] = await Promise.all([
+  const [
+    { data: clinician },
+    { data: availability, error },
+    { data: appointments },
+    { data: blocks },
+  ] = await Promise.all([
     admin
       .from("clinic_accounts")
       .select("id, display_name, role")
@@ -190,14 +228,16 @@ export async function getAppointmentAvailabilityAction(input: {
       .in("role", ["doctor", "nurse"])
       .maybeSingle(),
     admin
-    .from("staff_availability")
-    .select("clinic_account_id, start_time, end_time, clinic_accounts!inner(display_name, role)")
-    .eq("is_active", true)
-    .eq("clinic_account_id", clinicianId)
-    .eq("day_of_week", dayOfWeek)
-    .in("clinic_accounts.role", ["doctor", "nurse"])
-    .order("day_of_week", { ascending: true })
-    .order("start_time", { ascending: true }),
+      .from("staff_availability")
+      .select(
+        "clinic_account_id, start_time, end_time, clinic_accounts!inner(display_name, role)",
+      )
+      .eq("is_active", true)
+      .eq("clinic_account_id", clinicianId)
+      .eq("day_of_week", dayOfWeek)
+      .in("clinic_accounts.role", ["doctor", "nurse"])
+      .order("day_of_week", { ascending: true })
+      .order("start_time", { ascending: true }),
     admin
       .from("appointments")
       .select("doctor_id, scheduled_time")
@@ -209,14 +249,24 @@ export async function getAppointmentAvailabilityAction(input: {
       .eq("blocked_date", selectedDate),
   ]);
 
-  if (error || !clinician) return { error: error?.message ?? "Clinician is unavailable", availability: [] };
+  if (error || !clinician)
+    return {
+      error: error?.message ?? "Clinician is unavailable",
+      availability: [],
+    };
 
-  const taken = new Set((appointments ?? []).map((item) => `${item.doctor_id}:${item.scheduled_time?.slice(0, 5)}`));
-  const isBlocked = (clinicianId: string, time: string) => (blocks ?? []).some((block) =>
-    block.clinic_account_id === clinicianId &&
-    time >= block.start_time.slice(0, 5) &&
-    time < block.end_time.slice(0, 5),
+  const taken = new Set(
+    (appointments ?? []).map(
+      (item) => `${item.doctor_id}:${item.scheduled_time?.slice(0, 5)}`,
+    ),
   );
+  const isBlocked = (clinicianId: string, time: string) =>
+    (blocks ?? []).some(
+      (block) =>
+        block.clinic_account_id === clinicianId &&
+        time >= block.start_time.slice(0, 5) &&
+        time < block.end_time.slice(0, 5),
+    );
   const slots = (availability ?? []).flatMap(
     (row: AppointmentAvailabilityRow) => {
       const start = toMinutes(row.start_time);
@@ -264,8 +314,12 @@ function clinicTomorrow() {
     day: "2-digit",
   });
   const parts = formatter.formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const today = new Date(`${values.year}-${values.month}-${values.day}T00:00:00`);
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  const today = new Date(
+    `${values.year}-${values.month}-${values.day}T00:00:00`,
+  );
   today.setDate(today.getDate() + 1);
   return today.toISOString().slice(0, 10);
 }

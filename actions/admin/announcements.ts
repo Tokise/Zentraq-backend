@@ -41,6 +41,11 @@ export interface AnnouncementDTO {
     poster_name: string | null
 }
 
+// Converts an unknown server exception into a safe client-facing message.
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Server Actions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,10 +60,31 @@ export async function getAnnouncementsAction(): Promise<{ error: string | null; 
         if (auth.error || !auth.user) return { error: auth.error, announcements: [] }
 
         const admin = createAdminClient()
-        const { data, error } = await admin
+        const loginRole = await getUserRole(auth.user.id)
+        let patientRole: "student" | "faculty" | "staff" | null =
+            loginRole === "student" || loginRole === "faculty" || loginRole === "staff"
+                ? loginRole
+                : null
+        if (!patientRole && loginRole !== "admin") {
+            const [student, faculty, staff] = await Promise.all([
+                admin.from("students").select("id").eq("user_id", auth.user.id).maybeSingle(),
+                admin.from("faculty").select("id").eq("user_id", auth.user.id).maybeSingle(),
+                admin.from("staff").select("id").eq("user_id", auth.user.id).maybeSingle(),
+            ])
+            patientRole = student.data
+                ? "student"
+                : faculty.data
+                    ? "faculty"
+                    : staff.data
+                        ? "staff"
+                        : null
+        }
+        let query = admin
             .from("announcements")
             .select("id, title, content, image_url, posted_by, created_at, updated_at")
             .order("created_at", { ascending: false })
+        if (patientRole) query = query.contains("target_audience", [patientRole])
+        const { data, error } = await query
 
         if (error) {
             console.error("[getAnnouncementsAction DB Error]:", error)
@@ -92,9 +118,12 @@ export async function getAnnouncementsAction(): Promise<{ error: string | null; 
         }))
 
         return { error: null, announcements }
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("[getAnnouncementsAction Exception]:", err)
-        return { error: err?.message || "Failed to fetch announcements", announcements: [] }
+        return {
+            error: errorMessage(err, "Failed to fetch announcements"),
+            announcements: [],
+        }
     }
 }
 
@@ -124,7 +153,9 @@ export async function createAnnouncement(title: string, content: string, imageUr
         await logAuditEvent({ action: "INVENTORY_MODIFICATION", userId: auth.user.id, email: auth.user.email, resource: data?.id, details: { action: "ANNOUNCEMENT_CREATED", title } })
         revalidatePath("/admin/announcement")
         return { success: true }
-    } catch (err: any) { return { error: err?.message || "Server error" } }
+    } catch (err: unknown) {
+        return { error: errorMessage(err, "Server error") }
+    }
 }
 
 export async function updateAnnouncement(id: string, title: string, content: string, imageUrl?: string | null) {
@@ -152,7 +183,9 @@ export async function updateAnnouncement(id: string, title: string, content: str
         await logAuditEvent({ action: "INVENTORY_MODIFICATION", userId: auth.user.id, email: auth.user.email, resource: id, details: { action: "ANNOUNCEMENT_UPDATED", title } })
         revalidatePath("/admin/announcement")
         return { success: true }
-    } catch (err: any) { return { error: err?.message || "Server error" } }
+    } catch (err: unknown) {
+        return { error: errorMessage(err, "Server error") }
+    }
 }
 
 /**
@@ -199,9 +232,9 @@ export async function uploadAnnouncementImageAction(base64DataUrl: string): Prom
 
         const { data } = admin.storage.from("announcement-images").getPublicUrl(path)
         return { url: data.publicUrl }
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("[uploadAnnouncementImageAction Exception]:", err)
-        return { error: err?.message || "Image upload failed" }
+        return { error: errorMessage(err, "Image upload failed") }
     }
 }
 
@@ -215,5 +248,7 @@ export async function deleteAnnouncement(id: string) {
         await logAuditEvent({ action: "INVENTORY_MODIFICATION", userId: auth.user.id, email: auth.user.email, resource: id, details: { action: "ANNOUNCEMENT_DELETED" } })
         revalidatePath("/admin/announcement")
         return { success: true }
-    } catch (err: any) { return { error: err?.message || "Server error" } }
+    } catch (err: unknown) {
+        return { error: errorMessage(err, "Server error") }
+    }
 }

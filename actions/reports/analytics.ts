@@ -5,11 +5,13 @@ import { createAdminClient } from "@/utils/supabase/admin"
 
 type StaffRole = "admin" | "doctor" | "nurse"
 
+// Resolves an authenticated clinic actor with one of the requested roles.
 async function staff(roles: readonly StaffRole[]) {
   const actor = await getActionActor()
   return actor && hasAnyRole(actor, roles) ? actor : null
 }
 
+// Returns the signed-in clinic user's active account identifier.
 export async function getDoctorClinicAccountIdAction(): Promise<{ error: string | null; clinicAccountId: string | null }> {
   const actor = await getActionActor()
   if (!actor || !hasAnyRole(actor, ["doctor", "nurse", "admin"])) {
@@ -66,6 +68,7 @@ export interface ClearanceCompletion {
   approval_rate: number
 }
 
+// Returns bounded daily aggregate consultation counts for clinic reports.
 export async function getDailyConsultations(params?: {
   start_date?: string
   end_date?: string
@@ -75,7 +78,15 @@ export async function getDailyConsultations(params?: {
 
   let query = createAdminClient()
     .from("v_daily_consultations")
-    .select("*")
+    .select(`
+      consultation_date,
+      total_consultations,
+      student_consultations,
+      faculty_consultations,
+      walk_in_visits,
+      appointment_visits,
+      rfid_visits
+    `)
     .order("consultation_date", { ascending: false })
 
   if (params?.start_date) {
@@ -93,16 +104,18 @@ export async function getDailyConsultations(params?: {
   return { error: null, data: data as DailyConsultation[] }
 }
 
+// Returns bounded aggregate complaint frequencies without patient identifiers.
 export async function getComplaintFrequency(params?: {
   start_date?: string
   end_date?: string
 }) {
+  void params
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", data: [] as ComplaintFrequency[] }
 
   const { data, error } = await createAdminClient()
     .from("v_complaint_frequency")
-    .select("*")
+    .select("complaint, frequency")
     .order("frequency", { ascending: false })
     .limit(20)
 
@@ -111,16 +124,27 @@ export async function getComplaintFrequency(params?: {
   return { error: null, data: data as ComplaintFrequency[] }
 }
 
+// Returns bounded aggregate medicine dispensing totals for clinic reports.
 export async function getDispensingSummary(params?: {
   start_date?: string
   end_date?: string
 }) {
+  void params
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", data: [] as DispensingSummary[] }
 
   const { data, error } = await createAdminClient()
     .from("v_dispensing_summary")
-    .select("*")
+    .select(`
+      medicine_id,
+      generic_name,
+      brand_name,
+      category,
+      total_dispensed,
+      total_quantity_dispensed,
+      first_dispensed,
+      last_dispensed
+    `)
     .order("total_quantity_dispensed", { ascending: false })
     .limit(20)
 
@@ -129,19 +153,29 @@ export async function getDispensingSummary(params?: {
   return { error: null, data: data as DispensingSummary[] }
 }
 
+// Returns aggregate clearance outcomes for Admin reporting.
 export async function getClearanceCompletion() {
   const actor = await staff(["admin"])
   if (!actor) return { error: "Access denied", data: [] as ClearanceCompletion[] }
 
   const { data, error } = await createAdminClient()
     .from("v_clearance_completion")
-    .select("*")
+    .select(`
+      requester_type,
+      total_requests,
+      approved,
+      rejected,
+      pending,
+      evaluating,
+      approval_rate
+    `)
 
   if (error) return { error: error.message, data: [] as ClearanceCompletion[] }
 
   return { error: null, data: data as ClearanceCompletion[] }
 }
 
+// Returns minimized clinic-wide report summary totals.
 export async function getAnalyticsOverview(params?: {
   start_date?: string
   end_date?: string
@@ -149,37 +183,51 @@ export async function getAnalyticsOverview(params?: {
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", overview: null }
 
-  const startDate = params?.start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  const endDate = params?.end_date || new Date().toISOString().split('T')[0]
+  const startDate =
+    params?.start_date ||
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0]
+  const endDate = params?.end_date || new Date().toISOString().split("T")[0]
+  const admin = createAdminClient()
+  const [consultationResult, incidentResult, clearanceResult, stockResult] =
+    await Promise.all([
+      admin
+        .from("v_daily_consultations")
+        .select(
+          "total_consultations, student_consultations, faculty_consultations",
+        )
+        .gte("consultation_date", startDate)
+        .lte("consultation_date", endDate),
+      admin
+        .from("incidents")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["open", "in-progress"]),
+      admin
+        .from("health_clearances")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["pending", "evaluating"]),
+      admin
+        .from("v_medicine_stock_summary")
+        .select("total_quantity, min_stock_level"),
+    ])
 
-  // Get consultation stats
-  const { data: consultations } = await createAdminClient()
-    .from("v_daily_consultations")
-    .select("total_consultations, student_consultations, faculty_consultations")
-    .gte("consultation_date", startDate)
-    .lte("consultation_date", endDate)
+  const reportError =
+    consultationResult.error ??
+    incidentResult.error ??
+    clearanceResult.error ??
+    stockResult.error
+  if (reportError) return { error: reportError.message, overview: null }
+
+  const consultations = consultationResult.data
 
   const totalConsultations = consultations?.reduce((sum, c) => sum + c.total_consultations, 0) || 0
   const totalStudentConsultations = consultations?.reduce((sum, c) => sum + c.student_consultations, 0) || 0
   const totalFacultyConsultations = consultations?.reduce((sum, c) => sum + c.faculty_consultations, 0) || 0
 
-  // Get active incidents
-  const { count: activeIncidents } = await createAdminClient()
-    .from("incidents")
-    .select("*", { count: "exact", head: true })
-    .in("status", ["open", "in-progress"])
-
-  // Get pending clearances
-  const { count: pendingClearances } = await createAdminClient()
-    .from("health_clearances")
-    .select("*", { count: "exact", head: true })
-    .in("status", ["pending", "evaluating"])
-
-  // Get low stock medicines
-  const { count: lowStockCount } = await createAdminClient()
-    .from("v_medicine_stock_summary")
-    .select("*", { count: "exact", head: true })
-    .lte("total_quantity", "min_stock_level")
+  const lowStockCount = (stockResult.data ?? []).filter(
+    (item) => Number(item.total_quantity) <= Number(item.min_stock_level),
+  ).length
 
   return {
     error: null,
@@ -187,21 +235,34 @@ export async function getAnalyticsOverview(params?: {
       total_consultations: totalConsultations,
       student_consultations: totalStudentConsultations,
       faculty_consultations: totalFacultyConsultations,
-      active_incidents: activeIncidents || 0,
-      pending_clearances: pendingClearances || 0,
-      low_stock_medicines: lowStockCount || 0,
+      active_incidents: incidentResult.count ?? 0,
+      pending_clearances: clearanceResult.count ?? 0,
+      low_stock_medicines: lowStockCount,
       period_start: startDate,
       period_end: endDate
     }
   }
 }
 
+// Returns one authorized Doctor's aggregate performance totals.
 export async function getDoctorStats(doctorId: string, params?: {
   start_date?: string
   end_date?: string
 }) {
   const actor = await staff(["admin", "doctor"])
   if (!actor) return { error: "Access denied", stats: null }
+
+  if (actor.role === "doctor") {
+    const { data: account } = await createAdminClient()
+      .from("clinic_accounts")
+      .select("id")
+      .eq("user_id", actor.id)
+      .eq("is_active", true)
+      .maybeSingle()
+    if (!account || account.id !== doctorId) {
+      return { error: "Access denied", stats: null }
+    }
+  }
 
   const startDate = params?.start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   const endDate = params?.end_date || new Date().toISOString().split('T')[0]

@@ -4,12 +4,11 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-// Wraps tabular data with responsive horizontal scrolling.
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto rounded-xl bg-card shadow-sm"
+      className="relative w-full overflow-x-auto"
     >
       <table
         data-slot="table"
@@ -20,18 +19,16 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   )
 }
 
-// Styles table headers as a stable visual anchor while scrolling.
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b [&_tr]:bg-muted/50 [&_tr]:sticky [&_tr]:top-0 [&_tr]:z-10", className)}
+      className={cn("[&_tr]:border-b", className)}
       {...props}
     />
   )
 }
 
-// Renders the body region of a data table.
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
   return (
     <tbody
@@ -42,7 +39,6 @@ function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
   )
 }
 
-// Renders summary rows for a data table.
 function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   return (
     <tfoot
@@ -56,7 +52,6 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   )
 }
 
-// Adds a discernible hover and selected state to a data row.
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
@@ -70,13 +65,12 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-// Renders a compact, readable table column heading.
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
       className={cn(
-        "h-11 px-3 text-left align-middle text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0",
+        "h-12 px-3 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -84,7 +78,6 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
-// Renders a data cell with consistent breathing room.
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
@@ -98,7 +91,6 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   )
 }
 
-// Renders an accessible caption for a data table.
 function TableCaption({
   className,
   ...props

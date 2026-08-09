@@ -14,10 +14,9 @@ import {
   ShieldAlert,
   Activity,
   Clock,
-  UserPlus,
 } from "lucide-react"
 import { EmptyState } from "@/components/common/empty-state"
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts"
+import { ClinicalDashboardCharts } from "@/components/analytics/clinical-dashboard-charts"
 
 function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
   const s = status?.toLowerCase() ?? ""
@@ -96,24 +95,6 @@ export default function AdminDashboardPage() {
     return pendingConsultations + pendingAppointments
   }, [consultations, appointments])
 
-  const statusDistribution = useMemo(() => {
-    const map = new Map<string, number>()
-    appointments.forEach((a) => {
-      const key = formatStatus(a.status)
-      map.set(key, (map.get(key) ?? 0) + 1)
-    })
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
-  }, [appointments])
-
-  const consultationStatusDistribution = useMemo(() => {
-    const map = new Map<string, number>()
-    consultations.forEach((c) => {
-      const key = formatStatus(c.status)
-      map.set(key, (map.get(key) ?? 0) + 1)
-    })
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
-  }, [consultations])
-
   const recentAppointments = useMemo(() => {
     return [...appointments]
       .sort((a, b) => new Date(b.appointment_date || b.appointment_date).getTime() - new Date(a.appointment_date || a.appointment_date).getTime())
@@ -125,22 +106,6 @@ export default function AdminDashboardPage() {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5)
   }, [consultations])
-
-  const appointmentChartData = useMemo(() => {
-    return statusDistribution.map(([status, count]) => ({
-      name: status,
-      value: count,
-    }))
-  }, [statusDistribution])
-
-  const consultationChartData = useMemo(() => {
-    return consultationStatusDistribution.map(([status, count]) => ({
-      name: status,
-      value: count,
-    }))
-  }, [consultationStatusDistribution])
-
-  const COLORS = ["#0f6647", "#157f5a", "#16803c", "#4e784f", "#2563eb", "#b45309"]
 
   const statCards = [
     {
@@ -202,7 +167,6 @@ export default function AdminDashboardPage() {
         ))}
       </div>
 
-      {/* Analytics */}
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-2">
           <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -211,76 +175,11 @@ export default function AdminDashboardPage() {
           </h2>
           <p className="text-xs text-muted-foreground">Real-time summary</p>
         </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* Appointment status distribution */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Appointment Status Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-5 animate-pulse bg-muted" />
-                  ))}
-                </div>
-              ) : appointmentChartData.length === 0 ? (
-                <EmptyState title="No data" description="No appointments recorded yet." />
-              ) : (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={appointmentChartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={80}
-                        paddingAngle={2}
-                        dataKey="value"
-                      >
-                        {appointmentChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Consultation status distribution */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Consultation Status Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-5 animate-pulse bg-muted" />
-                  ))}
-                </div>
-              ) : consultationChartData.length === 0 ? (
-                <EmptyState title="No data" description="No consultations recorded yet." />
-              ) : (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={consultationChartData}>
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#0f6647" radius={[2, 2, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <ClinicalDashboardCharts
+          appointments={appointments}
+          consultations={consultations}
+          loading={loading}
+        />
       </div>
 
       {/* Recent Activity */}

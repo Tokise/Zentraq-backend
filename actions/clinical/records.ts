@@ -11,6 +11,20 @@ async function staff(roles: readonly StaffRole[]) {
   return actor && hasAnyRole(actor, roles) ? actor : null
 }
 
+// Checks whether the authenticated clinician owns the target patient profile.
+async function isOwnPatientProfile(
+  actorId: string,
+  patientId: string,
+  patientType: "student" | "faculty",
+) {
+  const { data } = await createAdminClient()
+    .from(patientType === "student" ? "students" : "faculty")
+    .select("user_id")
+    .eq("id", patientId)
+    .maybeSingle()
+  return data?.user_id === actorId
+}
+
 export interface MedicalHistory {
   id: string
   condition: string
@@ -179,6 +193,9 @@ export async function addPatientAllergy(
 ) {
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", allergy: null }
+  if (await isOwnPatientProfile(actor.id, patientId, patientType)) {
+    return { error: "Clinicians cannot modify their own health record", allergy: null }
+  }
 
   const tableName = patientType === "student" ? "student_allergies" : "faculty_allergies"
   const idColumn = patientType === "student" ? "student_id" : "faculty_id"
@@ -224,10 +241,30 @@ export async function updatePatientMedication(
     notes?: string
   }
 ) {
-  const actor = await staff(["admin", "doctor", "nurse"])
+  const actor = await staff(["admin", "doctor"])
   if (!actor) return { error: "Access denied", medication: null }
 
   const tableName = patientType === "student" ? "student_medications" : "faculty_medications"
+  const idColumn = patientType === "student" ? "student_id" : "faculty_id"
+  const { data: existing } = await createAdminClient()
+    .from(tableName)
+    .select(idColumn)
+    .eq("id", medicationId)
+    .maybeSingle()
+  const patientId = patientType === "student"
+    ? (existing as { student_id?: string } | null)?.student_id
+    : (existing as { faculty_id?: string } | null)?.faculty_id
+  if (
+    !patientId ||
+    await isOwnPatientProfile(actor.id, patientId, patientType)
+  ) {
+    return {
+      error: patientId
+        ? "Clinicians cannot modify their own health record"
+        : "Medication not found",
+      medication: null,
+    }
+  }
 
   const { data: medication, error } = await createAdminClient()
     .from(tableName)
@@ -269,6 +306,9 @@ export async function addPatientMedication(
 ) {
   const actor = await staff(["admin", "doctor"])
   if (!actor) return { error: "Access denied - only doctors can prescribe", medication: null }
+  if (await isOwnPatientProfile(actor.id, patientId, patientType)) {
+    return { error: "Clinicians cannot modify their own health record", medication: null }
+  }
 
   const tableName = patientType === "student" ? "student_medications" : "faculty_medications"
   const idColumn = patientType === "student" ? "student_id" : "faculty_id"
@@ -318,6 +358,12 @@ export async function addPatientImmunization(
 ) {
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", immunization: null }
+  if (await isOwnPatientProfile(actor.id, patientId, patientType)) {
+    return {
+      error: "Clinicians cannot modify their own health record",
+      immunization: null,
+    }
+  }
 
   const tableName = patientType === "student" ? "student_immunizations" : "faculty_immunizations"
   const idColumn = patientType === "student" ? "student_id" : "faculty_id"
@@ -365,6 +411,9 @@ export async function addMedicalHistory(
 ) {
   const actor = await staff(["admin", "doctor"])
   if (!actor) return { error: "Access denied - only doctors can add medical history", history: null }
+  if (await isOwnPatientProfile(actor.id, patientId, patientType)) {
+    return { error: "Clinicians cannot modify their own health record", history: null }
+  }
 
   const tableName = patientType === "student" ? "student_medical_history" : "faculty_medical_history"
   const idColumn = patientType === "student" ? "student_id" : "faculty_id"
@@ -412,8 +461,11 @@ export async function updatePatientMedicalRecord(
     notes?: string | null
   }
 ) {
-  const actor = await staff(["admin", "doctor", "nurse"])
+  const actor = await staff(["admin", "doctor"])
   if (!actor) return { error: "Access denied", record: null }
+  if (await isOwnPatientProfile(actor.id, patientId, patientType)) {
+    return { error: "Clinicians cannot modify their own health record", record: null }
+  }
 
   const tableName = patientType === "student" ? "students" : "faculty"
 

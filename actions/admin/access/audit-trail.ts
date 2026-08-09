@@ -12,13 +12,16 @@ export interface AuditLogDTO {
   user_id: string | null
   email: string | null
   resource: string | null
-  details: Record<string, any> | null
+  details: Record<string, unknown> | null
   ip_address: string | null
   user_agent: string | null
   timestamp: string
+  clinician_name: string | null
+  clinician_role: string | null
+  consultation_href: string | null
 }
 
-export interface GetAuditLogsParams {
+export interface GetAuditTrailParams {
   page?: number
   pageSize?: number
   actionFilter?: string
@@ -52,7 +55,7 @@ async function requireAdmin() {
   return { error: null, user }
 }
 
-export async function getAuditLogsAction(params: GetAuditLogsParams) {
+export async function getAuditTrailAction(params: GetAuditTrailParams) {
   try {
     const auth = await requireAdmin()
     if (auth.error || !auth.user) {
@@ -60,7 +63,7 @@ export async function getAuditLogsAction(params: GetAuditLogsParams) {
     }
 
     const page = params.page && params.page > 0 ? params.page : 1
-    const pageSize = params.pageSize && params.pageSize > 0 ? params.pageSize : 20
+    const pageSize = params.pageSize && params.pageSize > 0 ? params.pageSize : 10
     const fromIndex = (page - 1) * pageSize
     const toIndex = page * pageSize - 1
 
@@ -94,27 +97,73 @@ export async function getAuditLogsAction(params: GetAuditLogsParams) {
     const { data, error, count } = await query
 
     if (error) {
-      console.error("[getAuditLogsAction DB Error]:", error)
+      console.error("[getAuditTrailAction DB Error]:", error)
       return { error: error.message, logs: [], totalCount: 0 }
     }
 
+    const actorIds = [
+      ...new Set(
+        (data || [])
+          .map((entry) => entry.user_id)
+          .filter((userId): userId is string => Boolean(userId)),
+      ),
+    ]
+    const { data: clinicAccounts } = actorIds.length
+      ? await admin
+          .from("clinic_accounts")
+          .select("user_id,display_name,role")
+          .in("user_id", actorIds)
+      : { data: [] }
+    const clinicianByUserId = new Map(
+      (clinicAccounts || []).map((account) => [
+        account.user_id,
+        {
+          name: account.display_name,
+          role: account.role,
+        },
+      ]),
+    )
+
     return {
       error: null,
-      logs: (data || []).map((entry) => ({
-        id: entry.id,
-        action: entry.action,
-        user_id: entry.user_id,
-        email: typeof entry.metadata?.actor_email === "string" ? entry.metadata.actor_email : null,
-        resource: entry.entity_id,
-        details: entry.metadata ?? {},
-        ip_address: entry.ip_address,
-        user_agent: entry.user_agent,
-        timestamp: entry.created_at,
-      })) as AuditLogDTO[],
+      logs: (data || []).map((entry) => {
+        const clinician = entry.user_id
+          ? clinicianByUserId.get(entry.user_id)
+          : undefined
+        const isConsultation = entry.action.startsWith("consultation.")
+        return {
+          id: entry.id,
+          action: entry.action,
+          user_id: entry.user_id,
+          email:
+            typeof entry.metadata?.actor_email === "string"
+              ? entry.metadata.actor_email
+              : null,
+          resource: entry.entity_id,
+          details: entry.metadata ?? {},
+          ip_address: entry.ip_address,
+          user_agent: entry.user_agent,
+          timestamp: entry.created_at,
+          clinician_name: clinician?.name ?? null,
+          clinician_role:
+            clinician?.role ??
+            (typeof entry.metadata?.clinician_role === "string"
+              ? entry.metadata.clinician_role
+              : null),
+          consultation_href:
+            isConsultation && entry.entity_id
+              ? `/admin/visits/history?id=${entry.entity_id}`
+              : null,
+        }
+      }) as AuditLogDTO[],
       totalCount: count || 0,
     }
-  } catch (err: any) {
-    console.error("[getAuditLogsAction Exception]:", err)
-    return { error: err?.message || "Failed to fetch audit logs", logs: [], totalCount: 0 }
+  } catch (err: unknown) {
+    console.error("[getAuditTrailAction Exception]:", err)
+    return {
+      error: err instanceof Error ? err.message : "Failed to fetch audit logs",
+      logs: [],
+      totalCount: 0,
+    }
   }
 }

@@ -257,12 +257,11 @@ These pages exist in the navigation and have route files, but currently render t
 | P.1 | Analytics | `/reports/analytics` | High |
 | P.2 | Compliance | `/reports/compliance` | Medium |
 | P.3 | Roles Management | `/admin/useraccess/roles` | Medium |
-| P.4 | Audit Logs | `/admin/useraccess/activity_logs` | High |
-| P.5 | System Settings | `/admin/settings` | Medium |
-| P.6 | Health Programs | `/admin/healthprograms/list` | Low |
-| P.7 | Health Clearance | `/admin/services/clearance` | Low |
-| P.8 | Faculty Accounts | `/admin/faculty-accounts` | Medium |
-| P.9 | Create Faculty Accounts | `/admin/faculty-accounts/create` | Medium |
+| P.4 | System Settings | `/admin/settings` | Medium |
+| P.5 | Health Programs | `/admin/healthprograms/list` | Low |
+| P.6 | Health Clearance | `/admin/services/clearance` | Low |
+| P.7 | Faculty Accounts | `/admin/faculty-accounts` | Medium |
+| P.8 | Create Faculty Accounts | `/admin/faculty-accounts/create` | Medium |
 
 ---
 
@@ -403,7 +402,7 @@ gantt
 - [ ] Build `/admin/faculty-accounts` page — data table with search, department filter, status filter, pagination
 - [ ] Build `/admin/faculty-accounts/create` page — multi-field creation form with server action
 - [ ] Build faculty account edit dialog
-- [ ] Build `/admin/useraccess/activity_logs` page — filterable, sortable data table with date range picker
+- [x] Use `/admin/reports/audit_trail` as the single filterable audit interface
 - [ ] Create `logAuditEvent()` server utility function
 - [ ] Integrate audit logging into existing server actions (login, account CRUD, RFID registration)
 - [ ] Add audit log export endpoint (CSV)

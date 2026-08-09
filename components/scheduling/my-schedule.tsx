@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarOff, Loader2, Plus } from "lucide-react";
+import { CalendarOff, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   addScheduleBlockAction,
@@ -9,9 +9,11 @@ import {
   saveAvailabilityAction,
 } from "@/actions/scheduling/my-schedule";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/common/page-header";
 
 const DAYS = [
@@ -166,18 +168,17 @@ export function MySchedulePage() {
               )}
               <div>
                 <Label htmlFor="block-date">Date</Label>
-                <Input
+                <Calendar
                   id="block-date"
                   min={new Date().toISOString().slice(0, 10)}
-                  onChange={(event) =>
+                  onSelect={(blocked_date) =>
                     setBlock((value) => ({
                       ...value,
-                      blocked_date: event.target.value,
+                      blocked_date,
                     }))
                   }
                   required
-                  type="date"
-                  value={block.blocked_date}
+                  selected={block.blocked_date}
                 />
               </div>
               <TimeInputs
@@ -216,8 +217,10 @@ export function MySchedulePage() {
         <CardContent className="p-5">
           <h2 className="font-semibold">Published schedule</h2>
           {loading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="size-5 animate-spin" />
+            <div className="mt-4 grid gap-2 md:grid-cols-2">
+              {Array.from({ length: 6 }, (_, index) => (
+                <Skeleton className="h-16 w-full" key={index} />
+              ))}
             </div>
           ) : (
             <div className="mt-4 grid gap-2 md:grid-cols-2">

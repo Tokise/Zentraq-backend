@@ -1,15 +1,6 @@
-import { PageHeader } from "@/components/common/page-header"
-import { Card, CardContent } from "@/components/ui/card"
+import { ClinicalReportsWorkspace } from "@/components/analytics/clinical-reports-workspace"
 
-export default function ViewOnlyPage() {
-  return (
-    <div className="space-y-6">
-      <PageHeader title="View Only" description="Manage View Only" />
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-sm text-muted-foreground">This page is under construction.</p>
-        </CardContent>
-      </Card>
-    </div>
-  )
+// Shows read-only aggregate clinic analytics to Nurse.
+export default function NurseReportsPage() {
+  return <ClinicalReportsWorkspace role="nurse" />
 }

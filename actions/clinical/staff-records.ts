@@ -11,6 +11,16 @@ async function staff(roles: readonly StaffRole[]) {
   return actor && hasAnyRole(actor, roles) ? actor : null
 }
 
+// Checks whether the authenticated clinician owns the target Staff profile.
+async function isOwnStaffProfile(actorId: string, staffId: string) {
+  const { data } = await createAdminClient()
+    .from("staff")
+    .select("user_id")
+    .eq("id", staffId)
+    .maybeSingle()
+  return data?.user_id === actorId
+}
+
 export interface StaffMedicalHistory {
   id: string
   staff_id: string
@@ -76,6 +86,9 @@ export async function getStaffMedicalHistory(staffId: string) {
 export async function addStaffMedicalHistory(staffId: string, data: { condition_name: string; diagnosed_date?: string; status?: string; notes?: string }) {
   const actor = await staff(["admin", "doctor"])
   if (!actor) return { error: "Access denied", history: null }
+  if (await isOwnStaffProfile(actor.id, staffId)) {
+    return { error: "Clinicians cannot modify their own health record", history: null }
+  }
 
   const admin = createAdminClient()
   const { data: history, error } = await admin
@@ -107,6 +120,9 @@ export async function getStaffAllergies(staffId: string) {
 export async function addStaffAllergy(staffId: string, data: { allergen: string; reaction?: string; severity?: string; notes?: string }) {
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", allergy: null }
+  if (await isOwnStaffProfile(actor.id, staffId)) {
+    return { error: "Clinicians cannot modify their own health record", allergy: null }
+  }
 
   const admin = createAdminClient()
   const { data: allergy, error } = await admin
@@ -138,6 +154,9 @@ export async function getStaffMedications(staffId: string) {
 export async function addStaffMedication(staffId: string, data: { medicine_name: string; dosage?: string; frequency?: string; start_date?: string; end_date?: string; notes?: string }) {
   const actor = await staff(["admin", "doctor"])
   if (!actor) return { error: "Access denied", medication: null }
+  if (await isOwnStaffProfile(actor.id, staffId)) {
+    return { error: "Clinicians cannot modify their own health record", medication: null }
+  }
 
   const admin = createAdminClient()
   const { data: medication, error } = await admin
@@ -169,6 +188,12 @@ export async function getStaffImmunizations(staffId: string) {
 export async function addStaffImmunization(staffId: string, data: { vaccine_name: string; administered_date?: string; dose_number?: number; lot_number?: string; notes?: string }) {
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", immunization: null }
+  if (await isOwnStaffProfile(actor.id, staffId)) {
+    return {
+      error: "Clinicians cannot modify their own health record",
+      immunization: null,
+    }
+  }
 
   const admin = createAdminClient()
   const { data: immunization, error } = await admin

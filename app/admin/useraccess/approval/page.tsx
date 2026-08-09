@@ -38,7 +38,7 @@ export default function ApprovalPage() {
             <CardTitle className="text-sm font-medium">Auditability</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Use Activity Logs to review account and permission activity.
+            Use Audit Trail to review account and permission activity.
           </CardContent>
         </Card>
       </div>

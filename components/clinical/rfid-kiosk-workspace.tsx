@@ -6,27 +6,30 @@ import {
   ExternalLink,
   FileText,
   Loader2,
-  RefreshCw,
   Stethoscope,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import {
-  getPatientMedicalRecord,
-  type PatientMedicalRecord,
-} from "@/actions/clinical/records";
+  claimConsultation,
+} from "@/actions/clinical/visits";
 import {
-  getStaffMedicalRecord,
-  type StaffMedicalRecord,
-} from "@/actions/clinical/staff-records";
+  getComplianceRecordAction,
+  type ComplianceRecordDTO,
+} from "@/actions/clinical/compliance-records";
 import { getRfidQueue, type RfidQueueItem } from "@/actions/rfid/kiosk";
-import { MedicalRecordView } from "@/components/medical/medical-record-view";
-import { StaffMedicalRecordView } from "@/components/medical/staff-medical-record-view";
-import { StaffRecordExtras } from "@/components/medical/staff-record-extras";
+import {
+  HealthRecordTabs,
+  type HealthRecordTab,
+} from "@/components/medical/health-record-tabs";
+import { DataTablePagination } from "@/components/ui/pagination";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { createClient as createBrowserClient } from "@/utils/supabase/client";
 import {
   Table,
   TableBody,
@@ -37,6 +40,7 @@ import {
 } from "@/components/ui/table";
 
 type ClinicRole = "admin" | "doctor" | "nurse";
+const PAGE_SIZE = 10;
 
 interface ClinicalRfidKioskWorkspaceProps {
   role: ClinicRole;
@@ -47,38 +51,58 @@ export function ClinicalRfidKioskWorkspace({
   role,
 }: ClinicalRfidKioskWorkspaceProps) {
   const router = useRouter();
+  const [supabase] = useState(() => createBrowserClient());
   const [queue, setQueue] = useState<RfidQueueItem[]>([]);
+  const [queuePage, setQueuePage] = useState(1);
   const [selected, setSelected] = useState<RfidQueueItem | null>(null);
-  const [patientRecord, setPatientRecord] =
-    useState<PatientMedicalRecord | null>(null);
-  const [staffRecord, setStaffRecord] = useState<StaffMedicalRecord | null>(
-    null,
-  );
+  const [record, setRecord] = useState<ComplianceRecordDTO | null>(null);
+  const [previewTab, setPreviewTab] = useState<HealthRecordTab>("profile");
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [startingConsultationId, setStartingConsultationId] = useState<
+    string | null
+  >(null);
   const previewRequestId = useRef(0);
 
   // Refreshes only queue entries the active clinician is allowed to open.
-  const loadQueue = useCallback(async () => {
-    setLoading(true);
+  const loadQueue = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     const result = await getRfidQueue();
     setQueue(result.queue);
     setError(result.error);
     setLoading(false);
   }, []);
 
+  // Subscribes to private queue invalidations and reloads minimized server DTOs.
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
       void loadQueue();
     }, 0);
-    const interval = window.setInterval(loadQueue, 300_000);
+    let reloadTimer: number | undefined;
+    const channel = supabase.channel("clinic:rfid-queue", {
+      config: { private: true },
+    });
+
+    void supabase.realtime.setAuth().then(() => {
+      channel
+        .on("broadcast", { event: "queue-changed" }, () => {
+          window.clearTimeout(reloadTimer);
+          reloadTimer = window.setTimeout(() => {
+            setQueuePage(1);
+            void loadQueue(false);
+          }, 100);
+        })
+        .subscribe();
+    });
+
     return () => {
       window.clearTimeout(initialLoad);
-      window.clearInterval(interval);
+      window.clearTimeout(reloadTimer);
+      void supabase.removeChannel(channel);
     };
-  }, [loadQueue]);
+  }, [loadQueue, supabase]);
 
   // Opens the dedicated touch-friendly scanner without replacing the queue page.
   function openScanner() {
@@ -86,8 +110,19 @@ export function ClinicalRfidKioskWorkspace({
   }
 
   // Opens the selected patient's active consultation in the unified Visit workspace.
-  function startConsultation(item: RfidQueueItem) {
-    window.location.assign(`/${role}/visits?consultation=${item.consultationId}`);
+  async function startConsultation(item: RfidQueueItem) {
+    if (!item.canStartConsultation) return;
+    setStartingConsultationId(item.consultationId);
+    const result = await claimConsultation({
+      consultation_id: item.consultationId,
+    });
+    setStartingConsultationId(null);
+
+    if (!result.success) {
+      toast.error(result.error ?? "Unable to claim this consultation");
+      return;
+    }
+    router.push(`/${role}/visits?consultation=${item.consultationId}`);
   }
 
   // Opens the role-owned complete record page for the selected patient.
@@ -101,34 +136,71 @@ export function ClinicalRfidKioskWorkspace({
   }
 
   // Selects a queue entry and loads its read-only clinical record beneath the table.
-  async function selectPatient(item: RfidQueueItem) {
-    const requestId = previewRequestId.current + 1;
-    previewRequestId.current = requestId;
-    setSelected(item);
-    setPatientRecord(null);
-    setStaffRecord(null);
-    setPreviewError(null);
-    setPreviewLoading(true);
+  const loadPatientRecord = useCallback(
+    async (item: RfidQueueItem, resetTab: boolean) => {
+      const requestId = previewRequestId.current + 1;
+      previewRequestId.current = requestId;
+      setSelected(item);
+      if (resetTab) {
+        setRecord(null);
+        setPreviewTab("profile");
+      }
+      setPreviewError(null);
+      setPreviewLoading(true);
 
-    if (item.patientType === "staff") {
-      const result = await getStaffMedicalRecord(item.patientId);
+      const result = await getComplianceRecordAction({
+        patientId: item.patientId,
+        patientRole: item.patientType,
+      });
       if (previewRequestId.current !== requestId) return;
-      setStaffRecord(result.record);
+      setRecord(result.record);
       setPreviewError(result.error);
-    } else {
-      const result = await getPatientMedicalRecord(
-        item.patientId,
-        item.patientType,
-      );
-      if (previewRequestId.current !== requestId) return;
-      setPatientRecord(result.record);
-      setPreviewError(result.error);
-    }
 
-    if (previewRequestId.current === requestId) {
-      setPreviewLoading(false);
-    }
+      if (previewRequestId.current === requestId) {
+        setPreviewLoading(false);
+      }
+    },
+    [],
+  );
+
+  // Selects a new patient and resets the embedded record to Profile Overview.
+  function selectPatient(item: RfidQueueItem) {
+    setQueuePage(1);
+    void loadPatientRecord(item, true);
   }
+
+  const queueTotalPages = Math.ceil(queue.length / PAGE_SIZE);
+  const visibleQueue = queue.slice(
+    (queuePage - 1) * PAGE_SIZE,
+    queuePage * PAGE_SIZE,
+  );
+
+  // Refreshes the selected record when its private patient topic is invalidated.
+  useEffect(() => {
+    if (!selected) return;
+    let reloadTimer: number | undefined;
+    const topic =
+      `patient-record:${selected.patientType}:${selected.patientId}`;
+    const channel = supabase.channel(topic, {
+      config: { private: true },
+    });
+
+    void supabase.realtime.setAuth().then(() => {
+      channel
+        .on("broadcast", { event: "patient-record-changed" }, () => {
+          window.clearTimeout(reloadTimer);
+          reloadTimer = window.setTimeout(() => {
+            void loadPatientRecord(selected, false);
+          }, 100);
+        })
+        .subscribe();
+    });
+
+    return () => {
+      window.clearTimeout(reloadTimer);
+      void supabase.removeChannel(channel);
+    };
+  }, [loadPatientRecord, selected, supabase]);
 
   return (
     <div className="space-y-6">
@@ -137,7 +209,7 @@ export function ClinicalRfidKioskWorkspace({
         description={
           role === "admin"
             ? "Monitor every checked-in patient and open the clinic scanner."
-            : "View your assigned checked-in patients and open the clinic scanner."
+            : "Claim waiting patients, continue assigned work, and open the clinic scanner."
         }
       />
 
@@ -145,15 +217,6 @@ export function ClinicalRfidKioskWorkspace({
         <Button onClick={openScanner} type="button">
           <ExternalLink className="size-4" />
           Open scanner display
-        </Button>
-        <Button
-          disabled={loading}
-          onClick={() => void loadQueue()}
-          type="button"
-          variant="outline"
-        >
-          <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
-          Refresh queue
         </Button>
       </div>
 
@@ -174,8 +237,10 @@ export function ClinicalRfidKioskWorkspace({
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 5 }, (_, index) => (
+              <Skeleton className="h-10 w-full" key={index} />
+            ))}
           </div>
         ) : error ? (
           <p className="p-6 text-sm text-destructive" role="alert">
@@ -183,21 +248,22 @@ export function ClinicalRfidKioskWorkspace({
           </p>
         ) : queue.length === 0 ? (
           <p className="p-10 text-center text-sm text-muted-foreground">
-            No assigned patients are waiting.
+            No patients are waiting for this role.
           </p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-14">#</TableHead>
-                <TableHead>Patient</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Checked in</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {queue.map((item, index) => (
+          <div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-14">#</TableHead>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Checked in</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+              {visibleQueue.map((item, index) => (
                 <TableRow
                   className={
                     selected?.id === item.id
@@ -205,10 +271,10 @@ export function ClinicalRfidKioskWorkspace({
                       : "cursor-pointer hover:bg-muted/50"
                   }
                   key={item.id}
-                  onClick={() => void selectPatient(item)}
+                  onClick={() => selectPatient(item)}
                 >
                   <TableCell className="font-semibold text-muted-foreground">
-                    {index + 1}
+                    {(queuePage - 1) * PAGE_SIZE + index + 1}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -249,13 +315,24 @@ export function ClinicalRfidKioskWorkspace({
                           : "text-sm capitalize text-muted-foreground"
                       }
                     >
-                      {item.priority > 0 ? "Priority" : item.status}
+                      {item.priority > 0
+                        ? "Priority"
+                        : item.status.replaceAll("_", " ")}
                     </span>
                   </TableCell>
                 </TableRow>
               ))}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+            <DataTablePagination
+              currentPage={queuePage}
+              totalPages={queueTotalPages}
+              totalItems={queue.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setQueuePage}
+              className="mx-6 mb-4"
+            />
+          </div>
         )}
       </Card>
 
@@ -265,7 +342,7 @@ export function ClinicalRfidKioskWorkspace({
             <div>
               <h2 className="text-xl font-semibold">Medical record preview</h2>
               <p className="text-sm text-muted-foreground">
-                Read-only preview for {selected.patientName}; 
+                Read-only preview for {selected.patientName}.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -279,42 +356,50 @@ export function ClinicalRfidKioskWorkspace({
                   ? "Open Student Records"
                   : "Open Employee Records"}
               </Button>
-              <Button onClick={() => startConsultation(selected)} type="button">
-                <Stethoscope className="size-4" />
-                Start consultation
+              <Button
+                disabled={
+                  !selected.canStartConsultation ||
+                  startingConsultationId === selected.consultationId
+                }
+                onClick={() => void startConsultation(selected)}
+                type="button"
+              >
+                {startingConsultationId === selected.consultationId ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Stethoscope className="size-4" />
+                )}
+                {getConsultationActionLabel(selected)}
               </Button>
             </div>
           </div>
 
           {previewLoading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            <div className="space-y-4 py-4">
+              <Skeleton className="h-10 w-full" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <Skeleton className="h-32 w-full" />
+                <Skeleton className="h-32 w-full" />
+              </div>
             </div>
           ) : previewError ? (
             <p className="text-sm text-destructive" role="alert">
               {previewError}
             </p>
-          ) : patientRecord ? (
+          ) : record ? (
             <div className="space-y-6">
-              <MedicalRecordView
-                canEdit={false}
-                profilePhotoUrl={selected.profilePhotoUrl}
-                record={patientRecord}
-              />
-              <StaffRecordExtras
-                patientId={selected.patientId}
-                patientType={selected.patientType}
-              />
-            </div>
-          ) : staffRecord ? (
-            <div className="space-y-6">
-              <StaffMedicalRecordView
-                profilePhotoUrl={selected.profilePhotoUrl}
-                record={staffRecord}
-              />
-              <StaffRecordExtras
-                patientId={selected.patientId}
-                patientType="staff"
+              <HealthRecordTabs
+                activeTab={previewTab}
+                capabilities={{
+                  canAddExam: false,
+                  canAddSickLeave: false,
+                }}
+                key={record.profile.id}
+                onTabChange={setPreviewTab}
+                readOnly
+                record={record}
+                role={record.profile.role}
+                showPreviousConsultations
               />
             </div>
           ) : (
@@ -336,6 +421,22 @@ function getInitials(name: string): string {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+// Describes whether the selected queue entry will be claimed, resumed, or reviewed.
+function getConsultationActionLabel(item: RfidQueueItem): string {
+  if (item.status === "awaiting_doctor_review") {
+    return "Review consultation";
+  }
+  if (item.claimedByCurrentUser) {
+    return item.claimedByName
+      ? `Resume — ${item.claimedByName}`
+      : "Resume consultation";
+  }
+  if (!item.canStartConsultation) {
+    return `Claimed by ${item.claimedByName ?? "clinician"}`;
+  }
+  return "Start consultation";
 }
 
 // Formats a queue timestamp without combining incompatible Intl date options.

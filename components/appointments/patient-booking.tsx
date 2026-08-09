@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
 type Clinician = {
@@ -159,8 +160,15 @@ export function PatientBookingPage() {
           </CardHeader>
           <CardContent>
             {loadingClinicians ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                {Array.from({ length: 4 }, (_, index) => (
+                  <div className="space-y-3 rounded-lg border p-4" key={index}>
+                    <Skeleton className="h-5 w-36" />
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                ))}
               </div>
             ) : clinicians.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
@@ -269,8 +277,10 @@ export function PatientBookingPage() {
             <div>
               <h3 className="font-medium">Available 30-minute times</h3>
               {loadingSlots ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  {Array.from({ length: 6 }, (_, index) => (
+                    <Skeleton className="h-9 w-full" key={index} />
+                  ))}
                 </div>
               ) : slots.length === 0 ? (
                 <p className="py-8 text-sm text-muted-foreground">

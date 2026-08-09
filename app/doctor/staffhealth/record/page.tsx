@@ -1,8 +1,6 @@
-"use client";
+import { RecordsIndexWorkspace } from "@/components/medical/records-index-workspace"
 
-import AdminStaffHealthRecordPage from "@/app/admin/staffhealth/record/page";
-
-// Reuses the protected staff health-record workspace for doctors.
-export default function DoctorStaffHealthRecordPage() {
-  return <AdminStaffHealthRecordPage />;
+// Renders the Doctor Employee Records index with Sick Leave capability.
+export default function DoctorEmployeeRecordsPage() {
+  return <RecordsIndexWorkspace clinicRole="doctor" scope="employee" />
 }
