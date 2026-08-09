@@ -1,15 +1,6 @@
-import { PageHeader } from "@/components/common/page-header"
-import { Card, CardContent } from "@/components/ui/card"
+import { redirect } from "next/navigation"
 
-export default function ParticipantsPage() {
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Participants" description="Manage Participants" />
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-sm text-muted-foreground">This page is under construction.</p>
-        </CardContent>
-      </Card>
-    </div>
-  )
+// Returns clinicians to the live proposal and program-status workspace.
+export default function DoctorHealthProgramParticipantsPage() {
+  redirect("/doctor/healthprograms/list")
 }

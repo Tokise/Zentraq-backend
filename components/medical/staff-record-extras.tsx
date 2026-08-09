@@ -3,18 +3,11 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
-import { getFacultyDocumentsAction } from "@/actions/admin/documents/faculty";
-import { getStudentDocumentsAction } from "@/actions/admin/records/resources";
-import { getStaffDocumentsAction } from "@/actions/admin/documents/staff";
 import {
   getPatientConsultationHistory,
   type KioskConsultationSummary,
 } from "@/actions/rfid/kiosk";
 import { ConsultationDetailDialog } from "@/components/clinical/consultation-detail-dialog";
-import {
-  AttachmentCarousel,
-  type AttachmentCarouselItem,
-} from "@/components/medical/attachment-carousel";
 
 type ClinicalPatientType = "student" | "faculty" | "staff";
 
@@ -23,12 +16,11 @@ interface StaffRecordExtrasProps {
   patientType: ClinicalPatientType;
 }
 
-// Loads read-only files and completed consultations for any selected clinical record.
+// Loads previous consultations beneath the unified compliance record tabs.
 export function StaffRecordExtras({
   patientId,
   patientType,
 }: StaffRecordExtrasProps) {
-  const [attachments, setAttachments] = useState<AttachmentCarouselItem[]>([]);
   const [consultations, setConsultations] = useState<KioskConsultationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,20 +32,19 @@ export function StaffRecordExtras({
   useEffect(() => {
     let active = true;
 
-    // Fetches both read-only sections together whenever the selected record changes.
+    // Fetches read-only consultation history whenever the selected record changes.
     async function loadExtras() {
       setLoading(true);
       setError(null);
-      const [documentResult, consultationResult] = await Promise.all([
-        getPatientDocuments(patientId, patientType),
-        getPatientConsultationHistory(patientId, patientType),
-      ]);
+      const consultationResult = await getPatientConsultationHistory(
+        patientId,
+        patientType,
+      );
 
       if (!active) return;
 
-      setAttachments(documentResult.documents ?? []);
       setConsultations(consultationResult.consultations ?? []);
-      setError(documentResult.error ?? consultationResult.error);
+      setError(consultationResult.error);
       setLoading(false);
     }
 
@@ -82,17 +73,6 @@ export function StaffRecordExtras({
 
   return (
     <>
-      <section className="bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold">Files & attachments</h2>
-        {attachments.length ? (
-          <AttachmentCarousel attachments={attachments} className="mt-4" />
-        ) : (
-          <p className="mt-3 text-sm text-muted-foreground">
-            No attachments found.
-          </p>
-        )}
-      </section>
-
       <section className="bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold">Previous consultations</h2>
         {consultations.length ? (
@@ -135,19 +115,6 @@ export function StaffRecordExtras({
       />
     </>
   );
-}
-
-// Selects the role-owned document source without exposing storage access to the browser.
-function getPatientDocuments(patientId: string, patientType: ClinicalPatientType) {
-  if (patientType === "student") {
-    return getStudentDocumentsAction(patientId);
-  }
-
-  if (patientType === "faculty") {
-    return getFacultyDocumentsAction(patientId);
-  }
-
-  return getStaffDocumentsAction(patientId);
 }
 
 // Formats a consultation date with the same short form used by Student Records.

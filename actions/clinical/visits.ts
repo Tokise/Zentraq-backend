@@ -78,12 +78,6 @@ export async function claimConsultation(
     };
   }
 
-  await writeAuditLog(
-    actor,
-    "consultation.claimed",
-    "consultation",
-    parsed.data.consultation_id,
-  );
   return { success: true, data: { queueEntryId: data } };
 }
 
@@ -115,7 +109,7 @@ export async function completeClinicalConsultation(
 export async function finalizeConsultationWorkflow(
   input: unknown,
 ): Promise<ActionResult<{ status: "completed" | "awaiting_doctor_review" }>> {
-  const actor = await staff(["doctor", "nurse"]);
+  const actor = await staff(["admin", "doctor", "nurse"]);
   if (!actor || !(await assertSameOrigin())) return forbidden();
 
   const parsed = FinalizeConsultationWorkflowSchema.safeParse(input);
@@ -124,23 +118,25 @@ export async function finalizeConsultationWorkflow(
   if (
     actor.role === "nurse" &&
     (parsed.data.diagnosis ||
+      parsed.data.treatment ||
       parsed.data.prescriptions.length > 0 ||
       parsed.data.follow_up)
   ) {
     return forbidden();
   }
 
-  const { data, error } = await createAdminClient().rpc(
+  const supabase = createClient(await cookies());
+  const { data, error } = await supabase.rpc(
     "finalize_consultation_workflow",
     {
       p_consultation_id: parsed.data.consultation_id,
-      p_actor_id: actor.id,
-      p_actor_role: actor.role,
+      p_student_complaint: parsed.data.student_complaint,
       p_vitals_disposition: parsed.data.vitals_disposition,
       p_vitals_skip_reason: parsed.data.vitals_skip_reason ?? null,
       p_vitals: parsed.data.vitals,
       p_notes: parsed.data.outcome_note ?? null,
       p_diagnosis: parsed.data.diagnosis ?? null,
+      p_treatment: parsed.data.treatment ?? null,
       p_prescriptions: parsed.data.prescriptions,
       p_follow_up: parsed.data.follow_up ?? null,
     },
@@ -155,14 +151,6 @@ export async function finalizeConsultationWorkflow(
   }
 
   const status = data as "completed" | "awaiting_doctor_review";
-  await writeAuditLog(
-    actor,
-    status === "completed"
-      ? "consultation.completed"
-      : "consultation.submitted_for_review",
-    "consultation",
-    parsed.data.consultation_id,
-  );
   return { success: true, data: { status } };
 }
 
@@ -172,6 +160,34 @@ export async function getClinicalWorkflowRole(): Promise<
 > {
   const actor = await staff(["admin", "doctor", "nurse"]);
   return (actor?.role ?? null) as "admin" | "doctor" | "nurse" | null;
+}
+
+// Returns the approved complaint labels available to the consultation workflow.
+export async function getComplaintCatalog(): Promise<{
+  error: string | null;
+  complaints: string[];
+}> {
+  const actor = await staff(["admin", "doctor", "nurse"]);
+  if (!actor) return { error: "Access denied", complaints: [] };
+
+  const { data, error } = await createAdminClient()
+    .from("complaints")
+    .select("name")
+    .order("name", { ascending: true })
+    .limit(100);
+
+  if (error) return { error: error.message, complaints: [] };
+
+  return {
+    error: null,
+    complaints: Array.from(
+      new Set(
+        (data ?? [])
+          .map((complaint) => complaint.name?.trim())
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ),
+  };
 }
 
 // Adds an optional diagnosis while an authorized clinician is handling a consultation.

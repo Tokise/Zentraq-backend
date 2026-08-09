@@ -12,7 +12,6 @@ import { getDashboardDataAction, type DashboardConsultationDTO, type DashboardAp
 import {
   CalendarDays,
   Users,
-  Pill,
   AlertTriangle,
   HeartPulse,
   Activity,
@@ -20,6 +19,7 @@ import {
   Stethoscope,
 } from "lucide-react"
 import { EmptyState } from "@/components/common/empty-state"
+import { ClinicalDashboardCharts } from "@/components/analytics/clinical-dashboard-charts"
 
 function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
   const s = status?.toLowerCase() ?? ""
@@ -99,33 +99,6 @@ export default function NurseDashboardPage() {
     return consultations.filter((c) => c.status?.toLowerCase() === "completed" && c.notes).length
   }, [consultations])
 
-  const appointmentTrend = useMemo(() => {
-    const map = new Map<string, number>()
-    appointments.forEach((a) => {
-      const date = (a.appointment_date || "").split("T")[0]
-      if (!date) return
-      map.set(date, (map.get(date) ?? 0) + 1)
-    })
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .slice(-7)
-      .map(([date, count]) => ({
-        date: new Date(date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        count,
-      }))
-  }, [appointments])
-
-  const consultationDistribution = useMemo(() => {
-    const map = new Map<string, number>()
-    consultations.forEach((c) => {
-      const key = formatStatus(c.status)
-      map.set(key, (map.get(key) ?? 0) + 1)
-    })
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6)
-  }, [consultations])
-
-  const maxApptTrend = Math.max(...appointmentTrend.map((d) => d.count), 1)
-
   const statCards = [
     {
       label: "Today's Appointments",
@@ -186,7 +159,6 @@ export default function NurseDashboardPage() {
         ))}
       </div>
 
-      {/* Analytics */}
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-2">
           <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -196,76 +168,11 @@ export default function NurseDashboardPage() {
           <p className="text-xs text-muted-foreground">Real-time summary</p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          {/* Appointment trends */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Appointment Trends</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="flex h-40 items-center justify-center">
-                  <div className="h-6 w-40 animate-pulse bg-muted" />
-                </div>
-              ) : appointmentTrend.length === 0 ? (
-                <EmptyState title="No appointment data" description="Appointment trends will appear here." />
-              ) : (
-                <div className="space-y-2">
-                  {appointmentTrend.map((d) => (
-                    <div key={d.date} className="flex items-center gap-3">
-                      <span className="w-16 shrink-0 text-xs text-muted-foreground">{d.date}</span>
-                      <div className="h-6 flex-1 bg-muted">
-                        <div
-                          className="h-full bg-primary"
-                          style={{ width: `${Math.max((d.count / maxApptTrend) * 100, 4)}%` }}
-                        />
-                      </div>
-                      <span className="w-8 shrink-0 text-right text-xs font-medium">{d.count}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Consultation status distribution */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Consultation Status Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-5 animate-pulse bg-muted" />
-                  ))}
-                </div>
-              ) : consultationDistribution.length === 0 ? (
-                <EmptyState title="No consultation data" description="Consultation status will appear here." />
-              ) : (
-                <div className="space-y-3">
-                  {consultationDistribution.map(([status, count]) => {
-                    const total = consultations.length || 1
-                    const pct = Math.round((count / total) * 100)
-                    return (
-                      <div key={status} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <StatusBadge status={getStatusVariant(status)}>{status}</StatusBadge>
-                          <span className="text-muted-foreground">
-                            {count} · {pct}%
-                          </span>
-                        </div>
-                        <div className="h-1.5 w-full bg-muted">
-                          <div className="h-full bg-success" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <ClinicalDashboardCharts
+          appointments={appointments}
+          consultations={consultations}
+          loading={loading}
+        />
       </div>
 
       {/* Recent Activities */}

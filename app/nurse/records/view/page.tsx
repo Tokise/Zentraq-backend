@@ -1,8 +1,6 @@
-"use client";
+import { RecordsIndexWorkspace } from "@/components/medical/records-index-workspace"
 
-import { MedicalRecordsViewPage } from "@/app/admin/records/view/page";
-
-// Shows the unified medical-record workspace with nurse document-upload access.
-export default function NurseRecordsViewPage() {
-  return <MedicalRecordsViewPage />;
+// Renders the Nurse Student Records index with read-only annual exams.
+export default function NurseStudentRecordsPage() {
+  return <RecordsIndexWorkspace clinicRole="nurse" scope="student" />
 }

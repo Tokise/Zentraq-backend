@@ -10,6 +10,7 @@ import {
 } from "@/actions/admin/visits/overview";
 import {
   finalizeConsultationWorkflow,
+  getComplaintCatalog,
   getClinicalWorkflowRole,
 } from "@/actions/clinical/visits";
 import {
@@ -21,7 +22,6 @@ import {
   type ClinicalWorkflowRole,
   type ConsultationWizardStep,
 } from "@/components/clinical/consultation-wizard-shell";
-import { ConsultationDetailDialog } from "@/components/clinical/consultation-detail-dialog";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -34,7 +34,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -79,6 +85,14 @@ const emptyPrescription: PrescriptionDraft = {
   instructions: "",
 };
 
+const vitalsSkipReasons = [
+  "Document or certificate review only",
+  "Routine follow-up without reassessment",
+  "Recent vital signs are already documented",
+  "Patient declined vital signs",
+  "Immediate referral or transfer",
+] as const;
+
 // Runs the protected consultation workflow with one final database write.
 export function ConsultationWizard({
   consultationId,
@@ -88,16 +102,23 @@ export function ConsultationWizard({
 }: ConsultationWizardProps) {
   const [consultation, setConsultation] =
     useState<ConsultationDetailRow | null>(null);
-  const [role, setRole] = useState<"admin" | ClinicalWorkflowRole | null>(null);
+  const [role, setRole] = useState<ClinicalWorkflowRole | null>(null);
   const [step, setStep] = useState<ConsultationWizardStep>("details");
+  const [complaintOptions, setComplaintOptions] = useState<string[]>([]);
+  const [studentComplaint, setStudentComplaint] = useState("");
+  const [customComplaint, setCustomComplaint] = useState("");
   const [vitalsDisposition, setVitalsDisposition] = useState<
     "required" | "not_required" | ""
   >("");
-  const [skipReason, setSkipReason] = useState("");
+  const [skipReasonChoice, setSkipReasonChoice] = useState("");
+  const [customSkipReason, setCustomSkipReason] = useState("");
   const [vitals, setVitals] = useState<Vitals>(emptyVitals);
   const [notes, setNotes] = useState("");
   const [diagnosisCode, setDiagnosisCode] = useState("");
   const [diagnosisDescription, setDiagnosisDescription] = useState("");
+  const [treatmentPlan, setTreatmentPlan] = useState("");
+  const [treatmentInstructions, setTreatmentInstructions] = useState("");
+  const [treatmentFollowUpDays, setTreatmentFollowUpDays] = useState("");
   const [prescription, setPrescription] =
     useState<PrescriptionDraft>(emptyPrescription);
   const [prescriptions, setPrescriptions] = useState<PrescriptionDraft[]>([]);
@@ -111,9 +132,10 @@ export function ConsultationWizard({
   useEffect(() => {
     if (!open) return;
     async function loadWorkflow() {
-      const [detail, workflowRole] = await Promise.all([
+      const [detail, workflowRole, complaintCatalog] = await Promise.all([
         getConsultationDetailAction(consultationId),
         getClinicalWorkflowRole(),
+        getComplaintCatalog(),
       ]);
       if (detail.error || !detail.consultation || !workflowRole) {
         toast.error(detail.error ?? "Consultation unavailable");
@@ -122,13 +144,20 @@ export function ConsultationWizard({
       }
       setConsultation(detail.consultation);
       setRole(workflowRole);
+      setComplaintOptions(complaintCatalog.complaints);
+      setStudentComplaint(detail.consultation.chief_complaint ?? "");
+      setCustomComplaint("");
       setNotes(detail.consultation.consultation_notes ?? "");
       setStep("details");
       setVitalsDisposition("");
-      setSkipReason("");
+      setSkipReasonChoice("");
+      setCustomSkipReason("");
       setVitals(emptyVitals);
       setDiagnosisCode("");
       setDiagnosisDescription("");
+      setTreatmentPlan("");
+      setTreatmentInstructions("");
+      setTreatmentFollowUpDays("");
       setPrescription(emptyPrescription);
       setPrescriptions([]);
       setFollowUpDate("");
@@ -137,9 +166,9 @@ export function ConsultationWizard({
     void loadWorkflow();
   }, [consultationId, onOpenChange, open]);
 
-  // Loads the medicine list only for a doctor who can prescribe.
+  // Loads the medicine list only for a doctor or Admin who can prescribe.
   useEffect(() => {
-    if (!open || role !== "doctor") return;
+    if (!open || !role || role === "nurse") return;
     async function loadMedicines() {
       const result = await getMedicineCatalog();
       if (result.error) toast.error(result.error);
@@ -152,6 +181,75 @@ export function ConsultationWizard({
     () => Boolean(prescription.medicine_id && prescription.quantity),
     [prescription.medicine_id, prescription.quantity],
   );
+
+  const canMakeClinicalPlan = role === "admin" || role === "doctor";
+  const resolvedComplaint =
+    studentComplaint === "__other__"
+      ? customComplaint.trim()
+      : studentComplaint.trim();
+  const resolvedSkipReason =
+    skipReasonChoice === "__other__"
+      ? customSkipReason.trim()
+      : skipReasonChoice.trim();
+
+  // Requires a complaint selection before the clinician advances from Visit.
+  function validateVisit() {
+    if (!resolvedComplaint) {
+      toast.error("Choose or enter the student complaint.");
+      return false;
+    }
+    return true;
+  }
+
+  // Validates the vital-sign choice before allowing forward navigation.
+  function validateVitals() {
+    if (!vitalsDisposition) {
+      toast.error("Choose whether vital signs are required.");
+      return false;
+    }
+    if (vitalsDisposition === "not_required" && !resolvedSkipReason) {
+      toast.error("Choose a reason when vital signs are not needed.");
+      return false;
+    }
+    if (
+      vitalsDisposition === "required" &&
+      !Object.values(vitals).some((value) => value.trim())
+    ) {
+      toast.error("Record at least one vital sign.");
+      return false;
+    }
+    return true;
+  }
+
+  // Allows free backward navigation and validates every completed forward step.
+  function requestStep(nextStep: ConsultationWizardStep) {
+    if (!role) return;
+    const steps: ConsultationWizardStep[] =
+      role === "nurse"
+        ? ["details", "vitals", "notes", "review"]
+        : ["details", "vitals", "notes", "clinical_plan", "review"];
+    const currentIndex = steps.indexOf(step);
+    const nextIndex = steps.indexOf(nextStep);
+
+    if (nextIndex <= currentIndex) {
+      setStep(nextStep);
+      return;
+    }
+    if (nextIndex > steps.indexOf("details") && !validateVisit()) {
+      setStep("details");
+      return;
+    }
+    if (nextIndex > steps.indexOf("vitals") && !validateVitals()) {
+      setStep("vitals");
+      return;
+    }
+    if (nextIndex > steps.indexOf("notes") && !notes.trim()) {
+      toast.error("Enter the consultation outcome before continuing.");
+      setStep("notes");
+      return;
+    }
+    setStep(nextStep);
+  }
 
   // Queues a prescription locally so Review remains the only persistent action.
   function addPrescription() {
@@ -167,31 +265,27 @@ export function ConsultationWizard({
 
   // Validates the review payload and commits it atomically through the server action.
   async function submitReview() {
-    if (!consultation || !role || role === "admin") return;
-    if (!vitalsDisposition) {
-      toast.error("Choose whether vital signs are required.");
+    if (!consultation || !role) return;
+    if (!validateVisit()) {
+      setStep("details");
+      return;
+    }
+    if (!validateVitals()) {
       setStep("vitals");
       return;
     }
-    if (vitalsDisposition === "not_required" && !skipReason.trim()) {
-      toast.error("Provide a reason when vital signs are not needed.");
-      setStep("vitals");
-      return;
-    }
-    if (
-      vitalsDisposition === "required" &&
-      !Object.values(vitals).some((value) => value.trim())
-    ) {
-      toast.error("Record at least one vital sign.");
-      setStep("vitals");
+    if (!notes.trim()) {
+      toast.error("Enter the consultation outcome before submitting.");
+      setStep("notes");
       return;
     }
 
     setSubmitting(true);
     const result = await finalizeConsultationWorkflow({
       consultation_id: consultation.id,
+      student_complaint: resolvedComplaint,
       vitals_disposition: vitalsDisposition,
-      vitals_skip_reason: skipReason || undefined,
+      vitals_skip_reason: resolvedSkipReason || undefined,
       vitals: {
         ...(vitals.temperature
           ? { temperature: Number(vitals.temperature) }
@@ -207,16 +301,27 @@ export function ConsultationWizard({
           ? { oxygen_saturation: Number(vitals.oxygen_saturation) }
           : {}),
       },
-      outcome_note: notes || undefined,
+      outcome_note: notes.trim(),
       diagnosis:
-        role === "doctor" && diagnosisDescription.trim()
+        canMakeClinicalPlan && diagnosisDescription.trim()
           ? {
               icd10_code: diagnosisCode || undefined,
               description: diagnosisDescription.trim(),
             }
           : undefined,
+      treatment:
+        canMakeClinicalPlan &&
+        (treatmentPlan.trim() || treatmentInstructions.trim())
+          ? {
+              treatment_plan: treatmentPlan.trim() || undefined,
+              instructions: treatmentInstructions.trim() || undefined,
+              follow_up_days: treatmentFollowUpDays
+                ? Number(treatmentFollowUpDays)
+                : undefined,
+            }
+          : undefined,
       prescriptions:
-        role === "doctor"
+        canMakeClinicalPlan
           ? prescriptions.map((item) => ({
               medicine_id: item.medicine_id,
               dosage: item.dosage || undefined,
@@ -229,7 +334,7 @@ export function ConsultationWizard({
             }))
           : [],
       follow_up:
-        role === "doctor" && followUpDate
+        canMakeClinicalPlan && followUpDate
           ? {
               scheduled_date: followUpDate,
               reason: followUpReason || undefined,
@@ -250,16 +355,6 @@ export function ConsultationWizard({
     onCompleted();
   }
 
-  if (role === "admin") {
-    return (
-      <ConsultationDetailDialog
-        consultationId={consultationId}
-        onOpenChange={onOpenChange}
-        open={open}
-      />
-    );
-  }
-
   if (!consultation || !role) return null;
 
   return (
@@ -267,7 +362,7 @@ export function ConsultationWizard({
       <ConsultationWizardShell
         onOpenChange={onOpenChange}
         onRequestClose={() => setDiscardOpen(true)}
-        onStepChange={setStep}
+        onStepChange={requestStep}
         onSubmitReview={() => void submitReview()}
         open={open}
         patientName={consultation.patient_name ?? "Patient"}
@@ -277,6 +372,8 @@ export function ConsultationWizard({
       >
         <WorkflowStep
           consultation={consultation}
+          complaintOptions={complaintOptions}
+          customComplaint={customComplaint}
           diagnosisCode={diagnosisCode}
           diagnosisDescription={diagnosisDescription}
           followUpDate={followUpDate}
@@ -292,17 +389,29 @@ export function ConsultationWizard({
           pendingPrescription={prescription}
           prescriptions={prescriptions}
           role={role}
+          setCustomComplaint={setCustomComplaint}
           setDiagnosisCode={setDiagnosisCode}
           setDiagnosisDescription={setDiagnosisDescription}
+          setTreatmentFollowUpDays={setTreatmentFollowUpDays}
+          setTreatmentInstructions={setTreatmentInstructions}
+          setTreatmentPlan={setTreatmentPlan}
           setFollowUpDate={setFollowUpDate}
           setFollowUpReason={setFollowUpReason}
           setNotes={setNotes}
+          setStudentComplaint={setStudentComplaint}
           setPendingPrescription={setPrescription}
-          setSkipReason={setSkipReason}
+          customSkipReason={customSkipReason}
+          resolvedSkipReason={resolvedSkipReason}
+          setCustomSkipReason={setCustomSkipReason}
+          setSkipReasonChoice={setSkipReasonChoice}
           setVitals={setVitals}
           setVitalsDisposition={setVitalsDisposition}
-          skipReason={skipReason}
+          skipReasonChoice={skipReasonChoice}
+          studentComplaint={studentComplaint}
           step={step}
+          treatmentFollowUpDays={treatmentFollowUpDays}
+          treatmentInstructions={treatmentInstructions}
+          treatmentPlan={treatmentPlan}
           vitals={vitals}
           vitalsDisposition={vitalsDisposition}
         />
@@ -346,10 +455,18 @@ interface WorkflowStepProps {
   consultation: ConsultationDetailRow;
   step: ConsultationWizardStep;
   role: ClinicalWorkflowRole;
+  complaintOptions: string[];
+  studentComplaint: string;
+  setStudentComplaint: (value: string) => void;
+  customComplaint: string;
+  setCustomComplaint: (value: string) => void;
   vitalsDisposition: "required" | "not_required" | "";
   setVitalsDisposition: (value: "required" | "not_required") => void;
-  skipReason: string;
-  setSkipReason: (value: string) => void;
+  skipReasonChoice: string;
+  setSkipReasonChoice: (value: string) => void;
+  customSkipReason: string;
+  setCustomSkipReason: (value: string) => void;
+  resolvedSkipReason: string;
   vitals: Vitals;
   setVitals: (value: Vitals) => void;
   notes: string;
@@ -358,6 +475,12 @@ interface WorkflowStepProps {
   setDiagnosisCode: (value: string) => void;
   diagnosisDescription: string;
   setDiagnosisDescription: (value: string) => void;
+  treatmentPlan: string;
+  setTreatmentPlan: (value: string) => void;
+  treatmentInstructions: string;
+  setTreatmentInstructions: (value: string) => void;
+  treatmentFollowUpDays: string;
+  setTreatmentFollowUpDays: (value: string) => void;
   medicines: Medicine[];
   pendingPrescription: PrescriptionDraft;
   setPendingPrescription: (value: PrescriptionDraft) => void;
@@ -373,18 +496,72 @@ interface WorkflowStepProps {
 // Renders the current client-only workflow step before the final review.
 function WorkflowStep(props: WorkflowStepProps) {
   if (props.step === "details") {
+    const complaintLabel =
+      props.consultation.patient_type === "student"
+        ? "Student complaint"
+        : "Patient complaint";
+    const availableComplaints = Array.from(
+      new Set(
+        [
+          ...props.complaintOptions,
+          props.studentComplaint === "__other__"
+            ? ""
+            : props.studentComplaint,
+        ].filter(Boolean),
+      ),
+    );
+
     return (
-      <div className="space-y-4">
-        <h3 className="font-semibold">Visit details</h3>
-        <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
-          <p className="text-xs text-muted-foreground">Chief complaint</p>
-          <p className="mt-1 font-medium">
-            {props.consultation.chief_complaint || "No complaint recorded"}
+      <div className="space-y-5">
+        <div>
+          <h3 className="font-semibold">Visit details</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Select the concern that brought the patient to the clinic.
           </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Nothing in this wizard is saved until the final review.
-        </p>
+        <div className="space-y-2">
+          <Label htmlFor="student-complaint">{complaintLabel}</Label>
+          <Select
+            onValueChange={(value) => {
+              if (value) props.setStudentComplaint(value);
+            }}
+            value={props.studentComplaint}
+          >
+            <SelectTrigger className="w-full" id="student-complaint">
+              <SelectValue placeholder={`Select ${complaintLabel.toLowerCase()}`} />
+            </SelectTrigger>
+            <SelectContent>
+              {availableComplaints.map((complaint) => (
+                <SelectItem key={complaint} value={complaint}>
+                  {complaint}
+                </SelectItem>
+              ))}
+              <SelectItem value="__other__">Other complaint</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {props.studentComplaint === "__other__" && (
+          <div className="space-y-2">
+            <Label htmlFor="custom-student-complaint">
+              Enter {complaintLabel.toLowerCase()}
+            </Label>
+            <Textarea
+              id="custom-student-complaint"
+              maxLength={1000}
+              onChange={(event) =>
+                props.setCustomComplaint(event.target.value)
+              }
+              placeholder="Describe the patient concern"
+              rows={4}
+              value={props.customComplaint}
+            />
+          </div>
+        )}
+        <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
+          <p className="text-muted-foreground">
+            Nothing in this wizard is saved until the final review.
+          </p>
+        </div>
       </div>
     );
   }
@@ -425,14 +602,42 @@ function WorkflowStep(props: WorkflowStepProps) {
           </label>
         </RadioGroup>
         {props.vitalsDisposition === "not_required" && (
-          <div className="space-y-2">
-            <Label htmlFor="vitals-reason">Reason</Label>
-            <Textarea
-              id="vitals-reason"
-              onChange={(event) => props.setSkipReason(event.target.value)}
-              placeholder="Reason vital signs are not needed"
-              value={props.skipReason}
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="vitals-reason">Reason</Label>
+              <Select
+                onValueChange={(value) => {
+                  if (value) props.setSkipReasonChoice(value);
+                }}
+                value={props.skipReasonChoice}
+              >
+                <SelectTrigger className="w-full" id="vitals-reason">
+                  <SelectValue placeholder="Select why vital signs are not needed" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vitalsSkipReasons.map((reason) => (
+                    <SelectItem key={reason} value={reason}>
+                      {reason}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__other__">Other reason</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {props.skipReasonChoice === "__other__" && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-vitals-reason">Other reason</Label>
+                <Textarea
+                  id="custom-vitals-reason"
+                  maxLength={500}
+                  onChange={(event) =>
+                    props.setCustomSkipReason(event.target.value)
+                  }
+                  placeholder="Enter why vital signs are not needed"
+                  value={props.customSkipReason}
+                />
+              </div>
+            )}
           </div>
         )}
         {props.vitalsDisposition === "required" && (
@@ -463,9 +668,13 @@ function WorkflowStep(props: WorkflowStepProps) {
   return <ReviewStep {...props} />;
 }
 
-// Renders the doctor-only diagnosis, prescription, and follow-up fields.
+// Renders the Doctor and Admin diagnosis, treatment, prescription, and follow-up fields.
 function ClinicalPlan(props: WorkflowStepProps) {
-  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const [tomorrow] = useState(() => {
+    const nextDay = new Date();
+    nextDay.setDate(nextDay.getDate() + 1);
+    return nextDay.toISOString().slice(0, 10);
+  });
   return (
     <div className="space-y-6">
       <div>
@@ -501,27 +710,65 @@ function ClinicalPlan(props: WorkflowStepProps) {
       </section>
       <Separator />
       <section className="space-y-3">
+        <h4 className="font-medium">Treatment</h4>
+        <div className="space-y-2">
+          <Label htmlFor="treatment-plan">Treatment plan</Label>
+          <Textarea
+            id="treatment-plan"
+            onChange={(event) => props.setTreatmentPlan(event.target.value)}
+            placeholder="Care plan and treatment decisions"
+            value={props.treatmentPlan}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+          <div className="space-y-2">
+            <Label htmlFor="treatment-instructions">
+              Patient instructions
+            </Label>
+            <Textarea
+              id="treatment-instructions"
+              onChange={(event) =>
+                props.setTreatmentInstructions(event.target.value)
+              }
+              placeholder="Home care and safety instructions"
+              value={props.treatmentInstructions}
+            />
+          </div>
+          <VitalInput
+            label="Follow-up days"
+            min={1}
+            onChange={props.setTreatmentFollowUpDays}
+            type="number"
+            value={props.treatmentFollowUpDays}
+          />
+        </div>
+      </section>
+      <Separator />
+      <section className="space-y-3">
         <h4 className="font-medium">Prescription</h4>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="medicine">Medicine</Label>
             <Select
-              id="medicine"
-              onChange={(event) =>
+              onValueChange={(medicineId) =>
                 props.setPendingPrescription({
                   ...props.pendingPrescription,
-                  medicine_id: event.target.value,
+                  medicine_id: medicineId ?? "",
                 })
               }
-              value={props.pendingPrescription.medicine_id}
+              value={props.pendingPrescription.medicine_id || null}
             >
-              <option value="">Choose medicine</option>
-              {props.medicines.map((medicine) => (
-                <option key={medicine.id} value={medicine.id}>
-                  {medicine.generic_name}
-                  {medicine.brand_name ? ` (${medicine.brand_name})` : ""}
-                </option>
-              ))}
+              <SelectTrigger className="w-full" id="medicine">
+                <SelectValue placeholder="Choose medicine" />
+              </SelectTrigger>
+              <SelectContent>
+                {props.medicines.map((medicine) => (
+                  <SelectItem key={medicine.id} value={medicine.id}>
+                    {medicine.generic_name}
+                    {medicine.brand_name ? ` (${medicine.brand_name})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
           <VitalInput
@@ -626,20 +873,33 @@ function ReviewStep(props: WorkflowStepProps) {
         <h3 className="font-semibold">Review consultation</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           Confirm these details before{" "}
-          {props.role === "doctor"
-            ? "completing the consultation"
-            : "submitting them to a doctor"}
+          {props.role === "nurse"
+            ? "submitting them to a doctor"
+            : "completing the consultation"}
           .
         </p>
       </div>
       <div className="space-y-4 rounded-lg border border-border p-4 text-sm">
+        <div>
+          <p className="text-xs text-muted-foreground">
+            {props.consultation.patient_type === "student"
+              ? "Student complaint"
+              : "Patient complaint"}
+          </p>
+          <p className="mt-1 font-medium">
+            {props.studentComplaint === "__other__"
+              ? props.customComplaint || "No complaint entered"
+              : props.studentComplaint || "No complaint selected"}
+          </p>
+        </div>
+        <Separator />
         <div>
           <p className="text-xs text-muted-foreground">Vitals</p>
           <p className="mt-1 font-medium">
             {props.vitalsDisposition === "required"
               ? "Will be recorded"
               : props.vitalsDisposition === "not_required"
-                ? `Not needed — ${props.skipReason || "Reason required"}`
+                ? `Not needed — ${props.resolvedSkipReason || "Reason required"}`
                 : "Not selected"}
           </p>
         </div>
@@ -650,11 +910,16 @@ function ReviewStep(props: WorkflowStepProps) {
             {props.notes || "No outcome note"}
           </p>
         </div>
-        {props.role === "doctor" && (
+        {props.role !== "nurse" && (
           <>
             <Separator />
             <div>
               <p className="text-xs text-muted-foreground">Clinical plan</p>
+              <p className="mt-1">
+                {props.treatmentPlan || props.treatmentInstructions
+                  ? "Treatment recorded"
+                  : "No treatment recorded"}
+              </p>
               <p className="mt-1">
                 {props.diagnosisDescription || "No diagnosis"} ·{" "}
                 {props.prescriptions.length} prescription(s)

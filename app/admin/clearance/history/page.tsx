@@ -5,10 +5,12 @@ import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { DataTablePagination, useTablePagination } from "@/components/ui/pagination"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Loader2, Search, History } from "lucide-react"
+import { Search, History } from "lucide-react"
 import { toast } from "sonner"
 import { getClearanceHistoryAction } from "@/actions/admin/clearances/overview"
 
@@ -17,6 +19,7 @@ export default function AdminClearanceHistoryPage() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
+  const pagination = useTablePagination(clearances)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -68,7 +71,10 @@ export default function AdminClearanceHistoryPage() {
           {["all", "pending", "evaluating", "approved", "rejected"].map((status) => (
             <button
               key={status}
-              onClick={() => setStatusFilter(status)}
+                  onClick={() => {
+                    setStatusFilter(status)
+                    pagination.setCurrentPage(1)
+                  }}
               className={`px-3 py-2 text-sm font-medium cursor-pointer transition-colors capitalize ${
                 statusFilter === status
                   ? "bg-zinc-900 text-white"
@@ -84,7 +90,10 @@ export default function AdminClearanceHistoryPage() {
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                pagination.setCurrentPage(1)
+              }}
             onKeyDown={(e) => e.key === "Enter" && fetchData()}
             placeholder="Search by purpose..."
             className="h-9 pl-8 text-sm"
@@ -95,8 +104,10 @@ export default function AdminClearanceHistoryPage() {
       <Card className="shadow-sm">
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 5 }, (_, index) => (
+                <Skeleton className="h-10 w-full" key={index} />
+              ))}
             </div>
           ) : clearances.length === 0 ? (
             <div className="py-16 text-center">
@@ -117,7 +128,7 @@ export default function AdminClearanceHistoryPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {clearances.map((c: any) => (
+                  {pagination.paginatedItems.map((c: any) => (
                     <TableRow key={c.id} className="hover:bg-zinc-50/50">
                       <TableCell className="font-medium">{c.requester_name || "—"}</TableCell>
                       <TableCell className="text-sm text-zinc-600 capitalize">{c.requester_type}</TableCell>
@@ -137,6 +148,13 @@ export default function AdminClearanceHistoryPage() {
           )}
         </CardContent>
       </Card>
+      <DataTablePagination
+        currentPage={pagination.currentPage}
+        onPageChange={pagination.setCurrentPage}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        totalPages={pagination.totalPages}
+      />
     </div>
   )
 }

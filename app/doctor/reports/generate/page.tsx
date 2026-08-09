@@ -1,15 +1,6 @@
-import { PageHeader } from "@/components/common/page-header"
-import { Card, CardContent } from "@/components/ui/card"
+import { ClinicalReportsWorkspace } from "@/components/analytics/clinical-reports-workspace"
 
-export default function GeneratePage() {
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Generate" description="Manage Generate" />
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-sm text-muted-foreground">This page is under construction.</p>
-        </CardContent>
-      </Card>
-    </div>
-  )
+// Shows read-only aggregate clinic analytics to Doctor.
+export default function DoctorReportsGeneratePage() {
+  return <ClinicalReportsWorkspace role="doctor" />
 }

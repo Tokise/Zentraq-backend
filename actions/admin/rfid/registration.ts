@@ -5,12 +5,19 @@ import { revalidatePath } from "next/cache"
 import { createClient } from "@/utils/supabase/server"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { getUserRole } from "@/lib/auth/get-user-role"
+import type { UserRole } from "@/lib/auth/roles"
 import { logAuditEvent } from "@/lib/audit-logger"
 
 const MIN_PASSWORD_LENGTH = 12
 const STUDENT_ID_PREFIX = "23011"
 const MAX_PROFILE_PHOTO_BYTES = 150 * 1024
 const PROFILE_PHOTO_DATA_URL = /^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/
+const CLINIC_DEPARTMENT = "Clinic"
+const CLINIC_LOGIN_ROLE_BY_POSITION: Record<string, UserRole> = {
+  admin: "admin",
+  doctor: "doctor",
+  nurse: "nurse",
+}
 type ProfileRole = "student" | "faculty" | "staff"
 type Profile = {
   id: string; role: ProfileRole; user_id: string | null; rfid_uid: string; first_name: string; last_name: string; email: string | null;
@@ -18,11 +25,81 @@ type Profile = {
   employee_number: string | null; clinic_photo_url: string | null; active_status: boolean
 }
 
+// Validates department and position without trusting the registration controls.
+function parseEmploymentDetails(
+  role: ProfileRole,
+  formData: FormData,
+): {
+  department: string | null
+  error: string | null
+  position: string | null
+} {
+  const department = String(formData.get("department") ?? "").trim()
+  const position = String(formData.get("position") ?? "").trim()
+
+  if (role === "student") {
+    return {
+      department: department || null,
+      error: null,
+      position: null,
+    }
+  }
+
+  if (!position) {
+    return {
+      department: department || null,
+      error: "Position is required for faculty and staff profiles",
+      position: null,
+    }
+  }
+
+  if (role !== "staff" || department.toLowerCase() !== "clinic") {
+    return {
+      department: department || null,
+      error: null,
+      position,
+    }
+  }
+
+  const loginRole = CLINIC_LOGIN_ROLE_BY_POSITION[position.toLowerCase()]
+  if (!loginRole) {
+    return {
+      department: CLINIC_DEPARTMENT,
+      error: "Clinic staff position must be Doctor, Nurse, or Admin",
+      position: null,
+    }
+  }
+
+  return {
+    department: CLINIC_DEPARTMENT,
+    error: null,
+    position: loginRole[0].toUpperCase() + loginRole.slice(1),
+  }
+}
+
+// Separates a Staff patient's profile role from the role used for login routing.
+function getLoginRoleForProfile(profile: Profile): UserRole | null {
+  if (profile.role !== "staff") return profile.role
+  if (profile.department?.trim().toLowerCase() !== "clinic") return "staff"
+  return CLINIC_LOGIN_ROLE_BY_POSITION[profile.position?.trim().toLowerCase() ?? ""] ?? null
+}
+
 async function requireAdmin() {
   const cookieStore = await cookies(); const supabase = createClient(cookieStore)
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error || !user || await getUserRole(user.id) !== "admin") return null
   return user
+}
+
+// Removes every partially-created portal identity row after an account failure.
+async function rollbackPortalAccount(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+) {
+  await admin.from("clinic_accounts").delete().eq("user_id", userId)
+  await admin.from("user_roles").delete().eq("user_id", userId)
+  await admin.from("users").delete().eq("id", userId)
+  await admin.auth.admin.deleteUser(userId)
 }
 
 // Validates a compact raster-image data URL before it reaches the database.
@@ -86,18 +163,20 @@ export async function registerStudentProfile(formData: FormData) {
   const rfidUid = String(formData.get("rfidUid") ?? "").trim(); const firstName = String(formData.get("firstName") ?? "").trim(); const lastName = String(formData.get("lastName") ?? "").trim()
   const identifier = String(formData.get(role === "student" ? "studentNumber" : "employeeNumber") ?? "").trim()
   if (!rfidUid || !firstName || !lastName || !identifier) return { error: "RFID UID, name, and ID number are required" }
+  const employment = parseEmploymentDetails(role, formData)
+  if (employment.error) return { error: employment.error }
   const admin = createAdminClient()
   const [{ data: studentRfid }, { data: facultyRfid }, { data: staffRfid }] = await Promise.all([admin.from("students").select("id").eq("rfid_uid", rfidUid).maybeSingle(), admin.from("faculty").select("id").eq("rfid_uid", rfidUid).maybeSingle(), admin.from("staff").select("id").eq("rfid_uid", rfidUid).maybeSingle()])
   if (studentRfid || facultyRfid || staffRfid) return { error: "RFID card is already registered" }
   const email = String(formData.get("email") ?? "").trim().toLowerCase() || null
-  const shared = { rfid_uid: rfidUid, first_name: firstName, last_name: lastName, email, department: String(formData.get("department") ?? "").trim() || null, status: "active" }
+  const shared = { rfid_uid: rfidUid, first_name: firstName, last_name: lastName, email, department: employment.department, status: "active" }
   const photo = parseProfilePhoto(formData.get("clinicPhotoUrl"))
   if (photo.error) return { error: photo.error }
   const result = role === "student"
     ? await admin.from("students").insert({ ...shared, student_number: identifier, course: String(formData.get("course") ?? "").trim() || null, year_level: Number(formData.get("yearLevel")) || null, profile_photo_url: photo.photoUrl }).select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").single()
     : role === "faculty"
-      ? await admin.from("faculty").insert({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null, profile_photo_url: photo.photoUrl }).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
-      : await admin.from("staff").insert({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null, profile_photo_url: photo.photoUrl }).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
+      ? await admin.from("faculty").insert({ ...shared, employee_number: identifier, position: employment.position, profile_photo_url: photo.photoUrl }).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
+      : await admin.from("staff").insert({ ...shared, employee_number: identifier, position: employment.position, profile_photo_url: photo.photoUrl }).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
   if (result.error || !result.data) return { error: result.error?.message ?? "Unable to register profile" }
   await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: result.data.id, details: { role } })
   revalidatePath("/admin/rfid-registration")
@@ -111,15 +190,17 @@ export async function updateStudentProfile(formData: FormData) {
   const role: ProfileRole = requestedRole === "faculty" || requestedRole === "staff" ? requestedRole : "student"
   const firstName = String(formData.get("firstName") ?? "").trim(); const lastName = String(formData.get("lastName") ?? "").trim(); const identifier = String(formData.get(role === "student" ? "studentNumber" : "employeeNumber") ?? "").trim()
   if (!id || !firstName || !lastName || !identifier) return { error: "Name and ID number are required" }
-  const admin = createAdminClient(); const shared = { first_name: firstName, last_name: lastName, email: String(formData.get("email") ?? "").trim().toLowerCase() || null, department: String(formData.get("department") ?? "").trim() || null }
+  const employment = parseEmploymentDetails(role, formData)
+  if (employment.error) return { error: employment.error }
+  const admin = createAdminClient(); const shared = { first_name: firstName, last_name: lastName, email: String(formData.get("email") ?? "").trim().toLowerCase() || null, department: employment.department }
   const photo = parseProfilePhoto(formData.get("clinicPhotoUrl"))
   if (photo.error) return { error: photo.error }
   const photoUpdate = photo.photoUrl ? { profile_photo_url: photo.photoUrl } : {}
   const result = role === "student"
     ? await admin.from("students").update({ ...shared, student_number: identifier, course: String(formData.get("course") ?? "").trim() || null, year_level: Number(formData.get("yearLevel")) || null, ...photoUpdate }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, course, year_level, student_number, profile_photo_url, status").single()
     : role === "faculty"
-      ? await admin.from("faculty").update({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null, ...photoUpdate }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
-      : await admin.from("staff").update({ ...shared, employee_number: identifier, position: String(formData.get("position") ?? "").trim() || null, ...photoUpdate }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
+      ? await admin.from("faculty").update({ ...shared, employee_number: identifier, position: employment.position, ...photoUpdate }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
+      : await admin.from("staff").update({ ...shared, employee_number: identifier, position: employment.position, ...photoUpdate }).eq("id", id).select("id, user_id, rfid_uid, first_name, last_name, email, department, position, employee_number, profile_photo_url, status").single()
   if (result.error || !result.data) return { error: result.error?.message ?? "Unable to update profile" }
   await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: id, details: { action: "PROFILE_UPDATED", role } })
   return { success: true, data: normalizeProfile(result.data, role) }
@@ -148,19 +229,117 @@ export async function generateStudentId() {
 }
 
 export async function createStudentAccount(formData: FormData) {
-  const actor = await requireAdmin(); if (!actor) return { error: "Unauthorized" }
-  const email = String(formData.get("email") ?? "").trim().toLowerCase(); const password = String(formData.get("password") ?? ""); const profileId = String(formData.get("studentAccountId") ?? "").trim()
-  if (!email || !profileId || password.length < MIN_PASSWORD_LENGTH) return { error: "Valid email, profile, and a 12-character password are required" }
-  const admin = createAdminClient(); const profile = await findProfile(admin, profileId)
-  if (!profile) return { error: "Patient profile not found" }; if (profile.user_id) return { error: "This profile already has a portal account" }
-  const { data: created, error: authError } = await admin.auth.admin.createUser({ email, password, email_confirm: true }); if (authError || !created.user) return { error: authError?.message ?? "Unable to create login" }
-  const { data: roleRow } = await admin.from("roles").select("id").eq("name", profile.role).maybeSingle()
-  if (!roleRow) { await admin.auth.admin.deleteUser(created.user.id); return { error: `The ${profile.role} role has not been seeded` } }
-  const { error: userError } = await admin.from("users").insert({ id: created.user.id, email })
-  if (!userError) await admin.from("user_roles").insert({ user_id: created.user.id, role_id: roleRow.id })
-  const table = profile.role === "student" ? "students" : profile.role === "faculty" ? "faculty" : "staff"; const { error: linkError } = await admin.from(table).update({ user_id: created.user.id, email }).eq("id", profile.id)
-  if (userError || linkError) { await admin.auth.admin.deleteUser(created.user.id); return { error: userError?.message ?? linkError?.message ?? "Unable to link account" } }
-  await logAuditEvent({ action: "STUDENT_ACCOUNT_CREATED", userId: actor.id, email: actor.email, resource: created.user.id, details: { profile_id: profile.id, role: profile.role } })
+  const actor = await requireAdmin()
+  if (!actor) return { error: "Unauthorized" }
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase()
+  const password = String(formData.get("password") ?? "")
+  const profileId = String(
+    formData.get("studentAccountId") ?? "",
+  ).trim()
+  if (!email || !profileId || password.length < MIN_PASSWORD_LENGTH) {
+    return {
+      error: "Valid email, profile, and a 12-character password are required",
+    }
+  }
+
+  const admin = createAdminClient()
+  const profile = await findProfile(admin, profileId)
+  if (!profile) return { error: "Patient profile not found" }
+  if (profile.user_id) {
+    return { error: "This profile already has a portal account" }
+  }
+
+  const loginRole = getLoginRoleForProfile(profile)
+  if (!loginRole) {
+    return { error: "Clinic staff position must be Doctor, Nurse, or Admin" }
+  }
+
+  const { data: created, error: authError } =
+    await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    })
+  if (authError || !created.user) {
+    return { error: authError?.message ?? "Unable to create login" }
+  }
+
+  const { data: roleRow, error: roleLookupError } = await admin
+    .from("roles")
+    .select("id")
+    .eq("name", loginRole)
+    .maybeSingle()
+  if (roleLookupError || !roleRow) {
+    await rollbackPortalAccount(admin, created.user.id)
+    return {
+      error:
+        roleLookupError?.message ??
+        `The ${loginRole} role has not been seeded`,
+    }
+  }
+
+  const { error: userError } = await admin.from("users").insert({
+    id: created.user.id,
+    email,
+  })
+  if (userError) {
+    await rollbackPortalAccount(admin, created.user.id)
+    return { error: userError.message }
+  }
+
+  const { error: assignmentError } = await admin
+    .from("user_roles")
+    .insert({
+      user_id: created.user.id,
+      role_id: roleRow.id,
+    })
+  if (assignmentError) {
+    await rollbackPortalAccount(admin, created.user.id)
+    return { error: assignmentError.message }
+  }
+
+  if (["admin", "doctor", "nurse"].includes(loginRole)) {
+    const { error: clinicAccountError } = await admin
+      .from("clinic_accounts")
+      .insert({
+        user_id: created.user.id,
+        role: loginRole,
+        display_name: `${profile.first_name} ${profile.last_name}`.trim(),
+        is_active: true,
+      })
+    if (clinicAccountError) {
+      await rollbackPortalAccount(admin, created.user.id)
+      return { error: clinicAccountError.message }
+    }
+  }
+
+  const table =
+    profile.role === "student"
+      ? "students"
+      : profile.role === "faculty"
+        ? "faculty"
+        : "staff"
+  const { error: linkError } = await admin
+    .from(table)
+    .update({ user_id: created.user.id, email })
+    .eq("id", profile.id)
+  if (linkError) {
+    await rollbackPortalAccount(admin, created.user.id)
+    return { error: linkError.message }
+  }
+
+  await logAuditEvent({
+    action: "STUDENT_ACCOUNT_CREATED",
+    userId: actor.id,
+    email: actor.email,
+    resource: created.user.id,
+    details: {
+      profile_id: profile.id,
+      patient_role: profile.role,
+      login_role: loginRole,
+    },
+  })
   return { success: true, userId: created.user.id, email, password }
 }
 

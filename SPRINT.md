@@ -58,7 +58,7 @@ gantt
 - [ ] Build `/admin/faculty-accounts` page — data table with search, department filter, status filter, pagination
 - [ ] Build `/admin/faculty-accounts/create` page — multi-field creation form with server action
 - [ ] Build faculty account edit dialog
-- [ ] Build `/admin/useraccess/activity_logs` page — filterable, sortable data table with date range picker
+- [x] Use `/admin/reports/audit_trail` as the single filterable audit interface
 - [ ] Create `logAuditEvent()` server utility function
 - [ ] Integrate audit logging into existing server actions (login, account CRUD, RFID registration)
 - [ ] Add audit log export endpoint (CSV)
@@ -67,7 +67,7 @@ gantt
 
 - [ ] Faculty accounts can be listed, created, edited, and deactivated
 - [ ] Audit logs capture all critical system actions
-- [ ] Audit logs page displays entries with proper filtering
+- [x] Audit Trail displays entries with proper filtering
 - [ ] All new pages follow existing design system (monochromatic, Shadcn UI)
 - [ ] RLS policies protect audit data
 

@@ -78,7 +78,6 @@ export const adminNavigation: NavGroup[] = [
       },
     ],
   },
-
   {
     label: "Consultations",
     items: [
@@ -87,6 +86,27 @@ export const adminNavigation: NavGroup[] = [
       {
         title: "Follow-ups",
         href: "/admin/visits/followup",
+        icon: ClipboardCheck,
+      },
+    ],
+  },
+    {
+    label: "Reports",
+    items: [
+      {
+        title: "Reports & Analytics",
+        href: "/admin/reports/generate",
+        icon: BarChart3,
+      },
+      { title: "Export Data", href: "/admin/reports/export", icon: FileText },
+      {
+        title: "Report Templates",
+        href: "/admin/reports/templates",
+        icon: FileCheck,
+      },
+      {
+        title: "Compliance Checklist",
+        href: "/admin/reports/checklist",
         icon: ClipboardCheck,
       },
     ],
@@ -249,32 +269,7 @@ export const adminNavigation: NavGroup[] = [
       },
     ],
   },
-  {
-    label: "Reports",
-    items: [
-      {
-        title: "Reports & Analytics",
-        href: "/admin/reports/generate",
-        icon: BarChart3,
-      },
-      { title: "Export Data", href: "/admin/reports/export", icon: FileText },
-      {
-        title: "Report Templates",
-        href: "/admin/reports/templates",
-        icon: FileCheck,
-      },
-      {
-        title: "Compliance Checklist",
-        href: "/admin/reports/checklist",
-        icon: ClipboardCheck,
-      },
-      {
-        title: "Audit Trail",
-        href: "/admin/reports/audit_trail",
-        icon: ShieldAlert,
-      },
-    ],
-  },
+
   {
     label: "Access Control",
     items: [
@@ -295,8 +290,8 @@ export const adminNavigation: NavGroup[] = [
         icon: UserCog,
       },
       {
-        title: "Activity Logs",
-        href: "/admin/useraccess/activity_logs",
+        title: "Audit Trail",
+        href: "/admin/reports/audit_trail",
         icon: ShieldAlert,
       },
     ],
@@ -307,7 +302,14 @@ export const doctorNavigation: NavGroup[] = [
   dashboard("doctor"),
   {
     label: "System",
-    items: [{ title: "RFID Kiosk", href: "/doctor/rfid-kiosk", icon: Scan }],
+    items: [
+      {
+        title: "Announcements",
+        href: "/doctor/announcements",
+        icon: Megaphone,
+      },
+      { title: "RFID Kiosk", href: "/doctor/rfid-kiosk", icon: Scan },
+    ],
   },
   {
     label: "Medical Records",
@@ -317,13 +319,8 @@ export const doctorNavigation: NavGroup[] = [
         href: "/doctor/records/view",
         icon: HeartPulse,
       },
-    ],
-  },
-  {
-    label: "Staff Health",
-    items: [
       {
-        title: "Faculty & Staff Records",
+        title: "Employee Records",
         href: "/doctor/staffhealth/record",
         icon: HeartPulse,
       },
@@ -367,42 +364,12 @@ export const doctorNavigation: NavGroup[] = [
     ],
   },
   {
-    label: "Medicine",
-    items: [
-      {
-        title: "Inventory Status",
-        href: "/doctor/medicine/stock",
-        icon: Package,
-      },
-      {
-        title: "Dispense Medicine",
-        href: "/doctor/medicine/dispense",
-        icon: Pill,
-      },
-      {
-        title: "Dispense Log",
-        href: "/doctor/medicine/dispense_log",
-        icon: History,
-      },
-    ],
-  },
-  {
     label: "Health Programs",
     items: [
       {
         title: "Health Programs",
         href: "/doctor/healthprograms/list",
         icon: HeartPulse,
-      },
-      {
-        title: "Participants",
-        href: "/doctor/healthprograms/participants",
-        icon: Users,
-      },
-      {
-        title: "Program Reports",
-        href: "/doctor/healthprograms/reports",
-        icon: BarChart3,
       },
     ],
   },
@@ -415,7 +382,7 @@ export const doctorNavigation: NavGroup[] = [
         icon: History,
       },
       {
-        title: "Issue Clearance",
+        title: "Evaluate Clearances",
         href: "/doctor/clearance/issue",
         icon: FileCheck,
       },
@@ -425,40 +392,9 @@ export const doctorNavigation: NavGroup[] = [
     label: "Reports",
     items: [
       {
-        title: "Reports & Analytics",
+        title: "Clinic Analytics",
         href: "/doctor/reports/generate",
         icon: BarChart3,
-      },
-      { title: "Export Data", href: "/doctor/reports/export", icon: FileText },
-    ],
-  },
-  {
-    label: "Incidents",
-    items: [
-      {
-        title: "Incident Log",
-        href: "/doctor/incidents/log",
-        icon: AlertTriangle,
-      },
-      {
-        title: "Case Status",
-        href: "/doctor/incidents/status",
-        icon: ClipboardCheck,
-      },
-      {
-        title: "Referrals",
-        href: "/doctor/incidents/referral",
-        icon: FileText,
-      },
-      {
-        title: "Emergency Contacts",
-        href: "/doctor/incidents/emergency_contacts",
-        icon: Users,
-      },
-      {
-        title: "Report Incident",
-        href: "/doctor/incidents",
-        icon: AlertTriangle,
       },
     ],
   },
@@ -468,7 +404,14 @@ export const nurseNavigation: NavGroup[] = [
   dashboard("nurse"),
   {
     label: "System",
-    items: [{ title: "RFID Kiosk", href: "/nurse/rfid-kiosk", icon: Scan }],
+    items: [
+      {
+        title: "Announcements",
+        href: "/nurse/announcements",
+        icon: Megaphone,
+      },
+      { title: "RFID Kiosk", href: "/nurse/rfid-kiosk", icon: Scan },
+    ],
   },
   {
     label: "Medical Records",
@@ -478,13 +421,8 @@ export const nurseNavigation: NavGroup[] = [
         href: "/nurse/records/view",
         icon: HeartPulse,
       },
-    ],
-  },
-  {
-    label: "Staff Health",
-    items: [
       {
-        title: "Faculty & Staff Records",
+        title: "Employee Records",
         href: "/nurse/staffhealth/record",
         icon: HeartPulse,
       },
@@ -541,18 +479,13 @@ export const nurseNavigation: NavGroup[] = [
         href: "/nurse/healthprograms/list",
         icon: HeartPulse,
       },
-      {
-        title: "Participants",
-        href: "/nurse/healthprograms/participants",
-        icon: Users,
-      },
     ],
   },
   {
     label: "Reports",
     items: [
       {
-        title: "View Reports",
+        title: "Clinic Analytics",
         href: "/nurse/reports/view_only",
         icon: BarChart3,
       },
@@ -794,16 +727,46 @@ export const staffNavigation: NavGroup[] = [
   },
 ];
 
+// Builds the private patient navigation for a clinic login linked to Staff.
+function clinicianMyHealthNavigation(
+  role: "admin" | "doctor" | "nurse",
+): NavGroup {
+  return {
+    label: "My Health",
+    items: [
+      {
+        title: "My Health Records",
+        href: `/${role}/my-health`,
+        icon: HeartPulse,
+      },
+      {
+        title: "My Consultations",
+        href: `/${role}/my-health/consultations`,
+        icon: Stethoscope,
+      },
+    ],
+  };
+}
+
 // Returns the navigation that is permitted for the active portal role.
-export function getNavigationForRole(role: string | null | undefined) {
+export function getNavigationForRole(
+  role: string | null | undefined,
+  hasPatientProfile = false,
+) {
   if (role === "admin") {
-    return adminNavigation;
+    return hasPatientProfile
+      ? [...adminNavigation, clinicianMyHealthNavigation("admin")]
+      : adminNavigation;
   }
   if (role === "doctor") {
-    return doctorNavigation;
+    return hasPatientProfile
+      ? [...doctorNavigation, clinicianMyHealthNavigation("doctor")]
+      : doctorNavigation;
   }
   if (role === "nurse") {
-    return nurseNavigation;
+    return hasPatientProfile
+      ? [...nurseNavigation, clinicianMyHealthNavigation("nurse")]
+      : nurseNavigation;
   }
   if (role === "faculty") {
     return facultyNavigation;
@@ -820,6 +783,9 @@ export const navigation = [
   ...studentNavigation,
   ...facultyNavigation,
   ...staffNavigation,
+  clinicianMyHealthNavigation("admin"),
+  clinicianMyHealthNavigation("doctor"),
+  clinicianMyHealthNavigation("nurse"),
 ];
 export const allNavItems = navigation.flatMap((group) => group.items);
 // Resolves a human-readable page title from a static route.

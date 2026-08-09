@@ -13,6 +13,7 @@ type AppSidebarProps = {
   onNavigate?: () => void;
   collapsed?: boolean;
   userRole?: UserRole;
+  hasPatientProfile?: boolean;
 };
 
 // Renders role-scoped clinic navigation with expandable workflow modules.
@@ -20,13 +21,14 @@ export function AppSidebar({
   onNavigate,
   collapsed = false,
   userRole = "nurse",
+  hasPatientProfile = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
-  const navGroups = getNavigationForRole(userRole);
+  const navGroups = getNavigationForRole(userRole, hasPatientProfile);
   const visibleNavigation = filterNavigationForRole(navGroups, userRole);
 
   return (

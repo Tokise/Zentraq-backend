@@ -3,6 +3,10 @@
 import { getActionActor, hasAnyRole } from "@/lib/security/action-guard"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { logAuditEvent } from "@/lib/audit-logger"
+import { assertSameOrigin } from "@/lib/security/action-guard"
+import { cookies } from "next/headers"
+import { z } from "zod"
+import { createClient } from "@/utils/supabase/server"
 
 type StaffRole = "admin" | "doctor" | "nurse"
 
@@ -22,6 +26,72 @@ export interface HealthProgram {
   managed_by: string | null
   created_at: string
   updated_at: string
+  workflow_status: "pending" | "active" | "rejected"
+  target_audience: Array<"student" | "faculty" | "staff">
+}
+
+const proposalSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(4_000).optional(),
+  program_type: z.enum(["immunization", "screening", "wellness"]),
+  start_date: z.iso.date().optional(),
+  end_date: z.iso.date().optional(),
+  target_audience: z
+    .array(z.enum(["student", "faculty", "staff"]))
+    .min(1)
+    .max(3),
+})
+
+// Creates a pending targeted program proposal for Admin review.
+export async function proposeHealthProgram(input: unknown) {
+  const actor = await staff(["doctor", "nurse"])
+  const parsed = proposalSchema.safeParse(input)
+  if (!actor || !parsed.success || !(await assertSameOrigin())) {
+    return { error: parsed.success ? "Access denied" : "Invalid proposal" }
+  }
+  if (
+    parsed.data.start_date &&
+    parsed.data.end_date &&
+    parsed.data.end_date < parsed.data.start_date
+  ) {
+    return { error: "End date cannot be before start date" }
+  }
+  const { data, error } = await createAdminClient()
+    .from("health_programs")
+    .insert({
+      ...parsed.data,
+      is_active: false,
+      workflow_status: "pending",
+      proposed_by: actor.id,
+      managed_by: null,
+    })
+    .select("id")
+    .single()
+  if (error || !data) return { error: error?.message ?? "Unable to propose program" }
+  await logAuditEvent({
+    userId: actor.id,
+    email: actor.email,
+    action: "SERVICE_CREATED",
+    resource: data.id,
+    details: {
+      action: "health_program.proposed",
+      program_type: parsed.data.program_type,
+    },
+  })
+  return { error: null, id: data.id }
+}
+
+// Approves and publishes one pending program through the atomic database RPC.
+export async function approveAndPublishHealthProgram(programId: string) {
+  const actor = await staff(["admin"])
+  if (!actor || !z.string().uuid().safeParse(programId).success) {
+    return { error: "Access denied" }
+  }
+  const supabase = createClient(await cookies())
+  const { error } = await supabase.rpc("approve_health_program", {
+    p_program_id: programId,
+  })
+  return error ? { error: error.message } : { error: null }
 }
 
 export async function createHealthProgram(data: {
@@ -239,7 +309,7 @@ export async function getHealthPrograms() {
 
 export async function getProgramDetail(programId: string) {
   const actor = await staff(["admin", "doctor", "nurse"])
-  if (!actor) return { error: "Access denied", program: null as any }
+  if (!actor) return { error: "Access denied", program: null }
 
   const { data, error } = await createAdminClient()
     .from("health_programs")

@@ -4,6 +4,7 @@ import { getUserRole } from "@/lib/auth/get-user-role"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { isDoctor } from "@/lib/auth/roles"
+import { getOwnPatientProfileAction } from "@/actions/clinical/compliance-records"
 
 export default async function DoctorLayout({
     children,
@@ -24,8 +25,14 @@ export default async function DoctorLayout({
         redirect("/unauthorized")
     }
 
+    const ownProfile = await getOwnPatientProfileAction()
+
     return (
-        <DashboardShell userEmail={user?.email} userRole={userRole ?? undefined}>
+        <DashboardShell
+            hasPatientProfile={Boolean(ownProfile.profile)}
+            userEmail={user?.email}
+            userRole={userRole ?? undefined}
+        >
             {children}
         </DashboardShell>
     )

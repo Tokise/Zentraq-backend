@@ -230,6 +230,11 @@ export const FollowUpSchema = z.object({
 
 export const FinalizeConsultationWorkflowSchema = z.object({
     consultation_id: UUIDSchema,
+    student_complaint: z
+        .string()
+        .trim()
+        .min(1, 'A student complaint is required')
+        .max(1000),
     vitals_disposition: z.enum(['required', 'not_required']),
     vitals_skip_reason: z.string().trim().min(3).max(500).optional(),
     vitals: z.object({
@@ -239,12 +244,24 @@ export const FinalizeConsultationWorkflowSchema = z.object({
         respiratory_rate: z.number().int().min(4).max(100).optional(),
         oxygen_saturation: z.number().int().min(0).max(100).optional(),
     }).default({}),
-    outcome_note: z.string().trim().max(5000).optional(),
+    outcome_note: z
+        .string()
+        .trim()
+        .min(1, 'A consultation outcome note is required')
+        .max(5000),
     diagnosis: z.object({
         icd10_code: z.string().trim().max(20).optional(),
         description: z.string().trim().min(1).max(500),
         is_primary: z.boolean().default(true),
     }).optional(),
+    treatment: z.object({
+        treatment_plan: z.string().trim().max(2000).optional(),
+        instructions: z.string().trim().max(2000).optional(),
+        follow_up_days: z.number().int().min(1).max(365).optional(),
+    }).refine(
+        (value) => Boolean(value.treatment_plan || value.instructions),
+        'Enter a treatment plan or patient instructions',
+    ).optional(),
     prescriptions: z.array(z.object({
         medicine_id: UUIDSchema,
         dosage: z.string().trim().max(100).optional(),

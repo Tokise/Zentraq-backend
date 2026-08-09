@@ -7,13 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { DataTablePagination, useTablePagination } from "@/components/ui/pagination"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import { Loader2, Award, FileCheck, X } from "lucide-react"
+import { Award, FileCheck, X } from "lucide-react"
 import { toast } from "sonner"
 import { getClearanceQueue } from "@/actions/inventory/workflow-queries"
 import { getClearanceDetail, approveClearance, rejectClearance } from "@/actions/clinical/clearances"
@@ -28,6 +30,10 @@ export default function AdminClearanceIssuePage() {
   const [expiresAt, setExpiresAt] = useState("")
   const [rejectReason, setRejectReason] = useState("")
   const [processing, setProcessing] = useState(false)
+  const clearancePagination = useTablePagination(clearances)
+  const certificatePagination = useTablePagination(certificates)
+  const activePagination =
+    viewMode === "issue" ? clearancePagination : certificatePagination
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -138,7 +144,11 @@ export default function AdminClearanceIssuePage() {
         {(["issue", "issued"] as const).map((mode) => (
           <button
             key={mode}
-            onClick={() => setViewMode(mode)}
+            onClick={() => {
+              setViewMode(mode)
+              clearancePagination.setCurrentPage(1)
+              certificatePagination.setCurrentPage(1)
+            }}
             className={`px-4 py-2 text-sm font-medium cursor-pointer transition-colors ${
               viewMode === mode
                 ? "bg-zinc-900 text-white"
@@ -153,8 +163,10 @@ export default function AdminClearanceIssuePage() {
       <Card className="shadow-sm">
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 5 }, (_, index) => (
+                <Skeleton className="h-10 w-full" key={index} />
+              ))}
             </div>
           ) : viewMode === "issue" ? (
             clearances.length === 0 ? (
@@ -175,7 +187,7 @@ export default function AdminClearanceIssuePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {clearances.map((c: any) => (
+                    {clearancePagination.paginatedItems.map((c: any) => (
                       <TableRow key={c.id} className="hover:bg-zinc-50/50">
                         <TableCell className="font-medium">{displayName(c)}</TableCell>
                         <TableCell className="text-sm text-zinc-600 capitalize">{c.requester_type}</TableCell>
@@ -210,7 +222,7 @@ export default function AdminClearanceIssuePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {certificates.map((c: any) => (
+                  {certificatePagination.paginatedItems.map((c: any) => (
                     <TableRow key={c.id} className="hover:bg-zinc-50/50">
                       <TableCell className="font-mono text-sm">{c.certificate_number}</TableCell>
                       <TableCell className="font-medium">{c.requester_name || "—"}</TableCell>
@@ -227,6 +239,13 @@ export default function AdminClearanceIssuePage() {
           )}
         </CardContent>
       </Card>
+      <DataTablePagination
+        currentPage={activePagination.currentPage}
+        onPageChange={activePagination.setCurrentPage}
+        pageSize={activePagination.pageSize}
+        totalItems={activePagination.totalItems}
+        totalPages={activePagination.totalPages}
+      />
 
       {/* Process Dialog */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>

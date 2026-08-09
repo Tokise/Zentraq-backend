@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/common/page-header"
 import { StatusBadge } from "@/components/common/status-badge"
 import { EmptyState } from "@/components/common/empty-state"
+import { DataTablePagination, useTablePagination } from "@/components/ui/pagination"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Loader2, Stethoscope } from "lucide-react"
+import { Stethoscope } from "lucide-react"
 import { toast } from "sonner"
 import { getClinicVisitsAction } from "@/actions/admin/visits/overview"
 
@@ -29,6 +31,7 @@ export default function AdminVisitHistoryPage() {
   const router = useRouter()
   const [visits, setVisits] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const pagination = useTablePagination(visits)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -60,8 +63,10 @@ export default function AdminVisitHistoryPage() {
 
       <div className="border border-border bg-card">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 5 }, (_, index) => (
+              <Skeleton className="h-10 w-full" key={index} />
+            ))}
           </div>
         ) : visits.length === 0 ? (
           <div className="p-6">
@@ -86,7 +91,7 @@ export default function AdminVisitHistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                  {visits.map((v) => (
+                  {pagination.paginatedItems.map((v) => (
                     <TableRow key={v.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/admin/visits/history/${v.id}`)}>
                     <TableCell className="font-medium">{v.patient_name || "—"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground capitalize">{v.patient_type}</TableCell>
@@ -108,6 +113,13 @@ export default function AdminVisitHistoryPage() {
           </div>
         )}
       </div>
+      <DataTablePagination
+        currentPage={pagination.currentPage}
+        onPageChange={pagination.setCurrentPage}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        totalPages={pagination.totalPages}
+      />
     </div>
   )
 }

@@ -6,12 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import { Badge } from "@/components/ui/badge"
 import { Search, CalendarPlus, Loader2, User } from "lucide-react"
 import { toast } from "sonner"
 import { searchRecordsAction } from "@/actions/admin/records/search"
 import { createAdminAppointmentAction } from "@/actions/admin/appointments/create"
 
+// Creates an appointment on behalf of an authorized patient.
 export default function AdminBookAppointmentPage() {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<Array<Record<string, any>>>([])
@@ -177,7 +179,13 @@ export default function AdminBookAppointmentPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Preferred Date</Label>
-                <Input type="date" value={form.scheduledDate} onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })} className="h-9" />
+                <Calendar
+                  className="h-9"
+                  onSelect={(scheduledDate) =>
+                    setForm((current) => ({ ...current, scheduledDate }))
+                  }
+                  selected={form.scheduledDate}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Preferred Time</Label>

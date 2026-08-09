@@ -7,6 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { toast } from "sonner"
 import { createStudentAccount, resetStudentPassword, registerStudentProfile, updateStudentProfile, generateStudentId as generateStudentIdAction, lookupStudentByRfid } from "@/actions/admin/rfid/registration"
 import { PasswordStrengthInput } from "@/components/common/password-strength-input"
@@ -49,6 +56,97 @@ interface PatientProfile {
 
 const STEPS = ["Scan Card", "Student Info", "Profile Photo", "Review", "Account Setup"]
 const STUDENT_ID_PREFIX = "23011"
+const ACADEMIC_DEPARTMENTS = [
+  "College of Engineering",
+  "College of Computer Studies",
+  "College of Nursing",
+  "College of Arts and Sciences",
+  "College of Business",
+] as const
+const STAFF_DEPARTMENTS = [
+  "Clinic",
+  "Registrar",
+  "IT",
+  "Maintenance",
+  "Guidance",
+] as const
+const CLINIC_POSITIONS = ["Doctor", "Nurse", "Admin"] as const
+
+interface EmploymentFieldsProps {
+  department: string
+  onDepartmentChange: (value: string) => void
+  onPositionChange: (value: string) => void
+  position: string
+  role: PatientProfile["role"]
+}
+
+// Renders role-specific department and position controls for profile registration.
+function EmploymentFields({
+  department,
+  onDepartmentChange,
+  onPositionChange,
+  position,
+  role,
+}: EmploymentFieldsProps) {
+  const departments = role === "staff" ? STAFF_DEPARTMENTS : ACADEMIC_DEPARTMENTS
+  const clinicStaff = role === "staff" && department === "Clinic"
+
+  return (
+    <>
+      <div className="space-y-1.5">
+        <Label className="text-xs">Department</Label>
+        <Select
+          onValueChange={(value) => onDepartmentChange(value ?? "")}
+          value={department || null}
+        >
+          <SelectTrigger className="w-full rounded-md border-border bg-background">
+            <SelectValue placeholder="Select Department" />
+          </SelectTrigger>
+          <SelectContent>
+            {departments.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {role !== "student" && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">
+            Position <span className="text-red-500">*</span>
+          </Label>
+          {clinicStaff ? (
+            <Select
+              onValueChange={(value) => onPositionChange(value ?? "")}
+              value={position || null}
+            >
+              <SelectTrigger className="w-full rounded-md border-border bg-background">
+                <SelectValue placeholder="Select Clinic position" />
+              </SelectTrigger>
+              <SelectContent>
+                {CLINIC_POSITIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              className="h-9 bg-background"
+              onChange={(event) => onPositionChange(event.target.value)}
+              placeholder={role === "faculty" ? "Professor" : "Lab Technician"}
+              required
+              value={position}
+            />
+          )}
+        </div>
+      )}
+    </>
+  )
+}
 
 export default function RfidRegistrationPage() {
   const [mode, setMode] = useState<PageMode>("WIZARD")
@@ -142,13 +240,6 @@ export default function RfidRegistrationPage() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
-  // Keep idNumber in sync with the formatted student ID whenever the suffix changes
-  useEffect(() => {
-    if (role === "student") {
-      setIdNumber(`${STUDENT_ID_PREFIX}${studentIdSuffix}`)
-    }
-  }, [studentIdSuffix, role])
-
   // Auto-suggest (auto-generate) a student ID only for brand-new registrations
   useEffect(() => {
     const shouldSuggest =
@@ -159,13 +250,6 @@ export default function RfidRegistrationPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, step, role])
-
-  // Pre-fill account email from profile email
-  useEffect(() => {
-    if (email && !accountEmail) {
-      setAccountEmail(email)
-    }
-  }, [email, accountEmail])
 
   function resetScanner() {
     setMode("WIZARD")
@@ -186,13 +270,26 @@ export default function RfidRegistrationPage() {
 
   function handleRoleChange(newRole: "student" | "faculty" | "staff") {
     setRole(newRole)
-    setCourse(""); setYearLevel(""); setPosition("")
+    setCourse(""); setYearLevel(""); setDepartment(""); setPosition("")
     if (newRole !== "student") {
       setIdNumber("")
       setStudentIdSuffix("")
     } else {
       setIdNumber(`${STUDENT_ID_PREFIX}${studentIdSuffix}`)
     }
+  }
+
+  // Keeps the formatted Student ID and editable suffix synchronized.
+  function handleStudentIdSuffixChange(value: string) {
+    const suffix = value.replace(/\D/g, "").slice(0, 4)
+    setStudentIdSuffix(suffix)
+    setIdNumber(`${STUDENT_ID_PREFIX}${suffix}`)
+  }
+
+  // Updates the profile email and pre-fills an untouched portal email.
+  function handleEmailChange(value: string) {
+    setEmail(value)
+    if (!accountEmail) setAccountEmail(value)
   }
 
   // Generate the NEXT sequential, guaranteed-unique 4-digit student ID suffix.
@@ -203,10 +300,10 @@ export default function RfidRegistrationPage() {
       if ("error" in result && result.error) {
         toast.error(result.error)
       } else {
-        setStudentIdSuffix(result.suffix || "")
+        handleStudentIdSuffixChange(result.suffix || "")
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to generate student ID")
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to generate student ID"))
     } finally {
       setGeneratingId(false)
     }
@@ -237,8 +334,8 @@ export default function RfidRegistrationPage() {
         setStep(2)
         toast.info("Card not registered. Fill in student details to continue.")
       }
-    } catch (err: any) {
-      toast.error(err.message || "Lookup failed")
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Lookup failed"))
     } finally {
       setLoading(false)
     }
@@ -302,6 +399,12 @@ export default function RfidRegistrationPage() {
       return
     }
     setStep(3)
+  }
+
+  // Clears a stale position whenever Staff switches department classifications.
+  function handleDepartmentChange(value: string) {
+    if (role === "staff" && value !== department) setPosition("")
+    setDepartment(value)
   }
 
   async function startCamera() {
@@ -420,8 +523,8 @@ export default function RfidRegistrationPage() {
         toast.success("Profile registered! Now set up their portal account.")
         setStep(5) // Go to Account Setup step
       }
-    } catch (err: any) {
-      toast.error(err.message || "Registration failed")
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Registration failed"))
     } finally {
       setLoading(false)
     }
@@ -458,8 +561,8 @@ export default function RfidRegistrationPage() {
         }
         toast.success("Portal account created! The student can now log in.")
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create account")
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to create account"))
     } finally {
       setCreatingAccount(false)
     }
@@ -520,8 +623,8 @@ export default function RfidRegistrationPage() {
         setMode("SUCCESS")
         setResetTimer(8)
       }
-    } catch (err: any) {
-      toast.error(err.message || "Update failed")
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Update failed"))
     } finally {
       setLoading(false)
     }
@@ -558,8 +661,8 @@ export default function RfidRegistrationPage() {
           setSearchedProfile({ ...searchedProfile, user_id: result.userId || result.email })
         }
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create account")
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to create account"))
     } finally {
       setCreatingAccount(false)
     }
@@ -595,8 +698,8 @@ export default function RfidRegistrationPage() {
         setShowResetForm(false)
         setResetPassword("")
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to reset password")
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to reset password"))
     } finally {
       setResettingPassword(false)
     }
@@ -690,7 +793,11 @@ export default function RfidRegistrationPage() {
                 <Label className="text-xs">Role</Label>
                 <select
                   value={role}
-                  onChange={(e) => handleRoleChange(e.target.value as any)}
+                  onChange={(e) =>
+                    handleRoleChange(
+                      e.target.value as "student" | "faculty" | "staff",
+                    )
+                  }
                   className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="student">Student</option>
@@ -720,7 +827,9 @@ export default function RfidRegistrationPage() {
                       </div>
                       <Input
                         value={studentIdSuffix}
-                        onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                        onChange={(e) =>
+                          handleStudentIdSuffixChange(e.target.value)
+                        }
                         placeholder="0000"
                         inputMode="numeric"
                         maxLength={4}
@@ -750,25 +859,17 @@ export default function RfidRegistrationPage() {
                 )}
                 <div className="space-y-1.5">
                   <Label className="text-xs">Email</Label>
-                  <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9 bg-background" />
+                  <Input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="mail@school.edu" className="h-9 bg-background" />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs">Department</Label>
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Select Department</option>
-                  <option value="College of Engineering">College of Engineering</option>
-                  <option value="College of Computer Studies">College of Computer Studies</option>
-                  <option value="College of Nursing">College of Nursing</option>
-                  <option value="College of Arts and Sciences">College of Arts and Sciences</option>
-                  <option value="College of Business">College of Business</option>
-                </select>
-              </div>
+              <EmploymentFields
+                department={department}
+                onDepartmentChange={handleDepartmentChange}
+                onPositionChange={setPosition}
+                position={position}
+                role={role}
+              />
 
               {role === "student" && (
                 <div className="grid gap-3 grid-cols-3">
@@ -798,13 +899,6 @@ export default function RfidRegistrationPage() {
                       <option value="4">4th</option>
                     </select>
                   </div>
-                </div>
-              )}
-
-              {role !== "student" && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Position <span className="text-red-500">*</span></Label>
-                  <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9 bg-background" />
                 </div>
               )}
 
@@ -1172,7 +1266,14 @@ export default function RfidRegistrationPage() {
                       <Label className="text-xs">Role</Label>
                       <select
                         value={role}
-                        onChange={(e) => handleRoleChange(e.target.value as any)}
+                        onChange={(e) =>
+                          handleRoleChange(
+                            e.target.value as
+                              | "student"
+                              | "faculty"
+                              | "staff",
+                          )
+                        }
                         className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         <option value="student">Student</option>
@@ -1202,7 +1303,9 @@ export default function RfidRegistrationPage() {
                         </div>
                         <Input
                           value={studentIdSuffix}
-                          onChange={(e) => setStudentIdSuffix(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                          onChange={(e) =>
+                            handleStudentIdSuffixChange(e.target.value)
+                          }
                           placeholder="0000"
                           inputMode="numeric"
                           maxLength={4}
@@ -1219,25 +1322,17 @@ export default function RfidRegistrationPage() {
                       )}
                       <div className="space-y-1.5">
                         <Label className="text-xs">Email</Label>
-                        <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="mail@school.edu" className="h-9 bg-background" />
+                        <Input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="mail@school.edu" className="h-9 bg-background" />
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Department</Label>
-                      <select
-                        value={department}
-                        onChange={(e) => setDepartment(e.target.value)}
-                        className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        <option value="">Select Department</option>
-                        <option value="College of Engineering">College of Engineering</option>
-                        <option value="College of Computer Studies">College of Computer Studies</option>
-                        <option value="College of Nursing">College of Nursing</option>
-                        <option value="College of Arts and Sciences">College of Arts and Sciences</option>
-                        <option value="College of Business">College of Business</option>
-                      </select>
-                    </div>
+                    <EmploymentFields
+                      department={department}
+                      onDepartmentChange={handleDepartmentChange}
+                      onPositionChange={setPosition}
+                      position={position}
+                      role={role}
+                    />
 
                     {role === "student" && (
                       <div className="grid gap-3 grid-cols-3">
@@ -1267,13 +1362,6 @@ export default function RfidRegistrationPage() {
                             <option value="4">4th</option>
                           </select>
                         </div>
-                      </div>
-                    )}
-
-                    {role !== "student" && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Position <span className="text-red-500">*</span></Label>
-                        <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Lab Technician" required className="h-9 bg-background" />
                       </div>
                     )}
 
@@ -1456,4 +1544,9 @@ export default function RfidRegistrationPage() {
       )}
     </div>
   )
+}
+
+// Converts an unknown thrown value into a user-safe message.
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback
 }

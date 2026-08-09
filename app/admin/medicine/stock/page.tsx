@@ -6,11 +6,12 @@ import { PageHeader } from "@/components/common/page-header"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/common/status-badge"
 import { EmptyState } from "@/components/common/empty-state"
-import { Pagination } from "@/components/common/pagination"
+import { DataTablePagination } from "@/components/ui/pagination"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Loader2, Search, Package } from "lucide-react"
+import { Search, Package } from "lucide-react"
 import { toast } from "sonner"
 import { getInventoryQueue } from "@/actions/inventory/workflow-queries"
 
@@ -95,8 +96,10 @@ export default function AdminMedicineStockPage() {
       {/* Table */}
       <div className="border border-border bg-card">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 5 }, (_, index) => (
+                <Skeleton className="h-10 w-full" key={index} />
+              ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-6">
@@ -145,7 +148,7 @@ export default function AdminMedicineStockPage() {
             </div>
 
             <div className="p-4">
-              <Pagination
+              <DataTablePagination
                 currentPage={currentPage}
                 totalPages={totalPages}
                 totalItems={filtered.length}

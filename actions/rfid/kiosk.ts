@@ -50,10 +50,59 @@ export interface RfidQueueItem {
   patientName: string;
   patientType: "student" | "faculty" | "staff";
   checkedInAt: string;
-  status: "waiting" | "claimed";
+  status: "waiting" | "claimed" | "awaiting_doctor_review";
   priority: number;
   profilePhotoUrl: string | null;
+  claimedByName: string | null;
+  claimedByCurrentUser: boolean;
+  canStartConsultation: boolean;
 }
+
+type QueuePatientRow = {
+  user_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  profile_photo_url: string | null;
+};
+
+type QueueVisitRow = {
+  patient_type: "student" | "faculty" | "staff";
+  student_id: string | null;
+  faculty_id: string | null;
+  staff_id: string | null;
+  consultations: { id: string } | Array<{ id: string }> | null;
+  students: QueuePatientRow | QueuePatientRow[] | null;
+  faculty: QueuePatientRow | QueuePatientRow[] | null;
+  staff: QueuePatientRow | QueuePatientRow[] | null;
+};
+
+type QueueQueryRow = {
+  id: string;
+  status: RfidQueueItem["status"];
+  priority: number;
+  created_at: string;
+  claimed_by: string | null;
+  clinic_visits: QueueVisitRow | QueueVisitRow[] | null;
+};
+
+type ConsultationHistoryQueryRow = {
+  check_in_time: string;
+  visit_type: string;
+  consultations:
+    | {
+        id: string;
+        chief_complaint: string | null;
+        consultation_notes: string | null;
+        status: string | null;
+      }
+    | Array<{
+        id: string;
+        chief_complaint: string | null;
+        consultation_notes: string | null;
+        status: string | null;
+      }>
+    | null;
+};
 
 // Returns the current clinical worklist ordered by priority and arrival time.
 export async function getRfidQueue(): Promise<{
@@ -66,64 +115,75 @@ export async function getRfidQueue(): Promise<{
   const { data, error } = await createAdminClient()
     .from("clinic_queue_entries")
     .select(
-      "id, status, priority, created_at, clinic_visits(patient_type, student_id, faculty_id, staff_id, consultations(id, doctor_id, nurse_id), students(first_name, last_name, profile_photo_url), faculty(first_name, last_name, profile_photo_url), staff(first_name, last_name, profile_photo_url))",
+      "id, status, priority, created_at, claimed_by, clinic_visits(patient_type, student_id, faculty_id, staff_id, consultations(id), students(user_id, first_name, last_name, profile_photo_url), faculty(user_id, first_name, last_name, profile_photo_url), staff(user_id, first_name, last_name, profile_photo_url))",
     )
-    .in("status", ["waiting", "claimed"])
+    .in("status", ["waiting", "claimed", "awaiting_doctor_review"])
     .order("priority", { ascending: false })
     .order("created_at", { ascending: true });
 
   if (error) return { error: error.message, queue: [] };
 
-  let assignedClinicianId: string | null = null;
-  if (auth.role !== "admin") {
-    const { data: account } = await createAdminClient()
+  const { data: account } = await createAdminClient()
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", auth.user.id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!account) {
+    return { error: "Active clinic account not found", queue: [] };
+  }
+
+  const rows = (data ?? []) as unknown as QueueQueryRow[];
+  const claimantUserIds = Array.from(
+    new Set(
+      rows
+        .map((item) => item.claimed_by)
+        .filter((userId): userId is string => Boolean(userId)),
+    ),
+  );
+  const claimantNames = new Map<string, string>();
+
+  if (claimantUserIds.length > 0) {
+    const { data: claimantAccounts } = await createAdminClient()
       .from("clinic_accounts")
-      .select("id")
-      .eq("user_id", auth.user.id)
-      .eq("is_active", true)
-      .maybeSingle();
-    assignedClinicianId = account?.id ?? null;
-    if (!assignedClinicianId) {
-      return { error: "Active clinic account not found", queue: [] };
+      .select("user_id, display_name")
+      .in("user_id", claimantUserIds)
+      .eq("is_active", true);
+
+    for (const claimant of claimantAccounts ?? []) {
+      if (claimant.user_id && claimant.display_name) {
+        claimantNames.set(claimant.user_id, claimant.display_name);
+      }
     }
   }
 
-  const queue = (data ?? [])
-    .filter((item: any) => {
-      if (!assignedClinicianId) return true;
-      const visit = Array.isArray(item.clinic_visits)
-        ? item.clinic_visits[0]
-        : item.clinic_visits;
-      const consultations = Array.isArray(visit?.consultations)
-        ? visit.consultations
-        : [];
-      return consultations.some(
-        (consultation: { doctor_id: string | null; nurse_id: string | null }) =>
-          consultation.doctor_id === assignedClinicianId ||
-          consultation.nurse_id === assignedClinicianId,
-      );
+  const queue = rows
+    .filter((item) => {
+      if (item.status === "waiting") return true;
+      if (item.status === "awaiting_doctor_review") {
+        return auth.role === "admin" || auth.role === "doctor";
+      }
+      return auth.role === "admin" || item.claimed_by === auth.user.id;
     })
-    .map((item: any) => {
-      const visit = Array.isArray(item.clinic_visits)
-        ? item.clinic_visits[0]
-        : item.clinic_visits;
+    .flatMap((item): RfidQueueItem[] => {
+      const visit = firstRelation(item.clinic_visits);
       const patient = visit?.patient_type === "student"
-        ? (Array.isArray(visit.students) ? visit.students[0] : visit.students)
+        ? firstRelation(visit.students)
         : visit?.patient_type === "faculty"
-          ? (Array.isArray(visit.faculty) ? visit.faculty[0] : visit.faculty)
-          : (Array.isArray(visit.staff) ? visit.staff[0] : visit.staff);
-      const consultation = Array.isArray(visit?.consultations)
-        ? visit.consultations[0]
-        : visit?.consultations;
-      return {
+          ? firstRelation(visit.faculty)
+          : firstRelation(visit?.staff ?? null);
+      const consultation = firstRelation(visit?.consultations ?? null);
+      if (patient?.user_id === auth.user.id) return [];
+      return [{
         id: item.id,
         consultationId: consultation?.id ?? "",
-        patientId:
+        patientId: (
           visit?.patient_type === "student"
             ? visit?.student_id
             : visit?.patient_type === "faculty"
               ? visit?.faculty_id
-              : visit?.staff_id,
+              : visit?.staff_id
+        ) ?? "",
         patientName:
           `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() ||
           "Unknown patient",
@@ -132,8 +192,18 @@ export async function getRfidQueue(): Promise<{
         status: item.status,
         priority: item.priority,
         profilePhotoUrl: patient?.profile_photo_url ?? null,
-      };
-    });
+        claimedByName: item.claimed_by
+          ? (claimantNames.get(item.claimed_by) ?? null)
+          : null,
+        claimedByCurrentUser: item.claimed_by === auth.user.id,
+        canStartConsultation:
+          item.status === "waiting" ||
+          (item.status === "awaiting_doctor_review" &&
+            (auth.role === "admin" || auth.role === "doctor")) ||
+          item.claimed_by === auth.user.id,
+      }];
+    })
+    .filter((item) => Boolean(item.patientId && item.consultationId));
 
   return {
     error: null,
@@ -241,15 +311,16 @@ export async function getKioskStudentProfile(rfidUid: string) {
     };
 
     return { error: null, profile };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[getKioskStudentProfile Exception]:", err);
     return {
-      error: err?.message || "Failed to look up student",
+      error: getErrorMessage(err, "Failed to look up student"),
       profile: null,
     };
   }
 }
 
+// Creates a legacy student RFID consultation for callers outside the queue RPC.
 export async function createConsultation(
   profileId: string,
   patientName: string,
@@ -297,8 +368,8 @@ export async function createConsultation(
     });
     revalidatePath("/consultations");
     return { success: true, data };
-  } catch (err: any) {
-    return { error: err?.message || "Server error" };
+  } catch (err: unknown) {
+    return { error: getErrorMessage(err, "Server error") };
   }
 }
 
@@ -353,11 +424,15 @@ export async function getPatientConsultationHistory(
       consultations: [] as KioskConsultationSummary[],
     };
 
-  const consultations = (data ?? []).flatMap((visit: any) => {
-    const entries = Array.isArray(visit.consultations)
-      ? visit.consultations
-      : [];
-    return entries.map((consultation: any) => ({
+  const visits = (data ?? []) as unknown as ConsultationHistoryQueryRow[];
+  const consultations = visits.flatMap((visit) => {
+    const relation = visit.consultations;
+    const entries = Array.isArray(relation)
+      ? relation
+      : relation
+        ? [relation]
+        : [];
+    return entries.map((consultation) => ({
       id: consultation.id,
       checkedInAt: visit.check_in_time,
       visitType: visit.visit_type,
@@ -369,6 +444,16 @@ export async function getPatientConsultationHistory(
 
   return {
     error: null,
-    consultations: consultations as KioskConsultationSummary[],
+    consultations,
   };
+}
+
+// Normalizes a single Supabase relation returned as either an object or array.
+function firstRelation<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+// Converts an unknown exception into a safe user-facing message.
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }

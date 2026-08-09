@@ -13,10 +13,10 @@ import {
   CheckCircle2,
   FileCheck,
   Activity,
-  Clock,
   ClipboardList,
 } from "lucide-react"
 import { EmptyState } from "@/components/common/empty-state"
+import { ClinicalDashboardCharts } from "@/components/analytics/clinical-dashboard-charts"
 
 function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
   const s = status?.toLowerCase() ?? ""
@@ -94,22 +94,6 @@ export default function DoctorDashboardPage() {
     return completedCount
   }, [completedCount])
 
-  const consultationTrend = useMemo(() => {
-    const map = new Map<string, number>()
-    consultations.forEach((c) => {
-      const date = (c.created_at || "").split("T")[0]
-      if (!date) return
-      map.set(date, (map.get(date) ?? 0) + 1)
-    })
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .slice(-7)
-      .map(([date, count]) => ({
-        date: new Date(date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        count,
-      }))
-  }, [consultations])
-
   const statCards = [
     {
       label: "Today's Patients",
@@ -148,8 +132,6 @@ export default function DoctorDashboardPage() {
     },
   ]
 
-  const maxTrend = Math.max(...consultationTrend.map((d) => d.count), 1)
-
   return (
     <div className="space-y-8">
       <PageHeader
@@ -172,45 +154,19 @@ export default function DoctorDashboardPage() {
         ))}
       </div>
 
-      {/* Analytics */}
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-border pb-2">
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <Activity className="size-4 text-primary" />
             Analytics
           </h2>
-          <p className="text-xs text-muted-foreground">Weekly consultation activity</p>
+          <p className="text-xs text-muted-foreground">Assigned clinical activity</p>
         </div>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Weekly Consultations</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex h-40 items-center justify-center">
-                <div className="h-6 w-40 animate-pulse bg-muted" />
-              </div>
-            ) : consultationTrend.length === 0 ? (
-              <EmptyState title="No consultation data" description="Consultation trends will appear here." />
-            ) : (
-              <div className="space-y-2">
-                {consultationTrend.map((d) => (
-                  <div key={d.date} className="flex items-center gap-3">
-                    <span className="w-16 shrink-0 text-xs text-muted-foreground">{d.date}</span>
-                    <div className="h-6 flex-1 bg-muted">
-                      <div
-                        className="h-full bg-primary"
-                        style={{ width: `${Math.max((d.count / maxTrend) * 100, 4)}%` }}
-                      />
-                    </div>
-                    <span className="w-8 shrink-0 text-right text-xs font-medium">{d.count}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ClinicalDashboardCharts
+          appointments={appointments}
+          consultations={consultations}
+          loading={loading}
+        />
       </div>
 
       {/* Additional sections */}

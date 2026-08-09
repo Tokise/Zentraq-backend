@@ -1,8 +1,7 @@
 ﻿"use client"
 
 import { useState, useRef, useEffect } from "react"
-import { useRouter, usePathname } from "next/navigation"
-import { Loader2, LogOut, User, Shield, Menu, Sun, Moon } from "lucide-react"
+import { Loader2, LogOut, Menu, Moon, Sun } from "lucide-react"
 import NProgress from "nprogress"
 
 import { AppSidebar } from "@/components/layout/app-sidebar"
@@ -21,22 +20,21 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { UserRole } from "@/lib/auth/roles"
 import { NotificationDropdown } from "@/components/layout/notification-dropdown"
-import { getPageTitle } from "@/lib/navigation"
 import { signOutAction } from "@/actions/system/auth"
 
 type DashboardShellProps = {
   children: React.ReactNode
   userEmail?: string
   userRole?: UserRole
+  hasPatientProfile?: boolean
 }
 
 export function DashboardShell({
   children,
   userEmail,
   userRole = "nurse",
+  hasPatientProfile = false,
 }: DashboardShellProps) {
-  const router = useRouter()
-  const pathname = usePathname()
   useSessionSecurity()
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -60,8 +58,6 @@ export function DashboardShell({
     }
     localStorage.setItem("theme", theme)
   }, [theme])
-
-  const pageTitle = getPageTitle(pathname)
 
   // Keyboard shortcut: Ctrl+K or Cmd+K to focus search
   useEffect(() => {
@@ -91,8 +87,6 @@ export function DashboardShell({
   }
 
   const roleLabel = userRole === "admin" ? "Admin" : userRole === "nurse" ? "Nurse" : userRole === "doctor" ? "Doctor" : userRole === "faculty" ? "Faculty" : userRole === "student" ? "Student" : userRole || "User"
-  const roleIcon = userRole === "admin" ? Shield : User
-
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar — responsive */}
@@ -102,7 +96,11 @@ export function DashboardShell({
           sidebarCollapsed ? "w-16" : "w-64"
         )}
       >
-        <AppSidebar collapsed={sidebarCollapsed} userRole={userRole} />
+        <AppSidebar
+          collapsed={sidebarCollapsed}
+          hasPatientProfile={hasPatientProfile}
+          userRole={userRole}
+        />
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -114,6 +112,7 @@ export function DashboardShell({
           />
           <div className="absolute inset-y-0 left-0 w-64 animate-in slide-in-from-left">
             <AppSidebar
+              hasPatientProfile={hasPatientProfile}
               onNavigate={() => setMobileOpen(false)}
               userRole={userRole}
             />

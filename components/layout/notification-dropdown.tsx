@@ -1,7 +1,22 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Bell, Loader2, X, Check, CalendarDays, Stethoscope, HeartPulse, ClipboardList, ShieldCheck, Megaphone, FileCheck, Pill } from "lucide-react"
+import {
+    Bell,
+    Loader2,
+    X,
+    Check,
+    CalendarDays,
+    Stethoscope,
+    HeartPulse,
+    ClipboardList,
+    ShieldCheck,
+    Megaphone,
+    FileCheck,
+    Pill,
+    type LucideIcon,
+} from "lucide-react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -21,10 +36,9 @@ import {
     markAllNotificationsAsRead,
     deleteNotification,
     type NotificationDTO,
-    type NotificationType,
 } from "@/actions/system/notifications"
 
-const NOTIFICATION_ICONS: Record<string, any> = {
+const NOTIFICATION_ICONS: Record<string, LucideIcon> = {
     appointment: CalendarDays,
     consultation: Stethoscope,
     emergency: HeartPulse,
@@ -52,7 +66,6 @@ const RESOURCE_ROUTES: Record<string, (id: string) => string> = {
     consultation: (id) => `/consultations?id=${id}`,
     emergency: (id) => `/consultations/emergency?id=${id}`,
     visit_log: (id) => `/consultations/visit-logs?id=${id}`,
-    announcement: (id) => `/admin/announcement?id=${id}`,
     student: (id) => `/admin/rfid-registration?id=${id}`,
     role: () => `/admin/useraccess/roles`,
     service: (id) => `/admin/healthprograms/list?id=${id}`,
@@ -85,8 +98,17 @@ function getRelativeTime(iso: string): string {
 }
 
 // Build navigation href from notification
-function getNotificationHref(n: NotificationDTO): string | undefined {
+function getNotificationHref(
+    n: NotificationDTO,
+    userRole: UserRole,
+): string | undefined {
     if (!n.related_resource) return undefined
+    if (n.related_resource === "announcement") {
+        if (userRole === "admin") {
+            return `/admin/announcement?id=${n.related_resource_id || ""}`
+        }
+        return `/${userRole}/announcements?id=${n.related_resource_id || ""}`
+    }
     const routeBuilder = RESOURCE_ROUTES[n.related_resource]
     if (!routeBuilder) return undefined
     return routeBuilder(n.related_resource_id || "")
@@ -97,6 +119,8 @@ type NotificationDropdownProps = {
 }
 
 export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdownProps) {
+    const router = useRouter()
+    const [supabase] = useState(() => createClient())
     const [notifications, setNotifications] = useState<NotificationDTO[]>([])
     const [unreadCount, setUnreadCount] = useState(0)
     const [loading, setLoading] = useState(false)
@@ -122,35 +146,35 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
         await refreshUnreadCount()
     }, [refreshUnreadCount])
 
-    // Fetch unread count on mount and set up a polling interval
+    // Fetches the unread count once before private invalidations take over.
     useEffect(() => {
-        refreshUnreadCount()
-        const interval = setInterval(refreshUnreadCount, 30000)
-        return () => clearInterval(interval)
+        const initialLoad = window.setTimeout(() => {
+            void refreshUnreadCount()
+        }, 0)
+        return () => window.clearTimeout(initialLoad)
     }, [refreshUnreadCount])
 
-    // Subscribes only to the signed-in user's notification inserts.
+    // Subscribes to the signed-in user's private notification Broadcast topic.
     useEffect(() => {
-        const supabase = createClient()
         let channel: ReturnType<typeof supabase.channel> | null = null
         let active = true
 
         async function subscribe() {
             const { data } = await supabase.auth.getUser()
             if (!active || !data.user) return
+            await supabase.realtime.setAuth()
             channel = supabase
-                .channel(`notifications:${data.user.id}`)
+                .channel(`notifications:${data.user.id}`, {
+                    config: { private: true },
+                })
                 .on(
-                    "postgres_changes",
-                    {
-                        event: "INSERT",
-                        schema: "public",
-                        table: "notifications",
-                        filter: `receiver_id=eq.${data.user.id}`,
-                    },
+                    "broadcast",
+                    { event: "notification-changed" },
                     () => {
                         void refreshUnreadCount()
-                        if (open) void loadNotifications()
+                        if (hasFetchedRef.current || open) {
+                            void loadNotifications()
+                        }
                     },
                 )
                 .subscribe()
@@ -161,15 +185,16 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
             active = false
             if (channel) void supabase.removeChannel(channel)
         }
-    }, [loadNotifications, open, refreshUnreadCount])
+    }, [loadNotifications, open, refreshUnreadCount, supabase])
 
-    // When dropdown opens, fetch the latest notifications (if not already fetched recently)
-    useEffect(() => {
-        if (open) {
-            loadNotifications()
+    // Loads fresh notifications when the user opens the menu.
+    const handleOpenChange = useCallback((nextOpen: boolean) => {
+        setOpen(nextOpen)
+        if (nextOpen) {
             hasFetchedRef.current = true
+            void loadNotifications()
         }
-    }, [open, loadNotifications])
+    }, [loadNotifications])
 
     const handleMarkSingle = async (id: string, isRead: boolean) => {
         // Optimistic update
@@ -218,14 +243,14 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
         if (!n.is_read) {
             await handleMarkSingle(n.id, true)
         }
-        const href = getNotificationHref(n)
+        const href = getNotificationHref(n, userRole)
         if (href) {
-            window.location.href = href
+            router.push(href)
         }
     }
 
     return (
-        <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenu open={open} onOpenChange={handleOpenChange}>
             <DropdownMenuTrigger className="relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-full hover:bg-accent/50 transition-colors focus:outline-none">
                 <Bell className="size-4 text-muted-foreground" />
                 {unreadCount > 0 && (
@@ -274,7 +299,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                             <Bell className="size-8 text-muted-foreground/30 mb-2" />
                             <p className="text-sm text-muted-foreground">No notifications yet</p>
                             <p className="text-xs text-muted-foreground/60 mt-0.5">
-                                You're all caught up
+                                You&apos;re all caught up
                             </p>
                         </div>
                     ) : (
