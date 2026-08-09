@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Input } from "@/components/ui/input"
-import { StatusBadge } from "@/components/status-badge"
-import { EmptyState } from "@/components/empty-state"
-import { Pagination } from "@/components/pagination"
+import { StatusBadge } from "@/components/common/status-badge"
+import { EmptyState } from "@/components/common/empty-state"
+import { Pagination } from "@/components/common/pagination"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"

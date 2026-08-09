@@ -8,7 +8,7 @@ import {
   getConsultationQueue,
   type QueueConsultation,
 } from "@/actions/inventory/workflow-queries";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import {
   Table,
   TableBody,

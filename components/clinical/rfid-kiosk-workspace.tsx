@@ -23,7 +23,7 @@ import { getRfidQueue, type RfidQueueItem } from "@/actions/rfid/kiosk";
 import { MedicalRecordView } from "@/components/medical/medical-record-view";
 import { StaffMedicalRecordView } from "@/components/medical/staff-medical-record-view";
 import { StaffRecordExtras } from "@/components/medical/staff-record-extras";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -265,8 +265,7 @@ export function ClinicalRfidKioskWorkspace({
             <div>
               <h2 className="text-xl font-semibold">Medical record preview</h2>
               <p className="text-sm text-muted-foreground">
-                Read-only preview for {selected.patientName}; record changes are
-                unavailable from the RFID queue.
+                Read-only preview for {selected.patientName}; 
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -278,7 +277,7 @@ export function ClinicalRfidKioskWorkspace({
                 <FileText className="size-4" />
                 {selected.patientType === "student"
                   ? "Open Student Records"
-                  : "Open Faculty & Staff Records"}
+                  : "Open Employee Records"}
               </Button>
               <Button onClick={() => startConsultation(selected)} type="button">
                 <Stethoscope className="size-4" />

@@ -8,10 +8,10 @@ import {
   getHealthPrograms,
   type HealthProgram,
 } from "@/actions/inventory/health-programs";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
-import { EmptyState } from "@/components/empty-state";
+import { EmptyState } from "@/components/common/empty-state";
 
 // Lists existing programs that are available for clinic reporting.
 export default function ReportsPage() {

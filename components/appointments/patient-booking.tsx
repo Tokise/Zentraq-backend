@@ -9,7 +9,7 @@ import {
   getAppointmentAvailabilityAction,
 } from "@/actions/patient/portal";
 import { submitAppointmentRequest } from "@/actions/scheduling/appointments";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

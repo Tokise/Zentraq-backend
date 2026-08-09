@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
-import { getFacultyDocumentsAction } from "@/actions/admin/faculty-documents";
-import { getStudentDocumentsAction } from "@/actions/admin/records-admin";
-import { getStaffDocumentsAction } from "@/actions/admin/staff-documents";
+import { getFacultyDocumentsAction } from "@/actions/admin/documents/faculty";
+import { getStudentDocumentsAction } from "@/actions/admin/records/resources";
+import { getStaffDocumentsAction } from "@/actions/admin/documents/staff";
 import {
   getPatientConsultationHistory,
   type KioskConsultationSummary,

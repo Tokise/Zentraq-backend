@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import {
 import { Loader2, ArrowRightLeft } from "lucide-react"
 import { toast } from "sonner"
 import { getIncidentQueue } from "@/actions/inventory/workflow-queries"
-import { getIncidentDetailAction, scheduleIncidentFollowUp } from "@/actions/admin/incidents-admin"
+import { getIncidentDetailAction, scheduleIncidentFollowUp } from "@/actions/admin/incidents/overview"
 
 export default function AdminIncidentReferralPage() {
   const [incidents, setIncidents] = useState<Array<{ id: string; description: string; severity: string | null; status: string; created_at: string }>>([])

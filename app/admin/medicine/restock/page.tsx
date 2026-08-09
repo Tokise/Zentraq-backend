@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table"
 import { Loader2, PackagePlus } from "lucide-react"
 import { toast } from "sonner"
-import { getRestockRequestsAction, updateRestockRequestAction } from "@/actions/admin/medicine-admin"
+import { getRestockRequestsAction, updateRestockRequestAction } from "@/actions/admin/medicine/operations"
 
 export default function AdminRestockPage() {
   const [requests, setRequests] = useState<Array<{

@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader2, BarChart3 } from "lucide-react"
 import { toast } from "sonner"
 import { getAnalyticsOverview, getDailyConsultations, getComplaintFrequency } from "@/actions/reports/analytics"
 import { ConsultationChart } from "@/components/analytics/consultation-chart"
 import { ComplaintChart } from "@/components/analytics/complaint-chart"
-import { StatCard } from "@/components/stat-card"
+import { StatCard } from "@/components/common/stat-card"
 
 export default function AdminReportsGeneratePage() {
   const [overview, setOverview] = useState<any>(null)

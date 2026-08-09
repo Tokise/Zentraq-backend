@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { resetStudentPassword } from "@/actions/admin/rfid-registration";
-import { resetFacultyPasswordAction } from "@/actions/admin/faculty-accounts";
-import { PageHeader } from "@/components/page-header";
+import { resetStudentPassword } from "@/actions/admin/rfid/registration";
+import { resetFacultyPasswordAction } from "@/actions/admin/accounts/faculty";
+import { PageHeader } from "@/components/common/page-header";
 import {
   Card,
   CardContent,

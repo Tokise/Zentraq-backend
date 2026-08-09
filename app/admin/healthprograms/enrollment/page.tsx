@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Loader2, Users, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { getSettingsAction, updateSettingAction } from "@/actions/admin/settings"
-import { searchRecordsAction } from "@/actions/admin/records"
+import { searchRecordsAction } from "@/actions/admin/records/search"
 
 interface Enrollment {
   id: string

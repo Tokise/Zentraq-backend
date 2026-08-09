@@ -7,10 +7,10 @@ import {
   getHealthPrograms,
   type HealthProgram,
 } from "@/actions/inventory/health-programs";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/empty-state";
+import { EmptyState } from "@/components/common/empty-state";
 
 // Formats optional program dates for concise schedule rows.
 const date = (value: string | null) =>

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { CalendarClock, ClipboardCheck, ExternalLink } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
-import { EmptyState } from "@/components/empty-state";
+import { EmptyState } from "@/components/common/empty-state";
 
 // Explains the secure, case-linked incident follow-up workflow.
 export default function FollowupPage() {

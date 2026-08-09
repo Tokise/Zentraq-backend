@@ -71,18 +71,14 @@ export const adminNavigation: NavGroup[] = [
         href: "/admin/records/view",
         icon: HeartPulse,
       },
-    ],
-  },
-  {
-    label: "Staff Health",
-    items: [
       {
-        title: "Faculty & Staff Records",
+        title: "Employee Records",
         href: "/admin/staffhealth/record",
         icon: HeartPulse,
       },
     ],
   },
+
   {
     label: "Consultations",
     items: [
@@ -324,6 +320,16 @@ export const doctorNavigation: NavGroup[] = [
     ],
   },
   {
+    label: "Staff Health",
+    items: [
+      {
+        title: "Faculty & Staff Records",
+        href: "/doctor/staffhealth/record",
+        icon: HeartPulse,
+      },
+    ],
+  },
+  {
     label: "Consultations",
     items: [
       { title: "Visit", href: "/doctor/visits", icon: Stethoscope },
@@ -332,26 +338,6 @@ export const doctorNavigation: NavGroup[] = [
         title: "Follow-ups",
         href: "/doctor/visits/followup",
         icon: ClipboardCheck,
-      },
-    ],
-  },
-  {
-    label: "Medicine",
-    items: [
-      {
-        title: "Inventory Status",
-        href: "/doctor/medicine/stock",
-        icon: Package,
-      },
-      {
-        title: "Dispense Medicine",
-        href: "/doctor/medicine/dispense",
-        icon: Pill,
-      },
-      {
-        title: "Dispense Log",
-        href: "/doctor/medicine/dispense_log",
-        icon: History,
       },
     ],
   },
@@ -381,42 +367,22 @@ export const doctorNavigation: NavGroup[] = [
     ],
   },
   {
-    label: "Incidents",
+    label: "Medicine",
     items: [
       {
-        title: "Incident Log",
-        href: "/doctor/incidents/log",
-        icon: AlertTriangle,
+        title: "Inventory Status",
+        href: "/doctor/medicine/stock",
+        icon: Package,
       },
       {
-        title: "Case Status",
-        href: "/doctor/incidents/status",
-        icon: ClipboardCheck,
+        title: "Dispense Medicine",
+        href: "/doctor/medicine/dispense",
+        icon: Pill,
       },
       {
-        title: "Referrals",
-        href: "/doctor/incidents/referral",
-        icon: FileText,
-      },
-      {
-        title: "Emergency Contacts",
-        href: "/doctor/incidents/emergency_contacts",
-        icon: Users,
-      },
-      {
-        title: "Report Incident",
-        href: "/doctor/incidents",
-        icon: AlertTriangle,
-      },
-    ],
-  },
-  {
-    label: "Staff Health",
-    items: [
-      {
-        title: "Faculty & Staff Records",
-        href: "/doctor/staffhealth/record",
-        icon: HeartPulse,
+        title: "Dispense Log",
+        href: "/doctor/medicine/dispense_log",
+        icon: History,
       },
     ],
   },
@@ -466,6 +432,36 @@ export const doctorNavigation: NavGroup[] = [
       { title: "Export Data", href: "/doctor/reports/export", icon: FileText },
     ],
   },
+  {
+    label: "Incidents",
+    items: [
+      {
+        title: "Incident Log",
+        href: "/doctor/incidents/log",
+        icon: AlertTriangle,
+      },
+      {
+        title: "Case Status",
+        href: "/doctor/incidents/status",
+        icon: ClipboardCheck,
+      },
+      {
+        title: "Referrals",
+        href: "/doctor/incidents/referral",
+        icon: FileText,
+      },
+      {
+        title: "Emergency Contacts",
+        href: "/doctor/incidents/emergency_contacts",
+        icon: Users,
+      },
+      {
+        title: "Report Incident",
+        href: "/doctor/incidents",
+        icon: AlertTriangle,
+      },
+    ],
+  },
 ];
 
 export const nurseNavigation: NavGroup[] = [
@@ -485,10 +481,81 @@ export const nurseNavigation: NavGroup[] = [
     ],
   },
   {
+    label: "Staff Health",
+    items: [
+      {
+        title: "Faculty & Staff Records",
+        href: "/nurse/staffhealth/record",
+        icon: HeartPulse,
+      },
+    ],
+  },
+  {
     label: "Consultations",
     items: [
       { title: "Visit", href: "/nurse/visits", icon: Stethoscope },
       { title: "Visit History", href: "/nurse/visits/history", icon: History },
+    ],
+  },
+
+  {
+    label: "Clearances",
+    items: [
+      {
+        title: "Clearance History",
+        href: "/nurse/clearance/history",
+        icon: History,
+      },
+    ],
+  },
+  {
+    label: "Appointments",
+    items: [
+      {
+        title: "Calendar",
+        href: "/nurse/appointments/calendar",
+        icon: CalendarDays,
+      },
+      {
+        title: "My Schedule",
+        href: "/nurse/my-schedule",
+        icon: CalendarDays,
+      },
+      {
+        title: "Appointments",
+        href: "/nurse/appointments",
+        icon: ClipboardCheck,
+      },
+      {
+        title: "Reminders",
+        href: "/nurse/appointments/reminders",
+        icon: ClipboardCheck,
+      },
+    ],
+  },
+  {
+    label: "Health Programs",
+    items: [
+      {
+        title: "Health Programs",
+        href: "/nurse/healthprograms/list",
+        icon: HeartPulse,
+      },
+      {
+        title: "Participants",
+        href: "/nurse/healthprograms/participants",
+        icon: Users,
+      },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
+      {
+        title: "View Reports",
+        href: "/nurse/reports/view_only",
+        icon: BarChart3,
+      },
     ],
   },
   {
@@ -527,31 +594,6 @@ export const nurseNavigation: NavGroup[] = [
     ],
   },
   {
-    label: "Appointments",
-    items: [
-      {
-        title: "Calendar",
-        href: "/nurse/appointments/calendar",
-        icon: CalendarDays,
-      },
-      {
-        title: "My Schedule",
-        href: "/nurse/my-schedule",
-        icon: CalendarDays,
-      },
-      {
-        title: "Appointments",
-        href: "/nurse/appointments",
-        icon: ClipboardCheck,
-      },
-      {
-        title: "Reminders",
-        href: "/nurse/appointments/reminders",
-        icon: ClipboardCheck,
-      },
-    ],
-  },
-  {
     label: "Incidents",
     items: [
       {
@@ -579,51 +621,6 @@ export const nurseNavigation: NavGroup[] = [
         title: "Incident Dashboard",
         href: "/nurse/incidents",
         icon: AlertTriangle,
-      },
-    ],
-  },
-  {
-    label: "Staff Health",
-    items: [
-      {
-        title: "Faculty & Staff Records",
-        href: "/nurse/staffhealth/record",
-        icon: HeartPulse,
-      },
-    ],
-  },
-  {
-    label: "Health Programs",
-    items: [
-      {
-        title: "Health Programs",
-        href: "/nurse/healthprograms/list",
-        icon: HeartPulse,
-      },
-      {
-        title: "Participants",
-        href: "/nurse/healthprograms/participants",
-        icon: Users,
-      },
-    ],
-  },
-  {
-    label: "Clearances",
-    items: [
-      {
-        title: "Clearance History",
-        href: "/nurse/clearance/history",
-        icon: History,
-      },
-    ],
-  },
-  {
-    label: "Reports",
-    items: [
-      {
-        title: "View Reports",
-        href: "/nurse/reports/view_only",
-        icon: BarChart3,
       },
     ],
   },

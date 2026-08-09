@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search, Loader2, User, AlertTriangle, Activity, HeartPulse, MapPin } from "lucide-react"
 import { toast } from "sonner"
-import { searchRecordsAction } from "@/actions/admin/records"
+import { searchRecordsAction } from "@/actions/admin/records/search"
 import { reportIncident } from "@/actions/clinical/incidents"
 
 export default function AdminIncidentReportPage() {

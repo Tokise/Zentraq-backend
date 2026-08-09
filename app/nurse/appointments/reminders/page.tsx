@@ -1,12 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Bell } from "lucide-react"
 import { toast } from "sonner"
-import { getAppointmentRemindersAction } from "@/actions/admin/appointments-admin"
+import { getAppointmentRemindersAction } from "@/actions/admin/appointments/overview"
 
 export default function NurseAppointmentRemindersPage() {
   const [reminders, setReminders] = useState<any[]>([])

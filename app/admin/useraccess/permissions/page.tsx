@@ -10,9 +10,9 @@ import {
   removePermissionAction,
   type PermissionDTO,
   type RoleWithPermissionsDTO,
-} from "@/actions/admin/useraccess/roles";
-import { EmptyState } from "@/components/empty-state";
-import { PageHeader } from "@/components/page-header";
+} from "@/actions/admin/access/roles";
+import { EmptyState } from "@/components/common/empty-state";
+import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,

@@ -1,7 +1,7 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +14,7 @@ import {
     deleteAnnouncement,
     uploadAnnouncementImageAction,
     type AnnouncementDTO,
-} from "@/actions/admin/clinic-announcements"
+} from "@/actions/admin/announcements"
 import { Loader2, Plus, Pencil, Trash2, X, Check, ImagePlus, ImageOff } from "lucide-react"
 
 import { useSearchParams } from "next/navigation"

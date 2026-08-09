@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ import { Loader2, Award, FileCheck, X } from "lucide-react"
 import { toast } from "sonner"
 import { getClearanceQueue } from "@/actions/inventory/workflow-queries"
 import { getClearanceDetail, approveClearance, rejectClearance } from "@/actions/clinical/clearances"
-import { getClearanceCertificatesAction } from "@/actions/admin/clearance-admin"
+import { getClearanceCertificatesAction } from "@/actions/admin/clearances/overview"
 
 export default function AdminClearanceIssuePage() {
   const [clearances, setClearances] = useState<any[]>([])

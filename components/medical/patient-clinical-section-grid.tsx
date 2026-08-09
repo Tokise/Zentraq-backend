@@ -18,7 +18,7 @@ import {
   addPatientMedication,
   type PatientMedicalRecord,
 } from "@/actions/clinical/records"
-import { SensitiveField } from "@/components/sensitive-field"
+import { SensitiveField } from "@/components/common/sensitive-field"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,

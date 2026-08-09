@@ -1,12 +1,12 @@
-﻿"use client"
+"use client"
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { PageHeader } from "@/components/page-header"
-import { StatCard } from "@/components/stat-card"
-import { StatusBadge } from "@/components/status-badge"
+import { PageHeader } from "@/components/common/page-header"
+import { StatCard } from "@/components/common/stat-card"
+import { StatusBadge } from "@/components/common/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getDashboardDataAction, type DashboardConsultationDTO, type DashboardAppointmentDTO } from "@/actions/system/dashboard"
 import {
@@ -19,7 +19,7 @@ import {
   Clock,
   Stethoscope,
 } from "lucide-react"
-import { EmptyState } from "@/components/empty-state"
+import { EmptyState } from "@/components/common/empty-state"
 
 function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
   const s = status?.toLowerCase() ?? ""

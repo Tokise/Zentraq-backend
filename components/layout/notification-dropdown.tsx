@@ -22,7 +22,7 @@ import {
     deleteNotification,
     type NotificationDTO,
     type NotificationType,
-} from "@/actions/admin/notifications"
+} from "@/actions/system/notifications"
 
 const NOTIFICATION_ICONS: Record<string, any> = {
     appointment: CalendarDays,

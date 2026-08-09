@@ -1,15 +1,15 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import { createStudentAccount, resetStudentPassword, registerStudentProfile, updateStudentProfile, generateStudentId as generateStudentIdAction, lookupStudentByRfid } from "@/actions/admin/rfid-registration"
-import { PasswordStrengthInput } from "@/components/password-strength-input"
+import { createStudentAccount, resetStudentPassword, registerStudentProfile, updateStudentProfile, generateStudentId as generateStudentIdAction, lookupStudentByRfid } from "@/actions/admin/rfid/registration"
+import { PasswordStrengthInput } from "@/components/common/password-strength-input"
 import { checkPassword } from "@/lib/validation/password"
 import {
   Camera,

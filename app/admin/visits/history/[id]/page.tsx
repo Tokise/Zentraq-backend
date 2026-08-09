@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { PageHeader } from "@/components/page-header"
-import { StatusBadge } from "@/components/status-badge"
+import { PageHeader } from "@/components/common/page-header"
+import { StatusBadge } from "@/components/common/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2, ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
-import { getClinicVisitsAction } from "@/actions/admin/visits-admin"
+import { getClinicVisitsAction } from "@/actions/admin/visits/overview"
 
 function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
   const s = status?.toLowerCase() ?? ""

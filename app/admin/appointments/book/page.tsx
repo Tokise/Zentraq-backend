@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search, CalendarPlus, Loader2, User } from "lucide-react"
 import { toast } from "sonner"
-import { searchRecordsAction } from "@/actions/admin/records"
-import { createAdminAppointmentAction } from "@/actions/admin/create-appointment"
+import { searchRecordsAction } from "@/actions/admin/records/search"
+import { createAdminAppointmentAction } from "@/actions/admin/appointments/create"
 
 export default function AdminBookAppointmentPage() {
   const [query, setQuery] = useState("")
