@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table"
 import { Loader2, Search, History } from "lucide-react"
 import { toast } from "sonner"
-import { getClearanceHistoryAction } from "@/actions/admin/clearance-admin"
+import { getClearanceHistoryAction } from "@/actions/admin/clearances/overview"
 
 export default function AdminClearanceHistoryPage() {
   const [clearances, setClearances] = useState<any[]>([])

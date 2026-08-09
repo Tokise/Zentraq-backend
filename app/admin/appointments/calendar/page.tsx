@@ -1,15 +1,15 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Button } from "@/components/ui/button"
-import { StatusBadge } from "@/components/status-badge"
+import { StatusBadge } from "@/components/common/status-badge"
 import { Loader2, CalendarDays } from "lucide-react"
-import { MonthCalendar } from "@/components/month-calendar"
-import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments-admin"
+import { MonthCalendar } from "@/components/scheduling/month-calendar"
+import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments/overview"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { EmptyState } from "@/components/empty-state"
+import { EmptyState } from "@/components/common/empty-state"
 
 const STATUS_CHIP: Record<string, string> = {
   pending: "pending",

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, ListOrdered } from "lucide-react"
 import { toast } from "sonner"
-import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments-admin"
+import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments/overview"
 import { getAppointmentDetail, approveAppointment, rejectAppointment } from "@/actions/scheduling/review"
 import { evaluateAppointmentRequest } from "@/actions/scheduling/appointments"
 

@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { SensitiveField } from "@/components/sensitive-field";
+import { SensitiveField } from "@/components/common/sensitive-field";
 import {
   User,
   Mail,

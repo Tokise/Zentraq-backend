@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,24 +15,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pagination } from "@/components/pagination";
+import { Pagination } from "@/components/common/pagination";
 import { Search, Loader2, User, HeartPulse, RefreshCcw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   searchRecordsAction,
   type RecordSearchResult,
-} from "@/actions/admin/records";
+} from "@/actions/admin/records/search";
 import {
   getPatientMedicalRecord,
   type PatientMedicalRecord,
 } from "@/actions/clinical/records";
 import { MedicalRecordView } from "@/components/medical/medical-record-view";
-import { RfidSearchButton } from "@/components/rfid-search-button";
+import { RfidSearchButton } from "@/components/rfid/search-button";
 import { ConsultationDetailDialog } from "@/components/clinical/consultation-detail-dialog";
 import {
   getStudentDocumentsAction,
   type StudentDocumentRow,
-} from "@/actions/admin/records-admin";
+} from "@/actions/admin/records/resources";
 import {
   getPatientConsultationHistory,
   type KioskConsultationSummary,
@@ -40,7 +40,7 @@ import {
 import { AttachmentCarousel } from "@/components/medical/attachment-carousel";
 import {
   uploadStudentDocumentAction,
-} from "@/actions/admin/records-admin";
+} from "@/actions/admin/records/resources";
 
 // Renders the medical-record workspace for a clinical role.
 export function MedicalRecordsViewPage({

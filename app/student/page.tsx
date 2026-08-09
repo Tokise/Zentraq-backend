@@ -1,8 +1,8 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { getStudentProfileDTO, getStudentAnnouncementsAction, type StudentProfileDTO, type StudentAnnouncementDTO } from "@/actions/student/profile"

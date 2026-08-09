@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   getConsultationDetailAction,
   type ConsultationDetailRow,
-} from "@/actions/admin/visits-admin";
+} from "@/actions/admin/visits/overview";
 import {
   finalizeConsultationWorkflow,
   getClinicalWorkflowRole,

@@ -1,12 +1,12 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Megaphone } from "lucide-react"
 import { toast } from "sonner"
-import { getAnnouncementsAction } from "@/actions/admin/clinic-announcements"
+import { getAnnouncementsAction } from "@/actions/admin/announcements"
 
 export default function StudentAnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<any[]>([])

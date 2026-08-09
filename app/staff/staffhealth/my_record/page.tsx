@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ import {
   uploadStaffDocumentAction,
   getStaffDocumentsAction,
   deleteStaffDocumentAction,
-} from "@/actions/admin/staff-documents";
+} from "@/actions/admin/documents/staff";
 import { AttachmentCarousel } from "@/components/medical/attachment-carousel";
 
 export default function StaffMyRecordPage() {

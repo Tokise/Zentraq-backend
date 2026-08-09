@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table"
 import { Loader2, CalendarX } from "lucide-react"
 import { toast } from "sonner"
-import { getExpiringMedicinesAction } from "@/actions/admin/medicine-admin"
+import { getExpiringMedicinesAction } from "@/actions/admin/medicine/operations"
 
 export default function AdminMedicineExpiryPage() {
   const [items, setItems] = useState<Array<{

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 import type { StaffMedicalRecord } from "@/actions/clinical/staff-records";
-import { SensitiveField } from "@/components/sensitive-field";
+import { SensitiveField } from "@/components/common/sensitive-field";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 

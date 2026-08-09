@@ -1,12 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Calendar } from "lucide-react"
 import { toast } from "sonner"
-import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments-admin"
+import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments/overview"
 
 export default function NurseAppointmentsPage() {
   const [appointments, setAppointments] = useState<AppointmentOverviewRow[]>([])

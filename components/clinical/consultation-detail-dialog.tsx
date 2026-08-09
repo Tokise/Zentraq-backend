@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { getConsultationDetailAction, type ConsultationDetailRow } from "@/actions/admin/visits-admin";
+import { getConsultationDetailAction, type ConsultationDetailRow } from "@/actions/admin/visits/overview";
 import { toast } from "sonner";
 
 interface ConsultationDetailDialogProps {

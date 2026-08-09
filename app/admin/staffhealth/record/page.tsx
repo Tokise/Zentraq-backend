@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { searchRecordsAction } from "@/actions/admin/records";
+import { searchRecordsAction } from "@/actions/admin/records/search";
 import {
   getPatientMedicalRecord,
   type PatientMedicalRecord,
@@ -23,12 +23,12 @@ import {
 import { MedicalRecordView } from "@/components/medical/medical-record-view";
 import { StaffMedicalRecordView } from "@/components/medical/staff-medical-record-view";
 import { StaffRecordExtras } from "@/components/medical/staff-record-extras";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Pagination } from "@/components/pagination";
+import { Pagination } from "@/components/common/pagination";
 import {
   Table,
   TableBody,

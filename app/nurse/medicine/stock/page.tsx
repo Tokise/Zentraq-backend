@@ -1,10 +1,10 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { PageHeader } from "@/components/page-header"
-import { StatusBadge } from "@/components/status-badge"
-import { EmptyState } from "@/components/empty-state"
-import { Pagination } from "@/components/pagination"
+import { PageHeader } from "@/components/common/page-header"
+import { StatusBadge } from "@/components/common/status-badge"
+import { EmptyState } from "@/components/common/empty-state"
+import { Pagination } from "@/components/common/pagination"
 import { Input } from "@/components/ui/input"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,

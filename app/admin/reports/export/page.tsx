@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2, Download, FileSpreadsheet } from "lucide-react"

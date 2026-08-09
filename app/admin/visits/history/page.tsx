@@ -2,15 +2,15 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { PageHeader } from "@/components/page-header"
-import { StatusBadge } from "@/components/status-badge"
-import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/common/page-header"
+import { StatusBadge } from "@/components/common/status-badge"
+import { EmptyState } from "@/components/common/empty-state"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { Loader2, Stethoscope } from "lucide-react"
 import { toast } from "sonner"
-import { getClinicVisitsAction } from "@/actions/admin/visits-admin"
+import { getClinicVisitsAction } from "@/actions/admin/visits/overview"
 
 function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
   const s = status?.toLowerCase() ?? ""

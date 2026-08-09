@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { Loader2, History } from "lucide-react"
 import { toast } from "sonner"
-import { getDispensingLogsAction, type DispensingLogRow } from "@/actions/admin/medicine-admin"
+import { getDispensingLogsAction, type DispensingLogRow } from "@/actions/admin/medicine/operations"
 
 export default function AdminDispenseLogPage() {
   const [logs, setLogs] = useState<DispensingLogRow[]>([])
