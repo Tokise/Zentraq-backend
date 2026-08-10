@@ -238,7 +238,7 @@ export interface Consultation {
     appointment_id: string | null;
     doctor_id: string | null;
     nurse_id: string | null;
-    chief_complaint: string | null;
+    patient_complaint: string | null;
     consultation_notes: string | null;
     status: ConsultationStatus;
     created_at: string;
@@ -757,7 +757,7 @@ export interface FacultyMedicationDTO {
 export interface ConsultationDTO {
     id: string;
     visit_id: string;
-    chief_complaint: string | null;
+    patient_complaint: string | null;
     consultation_notes: string | null;
     status: ConsultationStatus;
     created_at: string;
@@ -998,7 +998,7 @@ export interface CreateConsultationInput {
     appointment_id?: string;
     doctor_id?: string;
     nurse_id?: string;
-    chief_complaint?: string;
+    patient_complaint?: string;
 }
 
 export interface CreatePrescriptionInput {
@@ -1069,7 +1069,7 @@ export interface DashboardAppointment {
 export interface DashboardConsultation {
     id: string;
     patient_name: string;
-    student_complaint: string;
+    patient_complaint: string;
     time: string;
     status: string;
 }

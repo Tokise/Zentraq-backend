@@ -57,26 +57,33 @@ export function ChartBarDefault({
         {data.length === 0 ? (
           <ChartEmptyState />
         ) : (
-          <ChartContainer className="h-[280px] w-full" config={config}>
-            <BarChart accessibilityLayer data={data} layout="vertical">
-              <CartesianGrid horizontal={false} />
-              <XAxis axisLine={false} tickLine={false} type="number" />
-              <YAxis
+          <ChartContainer className="h-[300px] w-full" config={config}>
+            <BarChart accessibilityLayer data={data}>
+              <CartesianGrid vertical={false} />
+              <XAxis
                 axisLine={false}
                 dataKey="label"
+                interval={0}
                 tickLine={false}
                 tickMargin={8}
                 type="category"
-                width={110}
+              />
+              <YAxis
+                allowDecimals={false}
+                axisLine={false}
+                tickLine={false}
+                tickMargin={8}
+                type="number"
+                width={36}
               />
               <ChartTooltip
-                content={<ChartTooltipContent hideLabel />}
+                content={<ChartTooltipContent />}
                 cursor={false}
               />
               <Bar
                 dataKey="value"
                 fill="var(--color-value)"
-                radius={[0, 6, 6, 0]}
+                radius={[6, 6, 0, 0]}
               />
             </BarChart>
           </ChartContainer>

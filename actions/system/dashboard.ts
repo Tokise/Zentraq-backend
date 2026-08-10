@@ -6,11 +6,22 @@ import { createAdminClient } from "@/utils/supabase/admin"
 export interface DashboardConsultationDTO {
   id: string
   patient_name: string
-  student_complaint: string
+  patient_complaint: string
   status: string
   created_at: string
   handled_at: string | null
   notes: string | null
+}
+
+export interface DashboardActivityDTO {
+  [key: string]: number | string
+  date: string
+  total_consultations: number
+  student_consultations: number
+  faculty_consultations: number
+  walk_in_visits: number
+  appointment_visits: number
+  rfid_visits: number
 }
 
 export interface DashboardAppointmentDTO {
@@ -34,6 +45,7 @@ export interface DashboardStatsDTO {
 export interface DashboardDataDTO {
   consultations: DashboardConsultationDTO[]
   appointments: DashboardAppointmentDTO[]
+  activity: DashboardActivityDTO[]
   stats: DashboardStatsDTO
 }
 
@@ -44,6 +56,8 @@ interface NamedPatient {
 
 interface ConsultationVisitRow {
   check_in_time: string
+  patient_type: "student" | "faculty" | "staff"
+  visit_type: string
   students: NamedPatient | NamedPatient[] | null
   faculty: NamedPatient | NamedPatient[] | null
   staff: NamedPatient | NamedPatient[] | null
@@ -51,10 +65,23 @@ interface ConsultationVisitRow {
 
 interface ConsultationQueryRow {
   id: string
-  chief_complaint: string | null
+  patient_complaint: string | null
   status: string
   created_at: string
   clinic_visits: ConsultationVisitRow | ConsultationVisitRow[] | null
+}
+
+interface ActivityQueryRow {
+  created_at: string
+  clinic_visits:
+    | Pick<ConsultationVisitRow, "check_in_time" | "patient_type" | "visit_type">
+    | Array<
+        Pick<
+          ConsultationVisitRow,
+          "check_in_time" | "patient_type" | "visit_type"
+        >
+      >
+    | null
 }
 
 interface AppointmentQueryRow {
@@ -76,6 +103,8 @@ export async function getDashboardDataAction() {
   const admin = createAdminClient()
   const dayStart = new Date()
   dayStart.setHours(0, 0, 0, 0)
+  const activityStart = new Date(dayStart)
+  activityStart.setDate(activityStart.getDate() - 89)
   let clinicAccountId: string | null = null
 
   if (actor.role !== "admin") {
@@ -99,11 +128,13 @@ export async function getDashboardDataAction() {
     .from("consultations")
     .select(`
       id,
-      chief_complaint,
+      patient_complaint,
       status,
       created_at,
       clinic_visits(
         check_in_time,
+        patient_type,
+        visit_type,
         students(first_name, last_name),
         faculty(first_name, last_name),
         staff(first_name, last_name)
@@ -113,6 +144,25 @@ export async function getDashboardDataAction() {
     .limit(50)
   if (clinicAccountId) {
     consultationQuery = consultationQuery.or(
+      `doctor_id.eq.${clinicAccountId},nurse_id.eq.${clinicAccountId}`,
+    )
+  }
+
+  let activityQuery = admin
+    .from("consultations")
+    .select(`
+      created_at,
+      clinic_visits!inner(
+        check_in_time,
+        patient_type,
+        visit_type
+      )
+    `)
+    .gte("created_at", activityStart.toISOString())
+    .order("created_at", { ascending: true })
+    .limit(2000)
+  if (clinicAccountId) {
+    activityQuery = activityQuery.or(
       `doctor_id.eq.${clinicAccountId},nurse_id.eq.${clinicAccountId}`,
     )
   }
@@ -134,10 +184,17 @@ export async function getDashboardDataAction() {
     appointmentQuery = appointmentQuery.eq("doctor_id", clinicAccountId)
   }
 
-  const [consultationResult, appointmentResult, visits, incidents] =
+  const [
+    consultationResult,
+    appointmentResult,
+    activityResult,
+    visits,
+    incidents,
+  ] =
     await Promise.all([
       consultationQuery,
       appointmentQuery,
+      activityQuery,
       admin
         .from("clinic_visits")
         .select("id", { count: "exact", head: true })
@@ -148,11 +205,16 @@ export async function getDashboardDataAction() {
         .in("status", ["open", "in-progress"]),
     ])
 
-  if (consultationResult.error || appointmentResult.error) {
+  if (
+    consultationResult.error ||
+    appointmentResult.error ||
+    activityResult.error
+  ) {
     return {
       error:
         consultationResult.error?.message ??
         appointmentResult.error?.message ??
+        activityResult.error?.message ??
         "Unable to load dashboard",
       data: null,
     }
@@ -162,8 +224,11 @@ export async function getDashboardDataAction() {
     ConsultationQueryRow[]
   const appointmentRows = (appointmentResult.data ?? []) as unknown as
     AppointmentQueryRow[]
+  const activityRows = (activityResult.data ?? []) as unknown as
+    ActivityQueryRow[]
   const consultations = consultationRows.map(toConsultationDTO)
   const appointments = appointmentRows.map(toAppointmentDTO)
+  const activity = buildActivityDTOs(activityRows)
   const assignedPatientsToday = consultationRows.filter((row) => {
     const visit = firstRelation(row.clinic_visits)
     return Boolean(visit?.check_in_time?.startsWith(dayStart.toISOString().slice(0, 10)))
@@ -174,6 +239,7 @@ export async function getDashboardDataAction() {
     data: {
       consultations,
       appointments,
+      activity,
       stats: {
         patientsToday:
           actor.role === "admin" ? (visits.count ?? 0) : assignedPatientsToday,
@@ -199,12 +265,48 @@ function toConsultationDTO(
     patient_name:
       `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() ||
       "Unknown patient",
-    student_complaint: row.chief_complaint ?? "",
+    patient_complaint: row.patient_complaint ?? "",
     status: row.status,
     created_at: row.created_at,
     handled_at: null,
     notes: null,
   }
+}
+
+// Aggregates role-scoped consultation visits into bounded daily chart totals.
+function buildActivityDTOs(rows: ActivityQueryRow[]): DashboardActivityDTO[] {
+  const days = new Map<string, DashboardActivityDTO>()
+
+  rows.forEach((row) => {
+    const visit = firstRelation(row.clinic_visits)
+    const date = (visit?.check_in_time ?? row.created_at).slice(0, 10)
+    if (!date) return
+
+    const point = days.get(date) ?? {
+      date,
+      total_consultations: 0,
+      student_consultations: 0,
+      faculty_consultations: 0,
+      walk_in_visits: 0,
+      appointment_visits: 0,
+      rfid_visits: 0,
+    }
+
+    point.total_consultations += 1
+    if (visit?.patient_type === "student") point.student_consultations += 1
+    if (visit?.patient_type === "faculty") point.faculty_consultations += 1
+
+    const visitType = visit?.visit_type.toLowerCase().replaceAll("_", "-")
+    if (visitType === "walk-in") point.walk_in_visits += 1
+    if (visitType === "appointment") point.appointment_visits += 1
+    if (visitType === "rfid") point.rfid_visits += 1
+
+    days.set(date, point)
+  })
+
+  return Array.from(days.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  )
 }
 
 // Maps one assigned appointment into the minimized dashboard contract.

@@ -3,9 +3,11 @@
 import * as React from "react"
 
 import type {
+  DashboardActivityDTO,
   DashboardAppointmentDTO,
   DashboardConsultationDTO,
 } from "@/actions/system/dashboard"
+import { clinicalActivitySeries } from "@/components/analytics/clinical-activity-series"
 import { ChartAreaInteractive } from "@/components/ui/chart-area-interactive"
 import { ChartBarDefault } from "@/components/ui/chart-bar-default"
 import { ChartPieDonutText } from "@/components/ui/chart-pie-donut-text"
@@ -13,6 +15,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
 interface ClinicalDashboardChartsProps {
+  activity: DashboardActivityDTO[]
   appointments: DashboardAppointmentDTO[]
   consultations: DashboardConsultationDTO[]
   loading: boolean
@@ -20,14 +23,11 @@ interface ClinicalDashboardChartsProps {
 
 // Renders the shared role-safe analytics section for clinic dashboards.
 export function ClinicalDashboardCharts({
+  activity,
   appointments,
   consultations,
   loading,
 }: ClinicalDashboardChartsProps) {
-  const activity = React.useMemo(
-    () => buildActivitySeries(appointments, consultations),
-    [appointments, consultations],
-  )
   const consultationStatuses = React.useMemo(
     () => buildStatusSeries(consultations.map((item) => item.status)),
     [consultations],
@@ -53,9 +53,8 @@ export function ClinicalDashboardCharts({
     <div className="space-y-4">
       <ChartAreaInteractive
         data={activity}
-        description="Authorized appointments and consultations over time."
-        primaryLabel="Consultations"
-        secondaryLabel="Appointments"
+        description="Authorized consultation volume, patient groups, and visit channels over time."
+        series={clinicalActivitySeries}
         title="Clinical Activity"
       />
       <div className="grid gap-4 lg:grid-cols-2">
@@ -76,36 +75,6 @@ export function ClinicalDashboardCharts({
         />
       </div>
     </div>
-  )
-}
-
-// Combines appointment and consultation dates into one deterministic series.
-function buildActivitySeries(
-  appointments: DashboardAppointmentDTO[],
-  consultations: DashboardConsultationDTO[],
-) {
-  const days = new Map<
-    string,
-    { date: string; primary: number; secondary: number }
-  >()
-
-  consultations.forEach((item) => {
-    const date = item.created_at.slice(0, 10)
-    if (!date) return
-    const point = days.get(date) ?? { date, primary: 0, secondary: 0 }
-    point.primary += 1
-    days.set(date, point)
-  })
-  appointments.forEach((item) => {
-    const date = item.appointment_date.slice(0, 10)
-    if (!date) return
-    const point = days.get(date) ?? { date, primary: 0, secondary: 0 }
-    point.secondary += 1
-    days.set(date, point)
-  })
-
-  return Array.from(days.values()).sort((a, b) =>
-    a.date.localeCompare(b.date),
   )
 }
 

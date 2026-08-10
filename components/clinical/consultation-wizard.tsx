@@ -10,8 +10,8 @@ import {
 } from "@/actions/admin/visits/overview";
 import {
   finalizeConsultationWorkflow,
-  getComplaintCatalog,
   getClinicalWorkflowRole,
+  getVisitReasonCatalog,
 } from "@/actions/clinical/visits";
 import {
   getMedicineCatalog,
@@ -31,6 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { SearchableCombobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -104,9 +105,9 @@ export function ConsultationWizard({
     useState<ConsultationDetailRow | null>(null);
   const [role, setRole] = useState<ClinicalWorkflowRole | null>(null);
   const [step, setStep] = useState<ConsultationWizardStep>("details");
-  const [complaintOptions, setComplaintOptions] = useState<string[]>([]);
-  const [studentComplaint, setStudentComplaint] = useState("");
-  const [customComplaint, setCustomComplaint] = useState("");
+  const [visitReasonOptions, setVisitReasonOptions] = useState<string[]>([]);
+  const [patientComplaint, setPatientComplaint] = useState("");
+  const [customPatientComplaint, setCustomPatientComplaint] = useState("");
   const [vitalsDisposition, setVitalsDisposition] = useState<
     "required" | "not_required" | ""
   >("");
@@ -132,10 +133,10 @@ export function ConsultationWizard({
   useEffect(() => {
     if (!open) return;
     async function loadWorkflow() {
-      const [detail, workflowRole, complaintCatalog] = await Promise.all([
+      const [detail, workflowRole, visitReasonCatalog] = await Promise.all([
         getConsultationDetailAction(consultationId),
         getClinicalWorkflowRole(),
-        getComplaintCatalog(),
+        getVisitReasonCatalog(),
       ]);
       if (detail.error || !detail.consultation || !workflowRole) {
         toast.error(detail.error ?? "Consultation unavailable");
@@ -144,9 +145,10 @@ export function ConsultationWizard({
       }
       setConsultation(detail.consultation);
       setRole(workflowRole);
-      setComplaintOptions(complaintCatalog.complaints);
-      setStudentComplaint(detail.consultation.chief_complaint ?? "");
-      setCustomComplaint("");
+      if (visitReasonCatalog.error) toast.error(visitReasonCatalog.error);
+      setVisitReasonOptions(visitReasonCatalog.reasons);
+      setPatientComplaint(detail.consultation.patient_complaint ?? "");
+      setCustomPatientComplaint("");
       setNotes(detail.consultation.consultation_notes ?? "");
       setStep("details");
       setVitalsDisposition("");
@@ -183,10 +185,10 @@ export function ConsultationWizard({
   );
 
   const canMakeClinicalPlan = role === "admin" || role === "doctor";
-  const resolvedComplaint =
-    studentComplaint === "__other__"
-      ? customComplaint.trim()
-      : studentComplaint.trim();
+  const resolvedPatientComplaint =
+    patientComplaint === "__other__"
+      ? customPatientComplaint.trim()
+      : patientComplaint.trim();
   const resolvedSkipReason =
     skipReasonChoice === "__other__"
       ? customSkipReason.trim()
@@ -194,8 +196,8 @@ export function ConsultationWizard({
 
   // Requires a complaint selection before the clinician advances from Visit.
   function validateVisit() {
-    if (!resolvedComplaint) {
-      toast.error("Choose or enter the student complaint.");
+    if (!resolvedPatientComplaint) {
+      toast.error("Choose or enter the visit reason.");
       return false;
     }
     return true;
@@ -283,7 +285,7 @@ export function ConsultationWizard({
     setSubmitting(true);
     const result = await finalizeConsultationWorkflow({
       consultation_id: consultation.id,
-      student_complaint: resolvedComplaint,
+      patient_complaint: resolvedPatientComplaint,
       vitals_disposition: vitalsDisposition,
       vitals_skip_reason: resolvedSkipReason || undefined,
       vitals: {
@@ -372,8 +374,7 @@ export function ConsultationWizard({
       >
         <WorkflowStep
           consultation={consultation}
-          complaintOptions={complaintOptions}
-          customComplaint={customComplaint}
+          customPatientComplaint={customPatientComplaint}
           diagnosisCode={diagnosisCode}
           diagnosisDescription={diagnosisDescription}
           followUpDate={followUpDate}
@@ -389,7 +390,7 @@ export function ConsultationWizard({
           pendingPrescription={prescription}
           prescriptions={prescriptions}
           role={role}
-          setCustomComplaint={setCustomComplaint}
+          setCustomPatientComplaint={setCustomPatientComplaint}
           setDiagnosisCode={setDiagnosisCode}
           setDiagnosisDescription={setDiagnosisDescription}
           setTreatmentFollowUpDays={setTreatmentFollowUpDays}
@@ -398,7 +399,7 @@ export function ConsultationWizard({
           setFollowUpDate={setFollowUpDate}
           setFollowUpReason={setFollowUpReason}
           setNotes={setNotes}
-          setStudentComplaint={setStudentComplaint}
+          setPatientComplaint={setPatientComplaint}
           setPendingPrescription={setPrescription}
           customSkipReason={customSkipReason}
           resolvedSkipReason={resolvedSkipReason}
@@ -407,13 +408,14 @@ export function ConsultationWizard({
           setVitals={setVitals}
           setVitalsDisposition={setVitalsDisposition}
           skipReasonChoice={skipReasonChoice}
-          studentComplaint={studentComplaint}
+          patientComplaint={patientComplaint}
           step={step}
           treatmentFollowUpDays={treatmentFollowUpDays}
           treatmentInstructions={treatmentInstructions}
           treatmentPlan={treatmentPlan}
           vitals={vitals}
           vitalsDisposition={vitalsDisposition}
+          visitReasonOptions={visitReasonOptions}
         />
       </ConsultationWizardShell>
 
@@ -455,11 +457,11 @@ interface WorkflowStepProps {
   consultation: ConsultationDetailRow;
   step: ConsultationWizardStep;
   role: ClinicalWorkflowRole;
-  complaintOptions: string[];
-  studentComplaint: string;
-  setStudentComplaint: (value: string) => void;
-  customComplaint: string;
-  setCustomComplaint: (value: string) => void;
+  visitReasonOptions: string[];
+  patientComplaint: string;
+  setPatientComplaint: (value: string) => void;
+  customPatientComplaint: string;
+  setCustomPatientComplaint: (value: string) => void;
   vitalsDisposition: "required" | "not_required" | "";
   setVitalsDisposition: (value: "required" | "not_required") => void;
   skipReasonChoice: string;
@@ -496,65 +498,59 @@ interface WorkflowStepProps {
 // Renders the current client-only workflow step before the final review.
 function WorkflowStep(props: WorkflowStepProps) {
   if (props.step === "details") {
-    const complaintLabel =
-      props.consultation.patient_type === "student"
-        ? "Student complaint"
-        : "Patient complaint";
-    const availableComplaints = Array.from(
+    const availableReasons = Array.from(
       new Set(
         [
-          ...props.complaintOptions,
-          props.studentComplaint === "__other__"
+          ...props.visitReasonOptions,
+          props.patientComplaint === "__other__"
             ? ""
-            : props.studentComplaint,
+            : props.patientComplaint,
         ].filter(Boolean),
       ),
     );
+    const reasonOptions = [
+      ...availableReasons.map((reason) => ({ label: reason, value: reason })),
+      { label: "Other", value: "__other__" },
+    ];
 
     return (
       <div className="space-y-5">
         <div>
           <h3 className="font-semibold">Visit details</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Select the concern that brought the patient to the clinic.
+            Select the reason that brought the patient to the clinic.
           </p>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="student-complaint">{complaintLabel}</Label>
-          <Select
-            onValueChange={(value) => {
-              if (value) props.setStudentComplaint(value);
-            }}
-            value={props.studentComplaint}
-          >
-            <SelectTrigger className="w-full" id="student-complaint">
-              <SelectValue placeholder={`Select ${complaintLabel.toLowerCase()}`} />
-            </SelectTrigger>
-            <SelectContent>
-              {availableComplaints.map((complaint) => (
-                <SelectItem key={complaint} value={complaint}>
-                  {complaint}
-                </SelectItem>
-              ))}
-              <SelectItem value="__other__">Other complaint</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label>Visit reason</Label>
+          <SearchableCombobox
+            ariaLabel="Visit reason"
+            emptyText="No visit reasons match your search. Choose Other to enter one."
+            onValueChange={props.setPatientComplaint}
+            options={reasonOptions}
+            placeholder="Select a visit reason"
+            searchPlaceholder="Search visit reasons"
+            value={props.patientComplaint}
+          />
         </div>
-        {props.studentComplaint === "__other__" && (
+        {props.patientComplaint === "__other__" && (
           <div className="space-y-2">
-            <Label htmlFor="custom-student-complaint">
-              Enter {complaintLabel.toLowerCase()}
+            <Label htmlFor="custom-patient-complaint">
+              Other visit reason
             </Label>
-            <Textarea
-              id="custom-student-complaint"
-              maxLength={1000}
+            <Input
+              id="custom-patient-complaint"
+              maxLength={120}
               onChange={(event) =>
-                props.setCustomComplaint(event.target.value)
+                props.setCustomPatientComplaint(event.target.value)
               }
-              placeholder="Describe the patient concern"
-              rows={4}
-              value={props.customComplaint}
+              placeholder="Enter a concise reason"
+              value={props.customPatientComplaint}
             />
+            <p className="text-xs text-muted-foreground">
+              Use a short clinical category. Do not include names or other
+              identifying details.
+            </p>
           </div>
         )}
         <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
@@ -882,14 +878,12 @@ function ReviewStep(props: WorkflowStepProps) {
       <div className="space-y-4 rounded-lg border border-border p-4 text-sm">
         <div>
           <p className="text-xs text-muted-foreground">
-            {props.consultation.patient_type === "student"
-              ? "Student complaint"
-              : "Patient complaint"}
+            Visit reason
           </p>
           <p className="mt-1 font-medium">
-            {props.studentComplaint === "__other__"
-              ? props.customComplaint || "No complaint entered"
-              : props.studentComplaint || "No complaint selected"}
+            {props.patientComplaint === "__other__"
+              ? props.customPatientComplaint || "No visit reason entered"
+              : props.patientComplaint || "No visit reason selected"}
           </p>
         </div>
         <Separator />

@@ -88,16 +88,16 @@ type QueueQueryRow = {
 type ConsultationHistoryQueryRow = {
   check_in_time: string;
   visit_type: string;
-  consultations:
+      consultations:
     | {
         id: string;
-        chief_complaint: string | null;
+        patient_complaint: string | null;
         consultation_notes: string | null;
         status: string | null;
       }
     | Array<{
         id: string;
-        chief_complaint: string | null;
+        patient_complaint: string | null;
         consultation_notes: string | null;
         status: string | null;
       }>
@@ -324,7 +324,7 @@ export async function getKioskStudentProfile(rfidUid: string) {
 export async function createConsultation(
   profileId: string,
   patientName: string,
-  complaint: string,
+  patientComplaint: string,
 ) {
   try {
     const auth = await requireClinicStaff();
@@ -351,7 +351,7 @@ export async function createConsultation(
       .from("consultations")
       .insert({
         visit_id: visit.id,
-        chief_complaint: complaint,
+        patient_complaint: patientComplaint,
         doctor_id: account?.role === "doctor" ? account.id : null,
         nurse_id: account?.role === "nurse" ? account.id : null,
         status: "in-progress",
@@ -364,7 +364,7 @@ export async function createConsultation(
       userId: auth.user.id,
       email: auth.user.email,
       resource: data?.id,
-      details: { patientName, complaint },
+      details: { patientName, patientComplaint },
     });
     revalidatePath("/consultations");
     return { success: true, data };
@@ -377,7 +377,7 @@ export interface KioskConsultationSummary {
   id: string;
   checkedInAt: string;
   visitType: string;
-  complaint: string | null;
+  patient_complaint: string | null;
   status: string | null;
   notes: string | null;
 }
@@ -403,7 +403,7 @@ export async function getPatientConsultationHistory(
   const visitsQuery = admin
     .from("clinic_visits")
     .select(
-      "id, check_in_time, visit_type, consultations(id, chief_complaint, consultation_notes, status)",
+      "id, check_in_time, visit_type, consultations(id, patient_complaint, consultation_notes, status)",
     )
     .order("check_in_time", { ascending: false })
     .limit(10);
@@ -436,7 +436,7 @@ export async function getPatientConsultationHistory(
       id: consultation.id,
       checkedInAt: visit.check_in_time,
       visitType: visit.visit_type,
-      complaint: consultation.chief_complaint ?? null,
+      patient_complaint: consultation.patient_complaint ?? null,
       status: consultation.status ?? null,
       notes: consultation.consultation_notes ?? null,
     }));

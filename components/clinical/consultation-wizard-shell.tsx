@@ -10,7 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
 export type ClinicalWorkflowRole = "admin" | "doctor" | "nurse"
@@ -103,9 +108,12 @@ export function ConsultationWizardShell({
               </TabsTrigger>
             ))}
           </TabsList>
+          <TabsContent value={step}>
+            <section className="min-h-72 border-y border-border py-5">
+              {children}
+            </section>
+          </TabsContent>
         </Tabs>
-
-        <section className="min-h-72 border-y border-border py-5">{children}</section>
 
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
           {index > 0 ? (

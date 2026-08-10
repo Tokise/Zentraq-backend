@@ -225,7 +225,7 @@ export function toConsultationDTO(
     return {
         id: consultation.id,
         visit_id: consultation.visit_id,
-        chief_complaint: consultation.chief_complaint,
+        patient_complaint: consultation.patient_complaint,
         consultation_notes: consultation.consultation_notes,
         status: consultation.status,
         created_at: consultation.created_at,

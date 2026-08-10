@@ -175,9 +175,11 @@ function DataTablePagination({
   onPageSizeChange,
   className,
 }: DataTablePaginationProps) {
-  if (totalPages <= 1 && !onPageSizeChange) return null
-
-  const safePage = Math.min(Math.max(currentPage, 1), Math.max(totalPages, 1))
+  const effectiveTotalPages = Math.max(totalPages, 1)
+  const safePage = Math.min(
+    Math.max(currentPage, 1),
+    effectiveTotalPages,
+  )
   const startItem = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1
   const endItem = Math.min(safePage * pageSize, totalItems)
 
@@ -229,7 +231,8 @@ function DataTablePagination({
               <ChevronLeftIcon className="size-4" />
             </Button>
           </PaginationItem>
-          {generatePageNumbers(safePage, totalPages).map((page, index) => (
+          {generatePageNumbers(safePage, effectiveTotalPages).map(
+            (page, index) => (
             <PaginationItem key={page === "..." ? `ellipsis-${index}` : page}>
               {page === "..." ? (
                 <PaginationEllipsis />
@@ -246,11 +249,12 @@ function DataTablePagination({
                 </Button>
               )}
             </PaginationItem>
-          ))}
+            ),
+          )}
           <PaginationItem>
             <Button
               aria-label="Next page"
-              disabled={safePage >= totalPages}
+              disabled={safePage >= effectiveTotalPages}
               onClick={() => onPageChange(safePage + 1)}
               size="icon-sm"
               type="button"

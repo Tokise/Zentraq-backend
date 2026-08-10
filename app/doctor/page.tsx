@@ -5,7 +5,12 @@ import { PageHeader } from "@/components/common/page-header"
 import { StatCard } from "@/components/common/stat-card"
 import { StatusBadge } from "@/components/common/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getDashboardDataAction, type DashboardConsultationDTO, type DashboardAppointmentDTO } from "@/actions/system/dashboard"
+import {
+  getDashboardDataAction,
+  type DashboardActivityDTO,
+  type DashboardAppointmentDTO,
+  type DashboardConsultationDTO,
+} from "@/actions/system/dashboard"
 import {
   Users,
   CalendarDays,
@@ -47,6 +52,7 @@ function formatTime(iso: string): string {
 export default function DoctorDashboardPage() {
   const [consultations, setConsultations] = useState<DashboardConsultationDTO[]>([])
   const [appointments, setAppointments] = useState<DashboardAppointmentDTO[]>([])
+  const [activity, setActivity] = useState<DashboardActivityDTO[]>([])
   const [stats, setStats] = useState({
     patientsToday: 0,
     consultations: 0,
@@ -60,6 +66,7 @@ export default function DoctorDashboardPage() {
       if (result.data) {
         setConsultations(result.data.consultations)
         setAppointments(result.data.appointments)
+        setActivity(result.data.activity)
         setStats({
           patientsToday: result.data.stats.patientsToday,
           consultations: result.data.stats.consultations,
@@ -74,7 +81,8 @@ export default function DoctorDashboardPage() {
   }, [])
 
   useEffect(() => {
-    fetchData()
+    const initialLoad = window.setTimeout(() => void fetchData(), 0)
+    return () => window.clearTimeout(initialLoad)
   }, [fetchData])
 
   const todayAppointments = useMemo(() => {
@@ -163,6 +171,7 @@ export default function DoctorDashboardPage() {
           <p className="text-xs text-muted-foreground">Assigned clinical activity</p>
         </div>
         <ClinicalDashboardCharts
+          activity={activity}
           appointments={appointments}
           consultations={consultations}
           loading={loading}
@@ -176,7 +185,7 @@ export default function DoctorDashboardPage() {
           <CardHeader className="border-b border-border pb-3">
             <CardTitle className="flex items-center gap-2 text-sm font-medium">
               <CalendarDays className="size-4 text-muted-foreground" />
-              Today's Schedule
+              Today&apos;s Schedule
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -240,7 +249,7 @@ export default function DoctorDashboardPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{c.patient_name || "Patient"}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {c.student_complaint || "No complaint"}
+                        {c.patient_complaint || "No visit reason"}
                       </p>
                     </div>
                     <StatusBadge status={getStatusVariant(c.status)}>{formatStatus(c.status)}</StatusBadge>
