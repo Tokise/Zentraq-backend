@@ -95,7 +95,7 @@ export const CONSULTATION_COLUMNS = `
   appointment_id,
   doctor_id,
   nurse_id,
-  chief_complaint,
+  patient_complaint,
   consultation_notes,
   status,
   created_at,

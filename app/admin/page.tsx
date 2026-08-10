@@ -5,7 +5,12 @@ import { PageHeader } from "@/components/common/page-header"
 import { StatCard } from "@/components/common/stat-card"
 import { StatusBadge } from "@/components/common/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { getDashboardDataAction, type DashboardConsultationDTO, type DashboardAppointmentDTO } from "@/actions/system/dashboard"
+import {
+  getDashboardDataAction,
+  type DashboardActivityDTO,
+  type DashboardAppointmentDTO,
+  type DashboardConsultationDTO,
+} from "@/actions/system/dashboard"
 import {
   Users,
   CalendarDays,
@@ -47,6 +52,7 @@ function formatTime(iso: string): string {
 export default function AdminDashboardPage() {
   const [consultations, setConsultations] = useState<DashboardConsultationDTO[]>([])
   const [appointments, setAppointments] = useState<DashboardAppointmentDTO[]>([])
+  const [activity, setActivity] = useState<DashboardActivityDTO[]>([])
   const [stats, setStats] = useState({
     patientsToday: 0,
     consultations: 0,
@@ -61,6 +67,7 @@ export default function AdminDashboardPage() {
       if (result.data) {
         setConsultations(result.data.consultations)
         setAppointments(result.data.appointments)
+        setActivity(result.data.activity)
         setStats({
           patientsToday: result.data.stats.patientsToday,
           consultations: result.data.stats.consultations,
@@ -76,7 +83,8 @@ export default function AdminDashboardPage() {
   }, [])
 
   useEffect(() => {
-    fetchData()
+    const initialLoad = window.setTimeout(() => void fetchData(), 0)
+    return () => window.clearTimeout(initialLoad)
   }, [fetchData])
 
   const totalPatients = useMemo(() => {
@@ -176,6 +184,7 @@ export default function AdminDashboardPage() {
           <p className="text-xs text-muted-foreground">Real-time summary</p>
         </div>
         <ClinicalDashboardCharts
+          activity={activity}
           appointments={appointments}
           consultations={consultations}
           loading={loading}
@@ -261,7 +270,7 @@ export default function AdminDashboardPage() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{c.patient_name || "Patient"}</p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {c.student_complaint || "No complaint"} · {formatTime(c.created_at)}
+                          {c.patient_complaint || "No visit reason"} · {formatTime(c.created_at)}
                         </p>
                       </div>
                       <StatusBadge status={getStatusVariant(c.status)}>{formatStatus(c.status)}</StatusBadge>

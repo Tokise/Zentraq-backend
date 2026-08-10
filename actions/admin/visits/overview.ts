@@ -5,6 +5,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 
 type StaffRole = "admin" | "doctor" | "nurse";
 
+// Returns the authenticated actor when they hold one of the allowed clinic roles.
 async function staff(roles: readonly StaffRole[]) {
   const actor = await getActionActor();
   return actor && hasAnyRole(actor, roles) ? actor : null;
@@ -12,7 +13,7 @@ async function staff(roles: readonly StaffRole[]) {
 
 export interface ClinicVisitRow {
   id: string;
-  patient_type: "student" | "faculty";
+  patient_type: "student" | "faculty" | "staff";
   patient_name: string | null;
   visit_type: string;
   check_in_time: string;
@@ -21,11 +22,34 @@ export interface ClinicVisitRow {
   consultation_count: number;
 }
 
+interface ClinicVisitQueryRow {
+  id: string;
+  patient_type: "student" | "faculty" | "staff";
+  visit_type: string;
+  check_in_time: string;
+  check_out_time: string | null;
+  status: string;
+  students:
+    | Array<{ first_name: string; last_name: string; student_number: string }>
+    | { first_name: string; last_name: string; student_number: string }
+    | null;
+  faculty:
+    | Array<{ first_name: string; last_name: string; employee_number: string }>
+    | { first_name: string; last_name: string; employee_number: string }
+    | null;
+  staff:
+    | Array<{ first_name: string; last_name: string; employee_number: string }>
+    | { first_name: string; last_name: string; employee_number: string }
+    | null;
+  consultations: Array<{ id: string }> | { id: string } | null;
+}
+
+// Returns clinic-wide visit rows for the administrator workspace.
 export async function getClinicVisitsAction(params?: {
   status?: string;
   searchQuery?: string;
 }): Promise<{ error: string | null; visits: ClinicVisitRow[] }> {
-  const actor = await staff(["admin", "doctor", "nurse"]);
+  const actor = await staff(["admin"]);
   if (!actor) return { error: "Access denied", visits: [] as ClinicVisitRow[] };
 
   const admin = createAdminClient();
@@ -36,6 +60,7 @@ export async function getClinicVisitsAction(params?: {
       id, patient_type, visit_type, check_in_time, check_out_time, status,
       students(first_name, last_name, student_number),
       faculty(first_name, last_name, employee_number),
+      staff(first_name, last_name, employee_number),
       consultations(id)
     `,
     )
@@ -49,14 +74,16 @@ export async function getClinicVisitsAction(params?: {
   const { data, error } = await query;
   if (error) return { error: error.message, visits: [] as ClinicVisitRow[] };
 
-  const visits: ClinicVisitRow[] = (data ?? []).map((row: any) => {
-    const student = Array.isArray(row.students)
-      ? row.students[0]
-      : row.students;
-    const faculty = Array.isArray(row.faculty) ? row.faculty[0] : row.faculty;
+  const rows = (data ?? []) as unknown as ClinicVisitQueryRow[];
+  const visits: ClinicVisitRow[] = rows.map((row) => {
+    const student = firstRelation(row.students);
+    const faculty = firstRelation(row.faculty);
+    const staffProfile = firstRelation(row.staff);
     const consultations = Array.isArray(row.consultations)
       ? row.consultations
-      : [];
+      : row.consultations
+        ? [row.consultations]
+        : [];
     return {
       id: row.id,
       patient_type: row.patient_type,
@@ -64,7 +91,9 @@ export async function getClinicVisitsAction(params?: {
         ? `${student.first_name} ${student.last_name} (${student.student_number})`
         : faculty
           ? `${faculty.first_name} ${faculty.last_name} (${faculty.employee_number})`
-          : null,
+          : staffProfile
+            ? `${staffProfile.first_name} ${staffProfile.last_name} (${staffProfile.employee_number})`
+            : null,
       visit_type: row.visit_type,
       check_in_time: row.check_in_time,
       check_out_time: row.check_out_time,
@@ -80,7 +109,7 @@ export interface ConsultationDetailRow {
   id: string;
   patient_type: "student" | "faculty" | "staff";
   patient_name: string | null;
-  chief_complaint: string | null;
+  patient_complaint: string | null;
   consultation_notes: string | null;
   vitals_disposition: "not_assessed" | "required" | "not_required" | "recorded";
   vitals_skip_reason: string | null;
@@ -122,6 +151,52 @@ export interface ConsultationDetailRow {
   }>;
 }
 
+type RelatedValue<T> = T | T[] | null;
+
+interface PatientRelation {
+  first_name: string;
+  last_name: string;
+  student_number?: string;
+  employee_number?: string;
+}
+
+interface DetailVisitRelation {
+  patient_type: "student" | "faculty" | "staff";
+  students: RelatedValue<PatientRelation>;
+  faculty: RelatedValue<PatientRelation>;
+  staff: RelatedValue<PatientRelation>;
+}
+
+interface PrescriptionQueryRow {
+  id: string;
+  dosage: string | null;
+  status: string;
+  quantity: number | null;
+  medicines: RelatedValue<{
+    generic_name: string;
+    brand_name: string | null;
+  }>;
+}
+
+interface ConsultationDetailQueryRow {
+  id: string;
+  patient_complaint: string | null;
+  consultation_notes: string | null;
+  vitals_disposition: ConsultationDetailRow["vitals_disposition"] | null;
+  vitals_skip_reason: string | null;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+  clinic_visits: RelatedValue<DetailVisitRelation>;
+  doctor: RelatedValue<{ display_name: string | null }>;
+  nurse: RelatedValue<{ display_name: string | null }>;
+  triage_assessments: RelatedValue<NonNullable<ConsultationDetailRow["triage"]>>;
+  diagnoses: ConsultationDetailRow["diagnoses"] | null;
+  treatments: ConsultationDetailRow["treatments"] | null;
+  prescriptions: PrescriptionQueryRow[] | null;
+}
+
+// Returns one consultation after enforcing clinician assignment server-side.
 export async function getConsultationDetailAction(
   consultationId: string,
 ): Promise<{
@@ -158,7 +233,7 @@ export async function getConsultationDetailAction(
       ),
       doctor:clinic_accounts!consultations_doctor_id_fkey(display_name),
       nurse:clinic_accounts!consultations_nurse_id_fkey(display_name),
-      chief_complaint,
+      patient_complaint,
       consultation_notes,
       vitals_disposition,
       vitals_skip_reason,
@@ -184,24 +259,17 @@ export async function getConsultationDetailAction(
   if (error) return { error: error.message, consultation: null };
   if (!data) return { error: null, consultation: null };
 
-  const visit: any = Array.isArray(data.clinic_visits)
-    ? data.clinic_visits[0]
-    : data.clinic_visits;
-  const student =
-    visit &&
-    (Array.isArray(visit.students) ? visit.students[0] : visit.students);
-  const faculty =
-    visit && (Array.isArray(visit.faculty) ? visit.faculty[0] : visit.faculty);
-  const staffProfile =
-    visit && (Array.isArray(visit.staff) ? visit.staff[0] : visit.staff);
-  const doctor: any = Array.isArray(data.doctor) ? data.doctor[0] : data.doctor;
-  const nurse: any = Array.isArray(data.nurse) ? data.nurse[0] : data.nurse;
-  const triageRaw: any = Array.isArray(data.triage_assessments)
-    ? data.triage_assessments[0]
-    : data.triage_assessments;
+  const detail = data as unknown as ConsultationDetailQueryRow;
+  const visit = firstRelation(detail.clinic_visits);
+  const student = firstRelation(visit?.students);
+  const faculty = firstRelation(visit?.faculty);
+  const staffProfile = firstRelation(visit?.staff);
+  const doctor = firstRelation(detail.doctor);
+  const nurse = firstRelation(detail.nurse);
+  const triageRaw = firstRelation(detail.triage_assessments);
 
   const consultation: ConsultationDetailRow = {
-    id: data.id,
+    id: detail.id,
     patient_type: visit?.patient_type ?? "student",
     patient_name: student
       ? `${student.first_name} ${student.last_name} (${student.student_number})`
@@ -210,13 +278,13 @@ export async function getConsultationDetailAction(
         : staffProfile
           ? `${staffProfile.first_name} ${staffProfile.last_name} (${staffProfile.employee_number})`
         : null,
-    chief_complaint: data.chief_complaint,
-    consultation_notes: data.consultation_notes,
-    vitals_disposition: data.vitals_disposition ?? "not_assessed",
-    vitals_skip_reason: data.vitals_skip_reason ?? null,
-    status: data.status,
-    created_at: data.created_at,
-    completed_at: data.completed_at,
+    patient_complaint: detail.patient_complaint,
+    consultation_notes: detail.consultation_notes,
+    vitals_disposition: detail.vitals_disposition ?? "not_assessed",
+    vitals_skip_reason: detail.vitals_skip_reason ?? null,
+    status: detail.status,
+    created_at: detail.created_at,
+    completed_at: detail.completed_at,
     doctor_name: doctor?.display_name ?? null,
     nurse_name: nurse?.display_name ?? null,
     triage: triageRaw
@@ -233,30 +301,28 @@ export async function getConsultationDetailAction(
           notes: triageRaw.notes,
         }
       : null,
-    diagnoses: (data.diagnoses ?? []).map((d: any) => ({
-      id: d.id,
-      icd10_code: d.icd10_code,
-      description: d.description,
-      is_primary: d.is_primary,
+    diagnoses: (detail.diagnoses ?? []).map((diagnosis) => ({
+      id: diagnosis.id,
+      icd10_code: diagnosis.icd10_code,
+      description: diagnosis.description,
+      is_primary: diagnosis.is_primary,
     })),
-    treatments: (data.treatments ?? []).map((t: any) => ({
-      id: t.id,
-      treatment_plan: t.treatment_plan,
-      instructions: t.instructions,
-      follow_up_days: t.follow_up_days,
+    treatments: (detail.treatments ?? []).map((treatment) => ({
+      id: treatment.id,
+      treatment_plan: treatment.treatment_plan,
+      instructions: treatment.instructions,
+      follow_up_days: treatment.follow_up_days,
     })),
-    prescriptions: (data.prescriptions ?? []).map((p: any) => {
-      const medicine = Array.isArray(p.medicines)
-        ? p.medicines[0]
-        : p.medicines;
+    prescriptions: (detail.prescriptions ?? []).map((prescription) => {
+      const medicine = firstRelation(prescription.medicines);
       return {
-        id: p.id,
+        id: prescription.id,
         medicine_name: medicine
           ? `${medicine.generic_name}${medicine.brand_name ? ` (${medicine.brand_name})` : ""}`
           : null,
-        dosage: p.dosage,
-        status: p.status,
-        quantity: p.quantity,
+        dosage: prescription.dosage,
+        status: prescription.status,
+        quantity: prescription.quantity,
       };
     }),
   };
@@ -264,6 +330,7 @@ export async function getConsultationDetailAction(
   return { error: null, consultation };
 }
 
+// Keeps the legacy notes endpoint read-only because final review owns outcome notes.
 export async function updateConsultationNotesAction(
   consultationId: string,
   notes: string,
@@ -271,4 +338,10 @@ export async function updateConsultationNotesAction(
   void consultationId;
   void notes;
   return { error: "Outcome notes are saved from the final consultation review." };
+}
+
+// Normalizes Supabase to-one relationships returned as an object or an array.
+function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 }

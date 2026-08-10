@@ -13,6 +13,7 @@ import {
   type DailyConsultation,
   type DispensingSummary,
 } from "@/actions/reports/analytics"
+import { clinicalActivitySeries } from "@/components/analytics/clinical-activity-series"
 import { PageHeader } from "@/components/common/page-header"
 import { StatCard } from "@/components/common/stat-card"
 import { ChartAreaInteractive } from "@/components/ui/chart-area-interactive"
@@ -117,9 +118,8 @@ export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
 
       <ChartAreaInteractive
         data={reportData.activity}
-        description="Daily consultations compared with appointment-based visits."
-        primaryLabel="Consultations"
-        secondaryLabel="Appointment visits"
+        description="Daily consultation volume, patient groups, and visit channels."
+        series={clinicalActivitySeries}
         title="Clinical Activity"
       />
 
@@ -132,8 +132,8 @@ export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
         />
         <ChartBarDefault
           data={reportData.complaints}
-          description="Most frequently recorded patient complaints."
-          title="Top Complaints"
+          description="Most frequently recorded visit reasons."
+          title="Top Visit Reasons"
           valueLabel="Occurrences"
         />
         <ChartPieDonutText
@@ -188,8 +188,12 @@ function buildReportChartData(
   return {
     activity: chronological.map((item) => ({
       date: item.consultation_date,
-      primary: item.total_consultations,
-      secondary: item.appointment_visits,
+      total_consultations: item.total_consultations,
+      student_consultations: item.student_consultations,
+      faculty_consultations: item.faculty_consultations,
+      walk_in_visits: item.walk_in_visits,
+      appointment_visits: item.appointment_visits,
+      rfid_visits: item.rfid_visits,
     })),
     trend: chronological.map((item) => ({
       label: formatShortDate(item.consultation_date),

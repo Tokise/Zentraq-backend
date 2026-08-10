@@ -19,6 +19,7 @@ interface ConsultationDetailDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// Displays one role-authorized consultation in a reusable detail dialog.
 export function ConsultationDetailDialog({
   consultationId,
   open,
@@ -29,20 +30,38 @@ export function ConsultationDetailDialog({
 
   useEffect(() => {
     if (!open || !consultationId) return;
-    setLoading(true);
-    setConsultation(null);
-    getConsultationDetailAction(consultationId)
-      .then((res) => {
-        if (res.error) {
-          toast.error(res.error);
-        } else if (res.consultation) {
-          setConsultation(res.consultation);
-        } else {
-          toast.error("Consultation not found");
-        }
-      })
-      .catch((err) => toast.error(err.message || "Failed to load consultation"))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    const initialLoad = window.setTimeout(() => {
+      setLoading(true);
+      setConsultation(null);
+      void getConsultationDetailAction(consultationId)
+        .then((res) => {
+          if (cancelled) return;
+          if (res.error) {
+            toast.error(res.error);
+          } else if (res.consultation) {
+            setConsultation(res.consultation);
+          } else {
+            toast.error("Consultation not found");
+          }
+        })
+        .catch((error: unknown) => {
+          if (cancelled) return;
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to load consultation",
+          );
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(initialLoad);
+    };
   }, [consultationId, open]);
 
   return (
@@ -99,14 +118,14 @@ export function ConsultationDetailDialog({
               )}
             </div>
 
-            {/* Patient Complaint */}
+            {/* Visit reason */}
             <section className="rounded-lg border border-border p-4">
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <FileText className="size-4 text-primary" />
-                Patient Complaint
+                Visit reason
               </h3>
               <p className="text-sm text-foreground">
-                {consultation.chief_complaint || "No complaint recorded"}
+                {consultation.patient_complaint || "No visit reason recorded"}
               </p>
             </section>
 

@@ -2222,7 +2222,7 @@ erDiagram
 | `appointment_id` | uuid | FK → appointments.id, nullable | If from appointment |
 | `doctor_id` | uuid | FK → clinic_accounts.id | Doctor |
 | `nurse_id` | uuid | FK → clinic_accounts.id | Nurse (triage) |
-| `chief_complaint` | text | | Presenting complaint |
+| `patient_complaint` | text | | Clinician-facing visit reason |
 | `consultation_notes` | text | | Medical notes (masked) |
 | `status` | text | DEFAULT 'in-progress' | `in-progress`, `completed` |
 | `created_at` | timestamptz | DEFAULT now() | Creation |

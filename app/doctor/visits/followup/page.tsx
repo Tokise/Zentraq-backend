@@ -3,24 +3,43 @@
 import { useState, useEffect, useCallback } from "react"
 import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DataTablePagination,
+  useTablePagination,
+} from "@/components/ui/pagination"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import { Loader2, Stethoscope, CalendarClock } from "lucide-react"
+import { Loader2, CalendarClock } from "lucide-react"
 import { toast } from "sonner"
-import { getConsultationQueue } from "@/actions/inventory/workflow-queries"
-import { getConsultationDetailAction } from "@/actions/admin/visits/overview"
+import {
+  getConsultationQueue,
+  type QueueConsultation,
+} from "@/actions/inventory/workflow-queries"
+import {
+  getConsultationDetailAction,
+  type ConsultationDetailRow,
+} from "@/actions/admin/visits/overview"
 
+// Renders the doctor's follow-up scheduling workspace.
 export default function DoctorVisitFollowupPage() {
-  const [consultations, setConsultations] = useState<any[]>([])
+  const [consultations, setConsultations] = useState<QueueConsultation[]>([])
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState<any>(null)
+  const [selected, setSelected] = useState<ConsultationDetailRow | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [followUpDate, setFollowUpDate] = useState("")
   const [followUpNotes, setFollowUpNotes] = useState("")
   const [processing, setProcessing] = useState(false)
+  const pagination = useTablePagination(consultations)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -32,15 +51,20 @@ export default function DoctorVisitFollowupPage() {
       } else {
         setConsultations(res.consultations)
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load consultations")
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to load consultations",
+      )
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchData()
+    const initialLoad = window.setTimeout(() => void fetchData(), 0)
+    return () => window.clearTimeout(initialLoad)
   }, [fetchData])
 
   const openDetail = async (id: string) => {
@@ -76,7 +100,10 @@ export default function DoctorVisitFollowupPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Follow-up Visits" description="Schedule and manage patient follow-ups." />
+      <PageHeader
+        description="Schedule and manage patient follow-ups."
+        title="Follow-up Visits"
+      />
 
       <Card className="shadow-sm">
         <CardContent className="p-0">
@@ -87,38 +114,60 @@ export default function DoctorVisitFollowupPage() {
           ) : consultations.length === 0 ? (
             <div className="py-16 text-center">
               <CalendarClock className="size-8 text-zinc-300 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No consultations to follow up.</p>
+              <p className="text-sm text-muted-foreground">
+                No consultations to follow up.
+              </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Patient</th>
-                    <th className="px-4 py-3 font-medium">Complaint</th>
-                    <th className="px-4 py-3 font-medium">Last Visit</th>
-                    <th className="px-4 py-3 text-right font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {consultations.map((c) => (
-                    <tr key={c.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-medium">{c.patient_name}</td>
-                      <td className="px-4 py-3 max-w-[250px] truncate">{c.complaint || "—"}</td>
-                      <td className="px-4 py-3 text-zinc-500">
-                        {new Date(c.check_in_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openDetail(c.id)}>
-                          Schedule Follow-up
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Visit reason</TableHead>
+                  <TableHead>Last visit</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pagination.paginatedItems.map((consultation) => (
+                  <TableRow key={consultation.id}>
+                    <TableCell className="font-medium">
+                      {consultation.patient_name}
+                    </TableCell>
+                    <TableCell className="max-w-[250px] truncate">
+                      {consultation.patient_complaint || "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(
+                        consultation.check_in_time,
+                      ).toLocaleDateString("en-US", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        onClick={() => openDetail(consultation.id)}
+                        size="sm"
+                        variant="outline"
+                      >
+                        Schedule Follow-up
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
+          <DataTablePagination
+            className="px-4 pb-4"
+            currentPage={pagination.currentPage}
+            onPageChange={pagination.setCurrentPage}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            totalPages={pagination.totalPages}
+          />
         </CardContent>
       </Card>
 
@@ -135,7 +184,9 @@ export default function DoctorVisitFollowupPage() {
             <div className="space-y-4">
               <div className="rounded-lg border border-zinc-200 p-3">
                 <p className="text-sm font-medium">{selected.patient_name}</p>
-                <p className="text-xs text-zinc-500 mt-1">{selected.chief_complaint || "No complaint"}</p>
+                <p className="mt-1 text-xs text-zinc-500">
+                  {selected.patient_complaint || "No visit reason"}
+                </p>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium">Follow-up Date *</label>

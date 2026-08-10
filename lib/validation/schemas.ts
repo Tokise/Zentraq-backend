@@ -180,11 +180,11 @@ export const CreateConsultationSchema = z.object({
     appointment_id: UUIDSchema.optional(),
     doctor_id: UUIDSchema.optional(),
     nurse_id: UUIDSchema.optional(),
-    chief_complaint: z.string().max(1000).optional(),
+    patient_complaint: z.string().max(120).optional(),
 });
 
 export const UpdateConsultationSchema = z.object({
-    chief_complaint: z.string().max(1000).optional(),
+    patient_complaint: z.string().max(120).optional(),
     consultation_notes: z.string().max(5000).optional(),
     status: z.enum(['in-progress', 'completed']).optional(),
 });
@@ -230,11 +230,11 @@ export const FollowUpSchema = z.object({
 
 export const FinalizeConsultationWorkflowSchema = z.object({
     consultation_id: UUIDSchema,
-    student_complaint: z
+    patient_complaint: z
         .string()
         .trim()
-        .min(1, 'A student complaint is required')
-        .max(1000),
+        .min(1, 'A patient complaint is required')
+        .max(120, 'The visit reason must be 120 characters or fewer'),
     vitals_disposition: z.enum(['required', 'not_required']),
     vitals_skip_reason: z.string().trim().min(3).max(500).optional(),
     vitals: z.object({

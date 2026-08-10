@@ -60,7 +60,7 @@ type PatientIdentity = {
 
 type CompletedConsultation = {
   id: string
-  chief_complaint: string | null
+  patient_complaint: string | null
   consultation_notes: string | null
   completed_at: string | null
   created_at: string
@@ -114,7 +114,7 @@ export async function getMyConsultationWorkspaceAction(
   const { data: consultationData, error: consultationError } = await admin
     .from("consultations")
     .select(
-      "id,chief_complaint,consultation_notes,completed_at,created_at,doctor_id,nurse_id,completed_by_clinic_account_id",
+      "id,patient_complaint,consultation_notes,completed_at,created_at,doctor_id,nurse_id,completed_by_clinic_account_id",
     )
     .in("visit_id", visitIds)
     .eq("status", "completed")
@@ -404,7 +404,7 @@ function historyRow(
     clinician,
     kind: "history",
     date: consultation.completed_at ?? consultation.created_at,
-    title: consultation.chief_complaint ?? "Consultation",
+    title: consultation.patient_complaint ?? "Consultation",
     summary: consultation.consultation_notes,
     status: "completed",
     details: [detail("Outcome", consultation.consultation_notes)],

@@ -48,7 +48,7 @@ export async function getMyConsultationsAction() {
   const { data, error } = await createAdminClient()
     .from("v_consultation_summary")
     .select(
-      "consultation_id, chief_complaint, consultation_status, check_in_time",
+      "consultation_id, patient_complaint, consultation_status, check_in_time",
     )
     .eq("patient_type", identity.profile.role)
     .eq("patient_id", identity.profile.id)
@@ -59,7 +59,7 @@ export async function getMyConsultationsAction() {
     error: error?.message ?? null,
     consultations: (data ?? []).map((consultation) => ({
       id: consultation.consultation_id,
-      complaint: consultation.chief_complaint ?? "",
+      patient_complaint: consultation.patient_complaint ?? "",
       status: consultation.consultation_status,
       check_in_time: consultation.check_in_time,
     })),

@@ -23,7 +23,33 @@ export async function getAppointmentQueue(statuses?: string[]) {
   return { error: null, appointments: (data ?? []).map((item) => ({ id: item.id, patient_name: `${item.patient_first_name} ${item.patient_last_name}`.trim(), reason: reasons.get(item.id) ?? "", priority: item.priority, scheduled_date: item.scheduled_date, scheduled_time: item.scheduled_time, status: item.status })) }
 }
 
-export interface QueueConsultation { id: string; patient_name: string; complaint: string; status: string; check_in_time: string; doctor_name: string | null }
+export interface QueueConsultation {
+  id: string
+  patient_name: string
+  patient_complaint: string
+  status: string
+  check_in_time: string
+  doctor_name: string | null
+}
+
+type RelatedValue<T> = T | T[] | null
+
+interface QueueVisitRelation {
+  patient_type: "student" | "faculty" | "staff"
+  check_in_time: string
+  students: RelatedValue<{ first_name: string; last_name: string }>
+  faculty: RelatedValue<{ first_name: string; last_name: string }>
+  staff: RelatedValue<{ first_name: string; last_name: string }>
+}
+
+interface QueueConsultationQueryRow {
+  id: string
+  patient_complaint: string | null
+  status: string
+  created_at: string
+  doctor: RelatedValue<{ display_name: string | null }>
+  clinic_visits: RelatedValue<QueueVisitRelation>
+}
 
 // Returns active consultations while applying clinician assignment on the server.
 export async function getConsultationQueue(statuses?: string[]) {
@@ -44,26 +70,27 @@ export async function getConsultationQueue(statuses?: string[]) {
 
   let query = admin
     .from("consultations")
-    .select("id, chief_complaint, status, created_at, doctor:clinic_accounts!consultations_doctor_id_fkey(display_name), clinic_visits(patient_type, check_in_time, students(first_name, last_name), faculty(first_name, last_name), staff(first_name, last_name))")
+    .select("id, patient_complaint, status, created_at, doctor:clinic_accounts!consultations_doctor_id_fkey(display_name), clinic_visits(patient_type, check_in_time, students(first_name, last_name), faculty(first_name, last_name), staff(first_name, last_name))")
     .order("created_at", { ascending: false })
     .limit(100)
   if (statuses?.length) query = query.in("status", statuses)
   if (assignedId) query = query.or(`doctor_id.eq.${assignedId},nurse_id.eq.${assignedId}`)
   const { data, error } = await query
+  const rows = (data ?? []) as unknown as QueueConsultationQueryRow[]
   return {
     error: error?.message ?? null,
-    consultations: (data ?? []).map((item: any) => {
-      const visit = Array.isArray(item.clinic_visits) ? item.clinic_visits[0] : item.clinic_visits
+    consultations: rows.map((item) => {
+      const visit = firstRelation(item.clinic_visits)
       const patient = visit?.patient_type === "student"
-        ? (Array.isArray(visit.students) ? visit.students[0] : visit.students)
+        ? firstRelation(visit.students)
         : visit?.patient_type === "faculty"
-          ? (Array.isArray(visit.faculty) ? visit.faculty[0] : visit.faculty)
-          : (Array.isArray(visit.staff) ? visit.staff[0] : visit.staff)
-      const doctor = Array.isArray(item.doctor) ? item.doctor[0] : item.doctor
+          ? firstRelation(visit.faculty)
+          : firstRelation(visit?.staff)
+      const doctor = firstRelation(item.doctor)
       return {
         id: item.id,
         patient_name: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Unknown patient",
-        complaint: item.chief_complaint ?? "",
+        patient_complaint: item.patient_complaint ?? "",
         status: item.status,
         check_in_time: visit?.check_in_time ?? item.created_at,
         doctor_name: doctor?.display_name ?? null,
@@ -78,7 +105,7 @@ export async function getStaffHealthConsultations() {
   if (!actor) return { error: "Access denied", consultations: [] as QueueConsultation[] }
   const { data, error } = await createAdminClient()
     .from("v_consultation_summary")
-    .select("consultation_id, patient_first_name, patient_last_name, chief_complaint, consultation_status, check_in_time, doctor_name")
+    .select("consultation_id, patient_first_name, patient_last_name, patient_complaint, consultation_status, check_in_time, doctor_name")
     .in("patient_type", ["faculty", "staff"])
     .order("check_in_time", { ascending: false })
     .limit(100)
@@ -87,7 +114,7 @@ export async function getStaffHealthConsultations() {
     consultations: (data ?? []).map((item) => ({
       id: item.consultation_id,
       patient_name: `${item.patient_first_name} ${item.patient_last_name}`.trim(),
-      complaint: item.chief_complaint ?? "",
+      patient_complaint: item.patient_complaint ?? "",
       status: item.consultation_status,
       check_in_time: item.check_in_time,
       doctor_name: item.doctor_name,
@@ -116,4 +143,10 @@ export async function getClearanceQueue() {
   if (!actor) return { error: "Access denied", clearances: [] as Array<{ id: string; requester_type: string; purpose: string | null; status: string; created_at: string }> }
   const { data, error } = await createAdminClient().from("health_clearances").select("id, requester_type, purpose, status, created_at").order("created_at", { ascending: false }).limit(100)
   return { error: error?.message ?? null, clearances: data ?? [] }
+}
+
+// Normalizes Supabase to-one relationships returned as an object or an array.
+function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null
+  return value ?? null
 }

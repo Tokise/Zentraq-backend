@@ -130,7 +130,7 @@ export async function finalizeConsultationWorkflow(
     "finalize_consultation_workflow",
     {
       p_consultation_id: parsed.data.consultation_id,
-      p_student_complaint: parsed.data.student_complaint,
+      p_patient_complaint: parsed.data.patient_complaint,
       p_vitals_disposition: parsed.data.vitals_disposition,
       p_vitals_skip_reason: parsed.data.vitals_skip_reason ?? null,
       p_vitals: parsed.data.vitals,
@@ -162,30 +162,28 @@ export async function getClinicalWorkflowRole(): Promise<
   return (actor?.role ?? null) as "admin" | "doctor" | "nurse" | null;
 }
 
-// Returns the approved complaint labels available to the consultation workflow.
-export async function getComplaintCatalog(): Promise<{
+// Returns the approved visit-reason labels available to clinical staff.
+export async function getVisitReasonCatalog(): Promise<{
   error: string | null;
-  complaints: string[];
+  reasons: string[];
 }> {
   const actor = await staff(["admin", "doctor", "nurse"]);
-  if (!actor) return { error: "Access denied", complaints: [] };
+  if (!actor) return { error: "Access denied", reasons: [] };
 
   const { data, error } = await createAdminClient()
     .from("complaints")
     .select("name")
     .order("name", { ascending: true })
-    .limit(100);
+    .limit(500);
 
-  if (error) return { error: error.message, complaints: [] };
+  if (error) return { error: error.message, reasons: [] };
 
   return {
     error: null,
-    complaints: Array.from(
-      new Set(
-        (data ?? [])
-          .map((complaint) => complaint.name?.trim())
-          .filter((name): name is string => Boolean(name)),
-      ),
+    reasons: deduplicateReasonNames(
+      (data ?? [])
+        .map((complaint) => complaint.name?.trim())
+        .filter((name): name is string => Boolean(name)),
     ),
   };
 }
@@ -467,10 +465,12 @@ export async function createHealthProgram(
   return { success: true, data };
 }
 
+// Returns the authenticated actor when they hold one of the allowed clinic roles.
 async function staff(roles: readonly ("admin" | "doctor" | "nurse")[]) {
   const actor = await getActionActor();
   return actor && hasAnyRole(actor, roles) ? actor : null;
 }
+// Resolves the active clinic account identifier for a signed-in user.
 async function clinicAccountId(
   admin: ReturnType<typeof createAdminClient>,
   userId: string,
@@ -482,19 +482,34 @@ async function clinicAccountId(
     .maybeSingle();
   return data?.id ?? null;
 }
+// Narrows unknown action input to a key-value object.
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+// Returns the standard validation failure contract.
 function invalid(): ActionResult<never> {
   return { success: false, error: "Invalid input", code: "VALIDATION" };
 }
+// Returns the standard authorization failure contract.
 function forbidden(): ActionResult<never> {
   return { success: false, error: "Forbidden", code: "FORBIDDEN" };
 }
+// Returns a non-sensitive database failure contract.
 function databaseError(): ActionResult<never> {
   return {
     success: false,
     error: "Unable to complete the request",
     code: "DATABASE",
   };
+}
+
+// Preserves display casing while removing normalized duplicate catalog names.
+function deduplicateReasonNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  return names.filter((name) => {
+    const normalized = name.toLocaleLowerCase("en-US");
+    if (seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
 }

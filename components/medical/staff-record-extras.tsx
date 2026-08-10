@@ -89,7 +89,7 @@ export function StaffRecordExtras({
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
-                    {consultation.complaint || "Consultation"}
+                    {consultation.patient_complaint || "Consultation"}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {formatConsultationDate(consultation.checkedInAt)}
