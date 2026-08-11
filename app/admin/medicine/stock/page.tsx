@@ -13,13 +13,29 @@ import {
 } from "@/components/ui/table"
 import { Search, Package } from "lucide-react"
 import { toast } from "sonner"
-import { getInventoryQueue } from "@/actions/inventory/workflow-queries"
+import {
+  getInventoryQueue,
+  type InventoryMedicine,
+} from "@/actions/inventory/workflow-queries"
 
 type MedicineStatus = "success" | "warning" | "danger" | "default"
+const INVENTORY_RENDER_DATE = Date.now()
+const EXPIRY_WARNING_CUTOFF =
+  INVENTORY_RENDER_DATE + 90 * 24 * 60 * 60 * 1000
+
+// Identifies non-expired stock batches reaching expiry within 90 days.
+function isExpiringSoon(expiry: string | null): boolean {
+  if (!expiry) return false
+  const expiryTime = new Date(expiry).getTime()
+  return (
+    expiryTime >= INVENTORY_RENDER_DATE &&
+    expiryTime <= EXPIRY_WARNING_CUTOFF
+  )
+}
 
 export default function AdminMedicineStockPage() {
   const router = useRouter()
-  const [medicines, setMedicines] = useState<Array<{ id: string; name: string; stock: number; minimum: number; expiry: string | null }>>([])
+  const [medicines, setMedicines] = useState<InventoryMedicine[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
@@ -35,15 +51,18 @@ export default function AdminMedicineStockPage() {
       } else {
         setMedicines(res.medicines)
       }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load inventory")
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to load inventory",
+      )
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchData()
+    const initialLoad = window.setTimeout(() => void fetchData(), 0)
+    return () => window.clearTimeout(initialLoad)
   }, [fetchData])
 
   const filtered = useMemo(() => {
@@ -65,20 +84,10 @@ export default function AdminMedicineStockPage() {
     return { variant: "success", label: "In Stock" }
   }
 
-  const isExpiringSoon = (expiry: string | null) => {
-    if (!expiry) return false
-    const days = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    return days <= 90 && days >= 0
-  }
-
   const handlePageSizeChange = (size: number) => {
     setPageSize(size)
     setCurrentPage(1)
   }
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search])
 
   return (
     <div className="space-y-6">
@@ -90,7 +99,15 @@ export default function AdminMedicineStockPage() {
       {/* Search */}
       <div className="relative w-full sm:max-w-xs">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search medicines..." className="h-9 pl-8 text-sm" />
+        <Input
+          className="h-9 pl-8 text-sm"
+          onChange={(event) => {
+            setSearch(event.target.value)
+            setCurrentPage(1)
+          }}
+          placeholder="Search medicines..."
+          value={search}
+        />
       </div>
 
       {/* Table */}
@@ -124,7 +141,13 @@ export default function AdminMedicineStockPage() {
                 </TableHeader>
                 <TableBody>
                   {paginated.map((m) => (
-                    <TableRow key={m.id} className="cursor-pointer hover:bg-muted/50" onClick={() => router.push(`/admin/medicine/restock`)}>
+                    <TableRow
+                      className="cursor-pointer hover:bg-muted/50"
+                      key={m.id}
+                      onClick={() =>
+                        router.push(`/admin/medicine/restock?medicineId=${m.id}`)
+                      }
+                    >
                       <TableCell className="font-medium">{m.name}</TableCell>
                       <TableCell className="text-sm font-semibold">{m.stock}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{m.minimum}</TableCell>

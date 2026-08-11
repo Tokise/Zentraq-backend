@@ -38,11 +38,7 @@ export function ClinicalVisitsWorkspace() {
   // Loads the protected worklist for the signed-in clinic account.
   const loadConsultations = useCallback(async () => {
     setLoading(true)
-    const result = await getConsultationQueue([
-      "queued",
-      "in-progress",
-      "awaiting_doctor_review",
-    ])
+    const result = await getConsultationQueue(["in-progress"])
     if (result.error) toast.error(result.error)
     setConsultations(result.consultations)
     setLoading(false)
@@ -61,7 +57,7 @@ export function ClinicalVisitsWorkspace() {
   return (
     <div className="space-y-6">
       <PageHeader
-        description="Open an active consultation or create a new walk-in visit."
+        description="Continue active consultations you claimed from the RFID queue."
         title="Visit"
       />
 
@@ -79,6 +75,7 @@ export function ClinicalVisitsWorkspace() {
                 <TableHead>Patient</TableHead>
                 <TableHead>Visit reason</TableHead>
                 <TableHead>Checked in</TableHead>
+                <TableHead>Claimed by</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
@@ -93,6 +90,14 @@ export function ClinicalVisitsWorkspace() {
                   <TableCell>
                     {new Date(consultation.check_in_time).toLocaleString()}
                   </TableCell>
+                  <TableCell>
+                    <div className="space-y-0.5">
+                      <p>{consultation.claimed_by_name ?? "Current operator"}</p>
+                      <p className="text-xs capitalize text-muted-foreground">
+                        {consultation.claimed_by_role ?? "clinic staff"}
+                      </p>
+                    </div>
+                  </TableCell>
                   <TableCell className="capitalize">
                     {consultation.status.replaceAll("_", " ")}
                   </TableCell>
@@ -103,7 +108,6 @@ export function ClinicalVisitsWorkspace() {
                         setSelectedConsultationId(consultation.id)
                       }
                       size="sm"
-                      variant="outline"
                     >
                       Open
                     </Button>

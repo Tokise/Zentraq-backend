@@ -1,11 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { KeyRound, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  KeyRound,
+  Loader2,
+  Search,
+  UserRound,
+} from "lucide-react";
 import { toast } from "sonner";
-import { resetStudentPassword } from "@/actions/admin/rfid/registration";
-import { resetFacultyPasswordAction } from "@/actions/admin/accounts/faculty";
+import {
+  resetPortalPasswordAction,
+  searchRecoveryAccountsAction,
+  type RecoveryAccountRole,
+  type RecoveryAccountSearchResult,
+} from "@/actions/admin/accounts/patient-portal";
 import { PageHeader } from "@/components/common/page-header";
+import { PasswordStrengthInput } from "@/components/common/password-strength-input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,105 +26,297 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { checkPassword } from "@/lib/validation/password";
+import { cn } from "@/lib/utils";
 
-// Provides an audited password-reset form for existing student and faculty accounts.
+const roleLabels: Record<RecoveryAccountRole, string> = {
+  doctor: "Doctor",
+  faculty: "Faculty",
+  nurse: "Nurse",
+  staff: "Staff (non-clinic)",
+  student: "Student",
+};
+
+// Provides searchable, audited credential recovery for patient and clinician portals.
 export default function PasswordResetPage() {
-  const [accountType, setAccountType] = useState<"student" | "faculty">(
-      "student",
-    ),
-    [profileId, setProfileId] = useState(""),
-    [password, setPassword] = useState(""),
-    [saving, setSaving] = useState(false);
-  // Validates the selected profile type and delegates the reset to its server action.
-  async function submit(event: React.FormEvent) {
+  const [role, setRole] = useState<RecoveryAccountRole>("student");
+  const [query, setQuery] = useState("");
+  const [accounts, setAccounts] = useState<RecoveryAccountSearchResult[]>([]);
+  const [selectedAccount, setSelectedAccount] =
+    useState<RecoveryAccountSearchResult | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length < 2) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try {
+        const result = await searchRecoveryAccountsAction({
+          query: trimmedQuery,
+          role,
+        });
+        if (cancelled) return;
+        setAccounts(result.accounts);
+        setSearchError(result.error ?? null);
+      } catch {
+        if (!cancelled) {
+          setAccounts([]);
+          setSearchError("Unable to search accounts right now.");
+        }
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, role]);
+
+  // Selects one eligible search result as the reset target.
+  function selectAccount(account: RecoveryAccountSearchResult) {
+    if (!account.canReset) return;
+    setSelectedAccount(account);
+    setSearchError(null);
+  }
+
+  // Clears stale account state when the recovery role changes.
+  function changeRole(nextRole: RecoveryAccountRole) {
+    setRole(nextRole);
+    setQuery("");
+    setAccounts([]);
+    setSelectedAccount(null);
+    setSearchError(null);
+  }
+
+  // Clears a selection when the administrator starts a different search.
+  function changeQuery(nextQuery: string) {
+    setQuery(nextQuery);
+    setAccounts([]);
+    setSelectedAccount(null);
+    setSearching(false);
+    setSearchError(null);
+  }
+
+  // Validates the password before invoking the protected server reset action.
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedAccount?.canReset) {
+      toast.error("Select an active account first.");
+      return;
+    }
+
+    const passwordCheck = checkPassword(password);
+    if (!passwordCheck.valid) {
+      toast.error(`Password needs: ${passwordCheck.missing.join(", ")}`);
+      return;
+    }
+
     setSaving(true);
     try {
-      const form = new FormData();
-      form.set(
-        accountType === "student" ? "studentAccountId" : "facultyId",
-        profileId,
-      );
-      form.set("newPassword", password);
-      const result =
-        accountType === "student"
-          ? await resetStudentPassword(form)
-          : await resetFacultyPasswordAction(form);
-      if (result.error) toast.error(result.error);
-      else {
-        toast.success(
-          `Password reset for ${result.email ?? "account"}. Existing sessions were revoked.`,
-        );
-        setProfileId("");
-        setPassword("");
+      const result = await resetPortalPasswordAction({
+        newPassword: password,
+        role: selectedAccount.role,
+        targetId: selectedAccount.targetId,
+      });
+      if (result.error) {
+        toast.error(result.error);
+        return;
       }
+
+      toast.success(
+        `Password reset for ${result.maskedEmail ?? "the selected account"}. Existing sessions were revoked.`,
+      );
+      setQuery("");
+      setAccounts([]);
+      setSelectedAccount(null);
+      setPassword("");
     } catch {
-      toast.error("Unable to reset the password");
+      toast.error("Unable to reset the password.");
     } finally {
       setSaving(false);
     }
   }
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Password Reset"
-        description="Reset a portal password and revoke active sessions for a student or faculty account."
+        title="Account Password Recovery"
+        description="Find a portal user by role, then securely reset their password and revoke prior sessions."
       />
-      <Card className="max-w-2xl">
+      <Card className="max-w-3xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <KeyRound className="size-4" /> Secure password reset
           </CardTitle>
           <CardDescription>
-            Use the profile ID from the account record. New passwords must
-            contain at least 12 characters.
+            Search by name, login email, student number, or employee number.
+            Clinic Admin accounts are intentionally excluded.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="account-type">Account type</Label>
+              <Label htmlFor="recovery-role">Account role</Label>
               <select
-                id="account-type"
-                value={accountType}
+                id="recovery-role"
+                value={role}
                 onChange={(event) =>
-                  setAccountType(event.target.value as "student" | "faculty")
+                  changeRole(event.target.value as RecoveryAccountRole)
                 }
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={saving}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="student">Student</option>
-                <option value="faculty">Faculty / Staff</option>
+                <option value="faculty">Faculty</option>
+                <option value="staff">Staff (non-clinic)</option>
+                <option value="doctor">Doctor</option>
+                <option value="nurse">Nurse</option>
               </select>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="profile-id">Profile ID</Label>
-              <Input
-                id="profile-id"
-                value={profileId}
-                onChange={(event) => setProfileId(event.target.value)}
-                placeholder="Account profile UUID"
-                required
-              />
+              <Label htmlFor="account-search">
+                Search {roleLabels[role]} accounts
+              </Label>
+              <div className="relative">
+                <Search
+                  aria-hidden
+                  className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  id="account-search"
+                  value={query}
+                  onChange={(event) => changeQuery(event.target.value)}
+                  placeholder="Enter at least two characters"
+                  autoComplete="off"
+                  disabled={saving}
+                  className="pr-10 pl-9"
+                  aria-describedby="account-search-status"
+                  aria-controls="account-search-results"
+                />
+                {searching ? (
+                  <Loader2
+                    aria-label="Searching accounts"
+                    className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground"
+                  />
+                ) : null}
+              </div>
+              <p
+                id="account-search-status"
+                className={cn(
+                  "text-xs text-muted-foreground",
+                  searchError && "text-destructive",
+                )}
+                aria-live="polite"
+              >
+                {searchError ??
+                  (query.trim().length < 2
+                    ? "Search results appear after two characters."
+                    : searching
+                      ? "Searching..."
+                      : `${accounts.length} matching account${accounts.length === 1 ? "" : "s"}.`)}
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-password">New temporary password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                minLength={12}
-                placeholder="At least 12 characters"
-                required
-              />
-            </div>
-            <Button type="submit" disabled={saving}>
+
+            {query.trim().length >= 2 && !searching && !searchError ? (
+              <div
+                id="account-search-results"
+                className="max-h-72 overflow-y-auto rounded-lg border border-border p-1"
+                role="listbox"
+                aria-label={`${roleLabels[role]} search results`}
+              >
+                {accounts.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No role-matched accounts found.
+                  </div>
+                ) : (
+                  accounts.map((account) => (
+                    <button
+                      key={`${account.role}:${account.targetId}`}
+                      type="button"
+                      role="option"
+                      aria-selected={
+                        selectedAccount?.targetId === account.targetId
+                      }
+                      disabled={!account.canReset || saving}
+                      onClick={() => selectAccount(account)}
+                      className={cn(
+                        "flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
+                        selectedAccount?.targetId === account.targetId &&
+                          "bg-primary/10 ring-1 ring-primary/30",
+                      )}
+                    >
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                        <UserRound className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {account.displayName}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {[
+                            account.identifier,
+                            account.department,
+                            account.maskedEmail,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "No additional profile details"}
+                        </span>
+                      </span>
+                      <Badge variant="outline" className="capitalize">
+                        {account.status}
+                      </Badge>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
+
+            {selectedAccount ? (
+              <div className="flex items-start gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="font-medium">{selectedAccount.displayName}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {roleLabels[selectedAccount.role]}
+                    {selectedAccount.identifier
+                      ? ` · ${selectedAccount.identifier}`
+                      : ""}
+                    {selectedAccount.maskedEmail
+                      ? ` · ${selectedAccount.maskedEmail}`
+                      : ""}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            <PasswordStrengthInput
+              id="new-password"
+              label="New temporary password"
+              value={password}
+              onChange={setPassword}
+              placeholder="Create a strong temporary password"
+              disabled={saving || !selectedAccount?.canReset}
+            />
+            <Button
+              type="submit"
+              disabled={saving || !selectedAccount?.canReset}
+            >
               {saving ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" /> Resetting…
+                  <Loader2 className="size-4 animate-spin" /> Resetting...
                 </>
               ) : (
                 "Reset password"

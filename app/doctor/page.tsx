@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/common/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   getDashboardDataAction,
+  type DashboardActivityScope,
   type DashboardActivityDTO,
   type DashboardAppointmentDTO,
   type DashboardConsultationDTO,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react"
 import { EmptyState } from "@/components/common/empty-state"
 import { ClinicalDashboardCharts } from "@/components/analytics/clinical-dashboard-charts"
+import { DoctorDutyToggle } from "@/components/clinical/doctor-duty-toggle"
 
 function getStatusVariant(status: string): "success" | "warning" | "danger" | "info" | "default" {
   const s = status?.toLowerCase() ?? ""
@@ -53,6 +55,8 @@ export default function DoctorDashboardPage() {
   const [consultations, setConsultations] = useState<DashboardConsultationDTO[]>([])
   const [appointments, setAppointments] = useState<DashboardAppointmentDTO[]>([])
   const [activity, setActivity] = useState<DashboardActivityDTO[]>([])
+  const [activityScope, setActivityScope] =
+    useState<DashboardActivityScope>("doctor")
   const [stats, setStats] = useState({
     patientsToday: 0,
     consultations: 0,
@@ -67,6 +71,7 @@ export default function DoctorDashboardPage() {
         setConsultations(result.data.consultations)
         setAppointments(result.data.appointments)
         setActivity(result.data.activity)
+        setActivityScope(result.data.activityScope)
         setStats({
           patientsToday: result.data.stats.patientsToday,
           consultations: result.data.stats.consultations,
@@ -148,6 +153,8 @@ export default function DoctorDashboardPage() {
         breadcrumb={[{ label: "Dashboard" }]}
       />
 
+      <DoctorDutyToggle />
+
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {statCards.map((card) => (
@@ -172,6 +179,7 @@ export default function DoctorDashboardPage() {
         </div>
         <ClinicalDashboardCharts
           activity={activity}
+          activityScope={activityScope}
           appointments={appointments}
           consultations={consultations}
           loading={loading}

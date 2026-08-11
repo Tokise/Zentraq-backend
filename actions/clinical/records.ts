@@ -3,6 +3,7 @@
 import { getActionActor, hasAnyRole } from "@/lib/security/action-guard"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { logAuditEvent } from "@/lib/audit-logger"
+import { resolveProfilePhotoUrl } from "@/lib/storage/profile-photos"
 
 type StaffRole = "admin" | "doctor" | "nurse"
 
@@ -97,6 +98,20 @@ export interface PatientMedicalRecord {
   immunizations: Immunization[]
 }
 
+// Replaces a private profile-photo object path with a short-lived preview URL.
+async function signPatientRecordPhoto(
+  admin: ReturnType<typeof createAdminClient>,
+  record: PatientMedicalRecord,
+): Promise<PatientMedicalRecord> {
+  return {
+    ...record,
+    profile_photo_url: await resolveProfilePhotoUrl(
+      admin,
+      record.profile_photo_url,
+    ),
+  }
+}
+
 export async function getPatientMedicalRecord(patientId: string, patientType: "student" | "faculty") {
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", record: null as PatientMedicalRecord | null, records: [] as PatientMedicalRecord[] }
@@ -104,13 +119,11 @@ export async function getPatientMedicalRecord(patientId: string, patientType: "s
   const adminClient = createAdminClient()
 
   if (patientId === "all") {
-    const { data, error } = await adminClient
-      .from("v_patient_medical_record")
-      .select("*")
-      .eq("patient_type", patientType)
-
-    if (error) return { error: error.message, record: null, records: [] }
-    return { error: null, record: null, records: (data || []) as PatientMedicalRecord[] }
+    return {
+      error: "Search for a patient before opening a medical record.",
+      record: null,
+      records: [],
+    }
   }
 
   const { data, error } = await adminClient
@@ -134,7 +147,13 @@ export async function getPatientMedicalRecord(patientId: string, patientType: "s
     })
   }
 
-  return { error: null, record: data as PatientMedicalRecord | null, records: data ? [data as PatientMedicalRecord] : [] }
+  const record = data
+    ? await signPatientRecordPhoto(
+        adminClient,
+        data as PatientMedicalRecord,
+      )
+    : null
+  return { error: null, record, records: record ? [record] : [] }
 }
 
 export async function getOwnMedicalRecord() {
@@ -160,7 +179,10 @@ export async function getOwnMedicalRecord() {
       .maybeSingle()
 
     if (error) return { error: error.message, record: null }
-    return { error: null, record: data as PatientMedicalRecord | null }
+    const record = data
+      ? await signPatientRecordPhoto(adminClient, data as PatientMedicalRecord)
+      : null
+    return { error: null, record }
   }
 
   if (actor.role === "faculty" || actor.role === "staff") {
@@ -180,7 +202,10 @@ export async function getOwnMedicalRecord() {
       .maybeSingle()
 
     if (error) return { error: error.message, record: null }
-    return { error: null, record: data as PatientMedicalRecord | null }
+    const record = data
+      ? await signPatientRecordPhoto(adminClient, data as PatientMedicalRecord)
+      : null
+    return { error: null, record }
   }
 
   return { error: "Access denied", record: null }

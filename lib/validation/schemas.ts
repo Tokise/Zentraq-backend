@@ -230,12 +230,13 @@ export const FollowUpSchema = z.object({
 
 export const FinalizeConsultationWorkflowSchema = z.object({
     consultation_id: UUIDSchema,
+    review_doctor_id: UUIDSchema.nullable().optional(),
     patient_complaint: z
         .string()
         .trim()
         .min(1, 'A patient complaint is required')
         .max(120, 'The visit reason must be 120 characters or fewer'),
-    vitals_disposition: z.enum(['required', 'not_required']),
+    vitals_disposition: z.enum(['required', 'not_required', 'existing']),
     vitals_skip_reason: z.string().trim().min(3).max(500).optional(),
     vitals: z.object({
         temperature: z.number().min(20).max(50).optional(),
@@ -289,6 +290,11 @@ export const FinalizeConsultationWorkflowSchema = z.object({
             message: 'Record at least one vital sign',
         });
     }
+});
+
+export const ReassignConsultationReviewSchema = z.object({
+    consultation_id: UUIDSchema,
+    review_doctor_id: UUIDSchema.nullable(),
 });
 
 // ──────────────────────────────────────────────

@@ -18,6 +18,8 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-chart-neutral: var(--chart-neutral);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -88,11 +90,13 @@
   --info: #2563c7;
 
   /* Charts */
-  --chart-1: #1f7a58;
-  --chart-2: #52615a;
-  --chart-3: #237a48;
-  --chart-4: #2563c7;
-  --chart-5: #cbd8d0;
+  --chart-neutral: #334155;
+  --chart-1: #2563eb;
+  --chart-2: #c2410c;
+  --chart-3: #0f766e;
+  --chart-4: #7c3aed;
+  --chart-5: #dc2626;
+  --chart-6: #a16207;
 
   --radius: 0;
 
@@ -134,11 +138,13 @@
   --field: #202428;
   --ring: #76d6a3;
   --surface: #252927;
-  --chart-1: #5ac88f;
-  --chart-2: #bcc3c9;
-  --chart-3: #76d6a3;
-  --chart-4: #9bc5ff;
-  --chart-5: #3a4147;
+  --chart-neutral: #cbd5e1;
+  --chart-1: #60a5fa;
+  --chart-2: #fb923c;
+  --chart-3: #2dd4bf;
+  --chart-4: #c084fc;
+  --chart-5: #f87171;
+  --chart-6: #facc15;
   --sidebar: #171a1d;
   --sidebar-foreground: #edf0f2;
   --sidebar-primary: #5ac88f;
@@ -160,6 +166,27 @@
 
   html {
     @apply font-sans;
+  }
+
+  button:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  summary,
+  label[for],
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  [role="menuitemcheckbox"]:not([aria-disabled="true"]),
+  [role="menuitemradio"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  [aria-disabled="true"],
+  [data-disabled] {
+    cursor: not-allowed;
   }
 }
 

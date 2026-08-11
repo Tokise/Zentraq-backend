@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/common/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   getDashboardDataAction,
+  type DashboardActivityScope,
   type DashboardActivityDTO,
   type DashboardAppointmentDTO,
   type DashboardConsultationDTO,
@@ -15,7 +16,6 @@ import {
   Users,
   CalendarDays,
   Stethoscope,
-  Pill,
   ShieldAlert,
   Activity,
   Clock,
@@ -53,11 +53,11 @@ export default function AdminDashboardPage() {
   const [consultations, setConsultations] = useState<DashboardConsultationDTO[]>([])
   const [appointments, setAppointments] = useState<DashboardAppointmentDTO[]>([])
   const [activity, setActivity] = useState<DashboardActivityDTO[]>([])
+  const [activityScope, setActivityScope] =
+    useState<DashboardActivityScope>("admin")
   const [stats, setStats] = useState({
     patientsToday: 0,
     consultations: 0,
-    emergencyCases: 0,
-    lowStockAlerts: 0,
   })
   const [loading, setLoading] = useState(true)
 
@@ -68,11 +68,10 @@ export default function AdminDashboardPage() {
         setConsultations(result.data.consultations)
         setAppointments(result.data.appointments)
         setActivity(result.data.activity)
+        setActivityScope(result.data.activityScope)
         setStats({
           patientsToday: result.data.stats.patientsToday,
           consultations: result.data.stats.consultations,
-          emergencyCases: result.data.stats.emergencyCases,
-          lowStockAlerts: 0,
         })
       }
     } catch (err) {
@@ -117,38 +116,27 @@ export default function AdminDashboardPage() {
 
   const statCards = [
     {
-      label: "Total Patients",
+      label: "Assigned Patients",
       value: loading ? "—" : totalPatients,
       icon: Users,
-      trend: 4.2,
-      comparisonText: "vs last week",
+      comparisonText: `${stats.patientsToday} assigned today`,
     },
     {
-      label: "Total Appointments",
+      label: "Assigned Appointments",
       value: loading ? "—" : appointments.length,
       icon: CalendarDays,
-      trend: 2.1,
-      comparisonText: "vs last week",
+      comparisonText: "Visible only when assigned to you",
     },
     {
-      label: "Total Consultations",
+      label: "Assigned Consultations",
       value: loading ? "—" : stats.consultations,
       icon: Stethoscope,
-      trend: 6.4,
-      comparisonText: "vs last week",
-    },
-    {
-      label: "Medicine Inventory",
-      value: loading ? "—" : stats.lowStockAlerts ?? "—",
-      icon: Pill,
-      trend: -1.2,
-      comparisonText: "low stock alerts",
+      comparisonText: "Your clinical workload",
     },
     {
       label: "Pending Requests",
       value: loading ? "—" : pendingCount,
       icon: ShieldAlert,
-      trend: 0,
       comparisonText: "awaiting action",
     },
   ]
@@ -156,20 +144,22 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Overview"
-        description="Welcome back, Admin! Here's what's happening in your clinic today."
+        title="My Admin Workload"
+        description={
+          "Appointments and clinical work assigned to your Admin account. " +
+          "Clinic-wide analytics remain in Reports & Analytics."
+        }
         breadcrumb={[{ label: "Dashboard" }]}
       />
 
       {/* Stat cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => (
           <StatCard
             key={card.label}
             label={card.label}
             value={card.value}
             icon={card.icon}
-            trend={card.trend}
             comparisonText={card.comparisonText}
           />
         ))}
@@ -179,12 +169,13 @@ export default function AdminDashboardPage() {
         <div className="flex items-center justify-between border-b border-border pb-2">
           <h2 className="flex items-center gap-2 text-base font-semibold">
             <Activity className="size-4 text-primary" />
-            Analytics Overview
+            Assigned Workload
           </h2>
-          <p className="text-xs text-muted-foreground">Real-time summary</p>
+          <p className="text-xs text-muted-foreground">Your assignments only</p>
         </div>
         <ClinicalDashboardCharts
           activity={activity}
+          activityScope={activityScope}
           appointments={appointments}
           consultations={consultations}
           loading={loading}
@@ -206,7 +197,7 @@ export default function AdminDashboardPage() {
             <CardHeader className="border-b border-border pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
                 <CalendarDays className="size-4 text-muted-foreground" />
-                Recent Appointments
+                My Recent Appointments
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -218,7 +209,14 @@ export default function AdminDashboardPage() {
                 </div>
               ) : recentAppointments.length === 0 ? (
                 <div className="p-4">
-                  <EmptyState title="No appointments" description="No recent appointments found." icon={CalendarDays} />
+                  <EmptyState
+                    description={
+                      "Appointments assigned to your Admin account will " +
+                      "appear here."
+                    }
+                    icon={CalendarDays}
+                    title="No assigned appointments"
+                  />
                 </div>
               ) : (
                 <div className="divide-y divide-border">
@@ -246,7 +244,7 @@ export default function AdminDashboardPage() {
             <CardHeader className="border-b border-border pb-3">
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
                 <Stethoscope className="size-4 text-muted-foreground" />
-                Recent Consultations
+                My Recent Consultations
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -258,7 +256,13 @@ export default function AdminDashboardPage() {
                 </div>
               ) : recentConsultations.length === 0 ? (
                 <div className="p-4">
-                  <EmptyState title="No consultations" description="No recent consultations found." icon={Stethoscope} />
+                  <EmptyState
+                    description={
+                      "Consultations you claim or receive will appear here."
+                    }
+                    icon={Stethoscope}
+                    title="No assigned consultations"
+                  />
                 </div>
               ) : (
                 <div className="divide-y divide-border">

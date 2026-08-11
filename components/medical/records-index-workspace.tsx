@@ -43,6 +43,13 @@ interface RecordsIndexWorkspaceProps {
   scope: "student" | "employee"
 }
 
+interface ActiveSearchFilters {
+  department?: string
+  patientRole?: "faculty" | "staff"
+  position?: string
+  query: string
+}
+
 // Renders a paged clinic index and one selected shared compliance record.
 export function RecordsIndexWorkspace({
   clinicRole,
@@ -55,52 +62,57 @@ export function RecordsIndexWorkspace({
   const [department, setDepartment] = useState("")
   const [position, setPosition] = useState("")
   const [employeeRole, setEmployeeRole] = useState<"all" | "faculty" | "staff">("all")
+  const [activeFilters, setActiveFilters] =
+    useState<ActiveSearchFilters | null>(null)
+  const [hasRequestedResults, setHasRequestedResults] = useState(false)
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState<PatientSearchDTO[]>([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<PatientSearchDTO | null>(null)
   const [record, setRecord] = useState<ComplianceRecordDTO | null>(null)
   const [loadingRecord, setLoadingRecord] = useState(false)
 
   // Loads one server-paged set of minimized profiles.
-  const loadIndex = useCallback(async () => {
-    setLoading(true)
-    const result = await searchPatientProfilesAction({
-      scope,
-      query,
-      page,
-      department: department || undefined,
-      position: scope === "employee" ? position || undefined : undefined,
-      patientRole:
-        scope === "employee" && employeeRole !== "all"
-          ? employeeRole
-          : undefined,
-    })
-    setLoading(false)
-    if (result.error) {
-      toast.error(result.error)
-      setRows([])
-      setTotal(0)
-      setTotalPages(0)
-      return
-    }
-    setRows(result.data)
-    setTotal(result.total)
-    setTotalPages(result.totalPages)
-  }, [department, employeeRole, page, position, query, scope])
+  const loadIndex = useCallback(
+    async (filters: ActiveSearchFilters, requestedPage: number) => {
+      setLoading(true)
+      const result = await searchPatientProfilesAction({
+        scope,
+        page: requestedPage,
+        ...filters,
+      })
+      setLoading(false)
+      if (result.error) {
+        toast.error(result.error)
+        setRows([])
+        setTotal(0)
+        setTotalPages(0)
+        return
+      }
+      setRows(result.data)
+      setTotal(result.total)
+      setTotalPages(result.totalPages)
+    },
+    [scope],
+  )
 
   useEffect(() => {
+    if (!activeFilters) return
     const indexLoad = window.setTimeout(() => {
-      void loadIndex()
+      void loadIndex(activeFilters, page)
     }, 0)
     return () => window.clearTimeout(indexLoad)
-  }, [loadIndex])
+  }, [activeFilters, loadIndex, page])
 
   // Loads a selected profile's authorized compliance record.
   const loadRecord = useCallback(
-    async (patientId: string, patientRole: PatientProfileRole) => {
+    async (
+      patientId: string,
+      patientRole: PatientProfileRole,
+      showAsRedirectResult = false,
+    ) => {
       setLoadingRecord(true)
       const result = await getComplianceRecordAction({ patientId, patientRole })
       setLoadingRecord(false)
@@ -111,9 +123,25 @@ export function RecordsIndexWorkspace({
       if (result.error || !result.record) {
         toast.error(result.error ?? "Patient record not found")
         setRecord(null)
+        if (showAsRedirectResult) {
+          setRows([])
+          setTotal(0)
+          setTotalPages(0)
+          setHasRequestedResults(true)
+        }
         return
       }
       setRecord(result.record)
+      if (showAsRedirectResult) {
+        const redirectedProfile: PatientSearchDTO = result.record.profile
+        setActiveFilters(null)
+        setHasRequestedResults(true)
+        setPage(1)
+        setRows([redirectedProfile])
+        setSelected(redirectedProfile)
+        setTotal(1)
+        setTotalPages(1)
+      }
     },
     [clinicRole, router],
   )
@@ -125,12 +153,16 @@ export function RecordsIndexWorkspace({
       patientRole === "student" ||
       patientRole === "faculty" ||
       patientRole === "staff"
-    if (!patientId || !allowed) return
+    const matchesScope =
+      scope === "student"
+        ? patientRole === "student"
+        : patientRole === "faculty" || patientRole === "staff"
+    if (!patientId || !allowed || !matchesScope) return
     const recordLoad = window.setTimeout(() => {
-      void loadRecord(patientId, patientRole)
+      void loadRecord(patientId, patientRole, true)
     }, 0)
     return () => window.clearTimeout(recordLoad)
-  }, [loadRecord, searchParams])
+  }, [loadRecord, scope, searchParams])
 
   // Reloads the selected minimized DTO after a private record invalidation.
   useEffect(() => {
@@ -165,8 +197,31 @@ export function RecordsIndexWorkspace({
 
   // Applies search filters from the first page.
   function applyFilters() {
-    if (page === 1) void loadIndex()
-    else setPage(1)
+    const nextFilters: ActiveSearchFilters = {
+      department: department.trim() || undefined,
+      patientRole:
+        scope === "employee" && employeeRole !== "all"
+          ? employeeRole
+          : undefined,
+      position:
+        scope === "employee" ? position.trim() || undefined : undefined,
+      query: query.trim(),
+    }
+    const hasSearchTerm = [
+      nextFilters.query,
+      nextFilters.department,
+      nextFilters.position,
+    ].some((value) => (value?.length ?? 0) >= 2)
+    if (!hasSearchTerm) {
+      toast.info("Enter at least two characters in a search field.")
+      return
+    }
+
+    setSelected(null)
+    setRecord(null)
+    setHasRequestedResults(true)
+    setPage(1)
+    setActiveFilters(nextFilters)
   }
 
   return (
@@ -207,7 +262,6 @@ export function RecordsIndexWorkspace({
               <Select
                 onValueChange={(value) => {
                   setEmployeeRole(value as "all" | "faculty" | "staff")
-                  setPage(1)
                 }}
                 value={employeeRole}
               >
@@ -266,14 +320,13 @@ export function RecordsIndexWorkspace({
                           onClick={() => selectPatient(row)}
                           size="sm"
                           type="button"
-                          variant="ghost"
                         >
                           View
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))
-                ) : (
+                ) : hasRequestedResults ? (
                   <TableRow>
                     <TableCell
                       className="py-12 text-center text-muted-foreground"
@@ -283,18 +336,30 @@ export function RecordsIndexWorkspace({
                       No matching profiles found.
                     </TableCell>
                   </TableRow>
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      className="py-12 text-center text-muted-foreground"
+                      colSpan={scope === "employee" ? 6 : 5}
+                    >
+                      <Search className="mx-auto mb-2 size-6" />
+                      Search by name or institutional ID to display records.
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
 
-          <DataTablePagination
-            currentPage={page}
-            onPageChange={setPage}
-            pageSize={10}
-            totalItems={total}
-            totalPages={totalPages}
-          />
+          {hasRequestedResults && total > 0 && (
+            <DataTablePagination
+              currentPage={page}
+              onPageChange={setPage}
+              pageSize={10}
+              totalItems={total}
+              totalPages={totalPages}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -328,7 +393,9 @@ export function RecordsIndexWorkspace({
               setPage(1)
               await Promise.all([
                 loadRecord(record.profile.id, record.profile.role),
-                loadIndex(),
+                activeFilters
+                  ? loadIndex(activeFilters, 1)
+                  : Promise.resolve(),
               ])
             }}
             key={record.profile.id}

@@ -3,6 +3,7 @@
 import { createAdminClient } from "@/utils/supabase/admin"
 import { cookies } from "next/headers"
 import { createClient } from "@/utils/supabase/server"
+import { resolveProfilePhotoUrl } from "@/lib/storage/profile-photos"
 
 export interface StaffProfileDTO {
   firstName: string
@@ -59,7 +60,10 @@ export async function getStaffProfileAction(): Promise<{ error: string | null; p
       position: staff.position,
       email: staff.email,
       phone: staff.phone,
-      profilePhotoUrl: staff.profile_photo_url,
+      profilePhotoUrl: await resolveProfilePhotoUrl(
+        createAdminClient(),
+        staff.profile_photo_url,
+      ),
     },
   }
 }

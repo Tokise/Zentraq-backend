@@ -259,7 +259,6 @@ export default function AdminClinicAnnouncementsPage() {
                                 <Button
                                     type="submit"
                                     disabled={submitting}
-                                    className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer"
                                 >
                                     {submitting ? (
                                         <><Loader2 className="size-3.5 animate-spin mr-1" /> Saving...</>

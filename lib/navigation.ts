@@ -115,6 +115,11 @@ export const adminNavigation: NavGroup[] = [
     label: "Medicine",
     items: [
       {
+        title: "Medicine Catalog",
+        href: "/admin/medicine/catalog",
+        icon: Pill,
+      },
+      {
         title: "Inventory Status",
         href: "/admin/medicine/stock",
         icon: Package,
@@ -133,11 +138,6 @@ export const adminNavigation: NavGroup[] = [
         title: "Dispense Log",
         href: "/admin/medicine/dispense_log",
         icon: History,
-      },
-      {
-        title: "Low Stock Alerts",
-        href: "/admin/medicine/low_stock_alerts",
-        icon: AlertTriangle,
       },
       {
         title: "Expiry Monitoring",
@@ -495,6 +495,11 @@ export const nurseNavigation: NavGroup[] = [
     label: "Medicine",
     items: [
       {
+        title: "Medicine Catalog",
+        href: "/nurse/medicine/catalog",
+        icon: Pill,
+      },
+      {
         title: "Inventory Status",
         href: "/nurse/medicine/stock",
         icon: Package,
@@ -513,11 +518,6 @@ export const nurseNavigation: NavGroup[] = [
         title: "Dispense Log",
         href: "/nurse/medicine/dispense_log",
         icon: History,
-      },
-      {
-        title: "Low Stock Alerts",
-        href: "/nurse/medicine/low_stock_alerts",
-        icon: AlertTriangle,
       },
       {
         title: "Expiry Monitoring",

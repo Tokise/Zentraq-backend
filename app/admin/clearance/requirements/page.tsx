@@ -145,10 +145,10 @@ export default function AdminClearanceRequirementsPage() {
                     <div key={req.id} className="flex items-center gap-2 p-2.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50/50 transition-colors">
                       <button
                         onClick={() => toggleRequired(type, req.id)}
-                        className="text-zinc-400 hover:text-zinc-600 cursor-pointer shrink-0"
+                        className="shrink-0 cursor-pointer rounded text-primary transition-colors hover:bg-primary/10"
                         title={req.required ? "Required" : "Optional"}
                       >
-                        {req.required ? <CheckSquare className="size-4 text-zinc-900" /> : <Square className="size-4" />}
+                        {req.required ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
                       </button>
                       <span className="text-sm flex-1">{req.name}</span>
                       <Badge variant="outline" className={`text-[10px] ${req.required ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-zinc-50 text-zinc-500 border-zinc-200"}`}>

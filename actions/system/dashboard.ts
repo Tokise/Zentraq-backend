@@ -3,6 +3,8 @@
 import { getActionActor, hasAnyRole } from "@/lib/security/action-guard"
 import { createAdminClient } from "@/utils/supabase/admin"
 
+export type DashboardActivityScope = "admin" | "doctor" | "nurse"
+
 export interface DashboardConsultationDTO {
   id: string
   patient_name: string
@@ -13,16 +15,38 @@ export interface DashboardConsultationDTO {
   notes: string | null
 }
 
-export interface DashboardActivityDTO {
+export interface DashboardActivityPoint {
   [key: string]: number | string
   date: string
-  total_consultations: number
-  student_consultations: number
-  faculty_consultations: number
-  walk_in_visits: number
-  appointment_visits: number
-  rfid_visits: number
 }
+
+export interface AdminDashboardActivityDTO extends DashboardActivityPoint {
+  assigned_consultations: number
+  completed_consultations: number
+  scheduled_appointments: number
+  prescriptions_written: number
+  clearance_evaluations: number
+}
+
+export interface DoctorDashboardActivityDTO extends DashboardActivityPoint {
+  assigned_consultations: number
+  completed_consultations: number
+  scheduled_appointments: number
+  prescriptions_written: number
+  clearance_evaluations: number
+}
+
+export interface NurseDashboardActivityDTO extends DashboardActivityPoint {
+  assigned_consultations: number
+  completed_consultations: number
+  triage_assessments: number
+  patient_check_ins: number
+}
+
+export type DashboardActivityDTO =
+  | AdminDashboardActivityDTO
+  | DoctorDashboardActivityDTO
+  | NurseDashboardActivityDTO
 
 export interface DashboardAppointmentDTO {
   id: string
@@ -43,9 +67,10 @@ export interface DashboardStatsDTO {
 }
 
 export interface DashboardDataDTO {
-  consultations: DashboardConsultationDTO[]
-  appointments: DashboardAppointmentDTO[]
   activity: DashboardActivityDTO[]
+  activityScope: DashboardActivityScope
+  appointments: DashboardAppointmentDTO[]
+  consultations: DashboardConsultationDTO[]
   stats: DashboardStatsDTO
 }
 
@@ -71,17 +96,25 @@ interface ConsultationQueryRow {
   clinic_visits: ConsultationVisitRow | ConsultationVisitRow[] | null
 }
 
-interface ActivityQueryRow {
+interface ClinicianConsultationActivityRow {
+  completed_at: string | null
   created_at: string
-  clinic_visits:
-    | Pick<ConsultationVisitRow, "check_in_time" | "patient_type" | "visit_type">
-    | Array<
-        Pick<
-          ConsultationVisitRow,
-          "check_in_time" | "patient_type" | "visit_type"
-        >
-      >
-    | null
+}
+
+interface TimestampRow {
+  created_at: string
+}
+
+interface ClearanceActivityRow {
+  evaluated_at: string
+}
+
+interface AppointmentActivityRow {
+  scheduled_date: string | null
+}
+
+interface CheckInActivityRow {
+  check_in_time: string
 }
 
 interface AppointmentQueryRow {
@@ -93,6 +126,11 @@ interface AppointmentQueryRow {
   status: string
 }
 
+interface ActivityLoadResult {
+  data: DashboardActivityDTO[]
+  error: string | null
+}
+
 // Returns the minimized dashboard dataset authorized for the current clinic role.
 export async function getDashboardDataAction() {
   const actor = await getActionActor()
@@ -100,29 +138,27 @@ export async function getDashboardDataAction() {
     return { error: "Access denied", data: null }
   }
 
+  const activityScope = actor.role as DashboardActivityScope
   const admin = createAdminClient()
   const dayStart = new Date()
   dayStart.setHours(0, 0, 0, 0)
   const activityStart = new Date(dayStart)
   activityStart.setDate(activityStart.getDate() - 89)
-  let clinicAccountId: string | null = null
+  const { data: account, error: accountError } = await admin
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", actor.id)
+    .eq("role", activityScope)
+    .eq("is_active", true)
+    .maybeSingle()
 
-  if (actor.role !== "admin") {
-    const { data: account, error: accountError } = await admin
-      .from("clinic_accounts")
-      .select("id")
-      .eq("user_id", actor.id)
-      .eq("is_active", true)
-      .maybeSingle()
-
-    if (accountError || !account) {
-      return {
-        error: accountError?.message ?? "Active clinic account not found",
-        data: null,
-      }
+  if (accountError || !account) {
+    return {
+      error: accountError?.message ?? "Active clinic account not found",
+      data: null,
     }
-    clinicAccountId = account.id
   }
+  const clinicAccountId = account.id
 
   let consultationQuery = admin
     .from("consultations")
@@ -142,30 +178,12 @@ export async function getDashboardDataAction() {
     `)
     .order("created_at", { ascending: false })
     .limit(50)
-  if (clinicAccountId) {
-    consultationQuery = consultationQuery.or(
-      `doctor_id.eq.${clinicAccountId},nurse_id.eq.${clinicAccountId}`,
-    )
-  }
-
-  let activityQuery = admin
-    .from("consultations")
-    .select(`
-      created_at,
-      clinic_visits!inner(
-        check_in_time,
-        patient_type,
-        visit_type
-      )
-    `)
-    .gte("created_at", activityStart.toISOString())
-    .order("created_at", { ascending: true })
-    .limit(2000)
-  if (clinicAccountId) {
-    activityQuery = activityQuery.or(
-      `doctor_id.eq.${clinicAccountId},nurse_id.eq.${clinicAccountId}`,
-    )
-  }
+  const assignmentColumn =
+    activityScope === "nurse" ? "nurse_id" : "doctor_id"
+  consultationQuery = consultationQuery.eq(
+    assignmentColumn,
+    clinicAccountId,
+  )
 
   let appointmentQuery = admin
     .from("v_appointment_overview")
@@ -180,29 +198,21 @@ export async function getDashboardDataAction() {
     `)
     .order("scheduled_date", { ascending: true })
     .limit(50)
-  if (clinicAccountId) {
-    appointmentQuery = appointmentQuery.eq("doctor_id", clinicAccountId)
-  }
+  appointmentQuery = appointmentQuery.eq("doctor_id", clinicAccountId)
 
-  const [
-    consultationResult,
-    appointmentResult,
-    activityResult,
-    visits,
-    incidents,
-  ] =
+  const activityPromise = loadDashboardActivity({
+    actorId: actor.id,
+    activityScope,
+    clinicAccountId,
+    endDate: dayStart,
+    startDate: activityStart,
+  })
+
+  const [consultationResult, appointmentResult, activityResult] =
     await Promise.all([
       consultationQuery,
       appointmentQuery,
-      activityQuery,
-      admin
-        .from("clinic_visits")
-        .select("id", { count: "exact", head: true })
-        .gte("check_in_time", dayStart.toISOString()),
-      admin
-        .from("incidents")
-        .select("id", { count: "exact", head: true })
-        .in("status", ["open", "in-progress"]),
+      activityPromise,
     ])
 
   if (
@@ -214,7 +224,7 @@ export async function getDashboardDataAction() {
       error:
         consultationResult.error?.message ??
         appointmentResult.error?.message ??
-        activityResult.error?.message ??
+        activityResult.error ??
         "Unable to load dashboard",
       data: null,
     }
@@ -224,29 +234,153 @@ export async function getDashboardDataAction() {
     ConsultationQueryRow[]
   const appointmentRows = (appointmentResult.data ?? []) as unknown as
     AppointmentQueryRow[]
-  const activityRows = (activityResult.data ?? []) as unknown as
-    ActivityQueryRow[]
   const consultations = consultationRows.map(toConsultationDTO)
   const appointments = appointmentRows.map(toAppointmentDTO)
-  const activity = buildActivityDTOs(activityRows)
   const assignedPatientsToday = consultationRows.filter((row) => {
     const visit = firstRelation(row.clinic_visits)
-    return Boolean(visit?.check_in_time?.startsWith(dayStart.toISOString().slice(0, 10)))
+    return Boolean(
+      visit?.check_in_time?.startsWith(dayStart.toISOString().slice(0, 10)),
+    )
   }).length
 
   return {
     error: null,
     data: {
-      consultations,
+      activity: activityResult.data,
+      activityScope,
       appointments,
-      activity,
+      consultations,
       stats: {
-        patientsToday:
-          actor.role === "admin" ? (visits.count ?? 0) : assignedPatientsToday,
+        patientsToday: assignedPatientsToday,
         consultations: consultations.length,
-        emergencyCases: incidents.count ?? 0,
+        emergencyCases: 0,
       },
     } satisfies DashboardDataDTO,
+  }
+}
+
+// Loads a role-owned chart dataset instead of reusing clinic-wide activity.
+async function loadDashboardActivity(input: {
+  actorId: string
+  activityScope: DashboardActivityScope
+  clinicAccountId: string | null
+  endDate: Date
+  startDate: Date
+}): Promise<ActivityLoadResult> {
+  if (!input.clinicAccountId) {
+    return { data: [], error: "Active clinic account not found" }
+  }
+  if (input.activityScope !== "nurse") {
+    return loadDoctorActivity(
+      input.clinicAccountId,
+      input.actorId,
+      input.startDate,
+      input.endDate,
+    )
+  }
+  return loadNurseActivity(
+    input.actorId,
+    input.clinicAccountId,
+    input.startDate,
+  )
+}
+
+// Aggregates Admin- or Doctor-owned clinical workflow activity.
+async function loadDoctorActivity(
+  doctorId: string,
+  actorId: string,
+  startDate: Date,
+  endDate: Date,
+): Promise<ActivityLoadResult> {
+  const admin = createAdminClient()
+  const startIso = startDate.toISOString()
+  const endDay = endDate.toISOString().slice(0, 10)
+  const [consultations, appointments, prescriptions, evaluations] =
+    await Promise.all([
+      admin
+        .from("consultations")
+        .select("created_at, completed_at")
+        .eq("doctor_id", doctorId)
+        .or(`created_at.gte.${startIso},completed_at.gte.${startIso}`)
+        .limit(2000),
+      admin
+        .from("appointments")
+        .select("scheduled_date")
+        .eq("doctor_id", doctorId)
+        .gte("scheduled_date", startIso.slice(0, 10))
+        .lte("scheduled_date", endDay)
+        .limit(2000),
+      admin
+        .from("prescriptions")
+        .select("created_at")
+        .eq("prescribed_by", actorId)
+        .gte("created_at", startIso)
+        .limit(2000),
+      admin
+        .from("clearance_evaluations")
+        .select("evaluated_at")
+        .eq("doctor_id", doctorId)
+        .gte("evaluated_at", startIso)
+        .limit(2000),
+    ])
+
+  const error =
+    consultations.error ??
+    appointments.error ??
+    prescriptions.error ??
+    evaluations.error
+  if (error) return { data: [], error: error.message }
+
+  return {
+    data: buildDoctorActivityDTOs({
+      appointments: (appointments.data ?? []) as AppointmentActivityRow[],
+      consultations: (consultations.data ?? []) as ClinicianConsultationActivityRow[],
+      evaluations: (evaluations.data ?? []) as ClearanceActivityRow[],
+      prescriptions: (prescriptions.data ?? []) as TimestampRow[],
+    }),
+    error: null,
+  }
+}
+
+// Aggregates Nurse-owned consultations, triage, and check-in workflow events.
+async function loadNurseActivity(
+  actorId: string,
+  nurseId: string,
+  startDate: Date,
+): Promise<ActivityLoadResult> {
+  const admin = createAdminClient()
+  const startIso = startDate.toISOString()
+  const [consultations, triage, checkIns] = await Promise.all([
+    admin
+      .from("consultations")
+      .select("created_at, completed_at")
+      .eq("nurse_id", nurseId)
+      .or(`created_at.gte.${startIso},completed_at.gte.${startIso}`)
+      .limit(2000),
+    admin
+      .from("triage_assessments")
+      .select("created_at")
+      .eq("nurse_id", nurseId)
+      .gte("created_at", startIso)
+      .limit(2000),
+    admin
+      .from("clinic_visits")
+      .select("check_in_time")
+      .eq("created_by", actorId)
+      .gte("check_in_time", startIso)
+      .limit(2000),
+  ])
+
+  const error = consultations.error ?? triage.error ?? checkIns.error
+  if (error) return { data: [], error: error.message }
+
+  return {
+    data: buildNurseActivityDTOs({
+      checkIns: (checkIns.data ?? []) as CheckInActivityRow[],
+      consultations: (consultations.data ?? []) as ClinicianConsultationActivityRow[],
+      triage: (triage.data ?? []) as TimestampRow[],
+    }),
+    error: null,
   }
 }
 
@@ -273,40 +407,98 @@ function toConsultationDTO(
   }
 }
 
-// Aggregates role-scoped consultation visits into bounded daily chart totals.
-function buildActivityDTOs(rows: ActivityQueryRow[]): DashboardActivityDTO[] {
-  const days = new Map<string, DashboardActivityDTO>()
-
-  rows.forEach((row) => {
-    const visit = firstRelation(row.clinic_visits)
-    const date = (visit?.check_in_time ?? row.created_at).slice(0, 10)
-    if (!date) return
-
-    const point = days.get(date) ?? {
-      date,
-      total_consultations: 0,
-      student_consultations: 0,
-      faculty_consultations: 0,
-      walk_in_visits: 0,
-      appointment_visits: 0,
-      rfid_visits: 0,
-    }
-
-    point.total_consultations += 1
-    if (visit?.patient_type === "student") point.student_consultations += 1
-    if (visit?.patient_type === "faculty") point.faculty_consultations += 1
-
-    const visitType = visit?.visit_type.toLowerCase().replaceAll("_", "-")
-    if (visitType === "walk-in") point.walk_in_visits += 1
-    if (visitType === "appointment") point.appointment_visits += 1
-    if (visitType === "rfid") point.rfid_visits += 1
-
+// Aggregates Doctor workflow events by their meaningful event dates.
+function buildDoctorActivityDTOs(input: {
+  appointments: AppointmentActivityRow[]
+  consultations: ClinicianConsultationActivityRow[]
+  evaluations: ClearanceActivityRow[]
+  prescriptions: TimestampRow[]
+}): DoctorDashboardActivityDTO[] {
+  const days = new Map<string, DoctorDashboardActivityDTO>()
+  const pointFor = (value: string | null) => {
+    const date = toDateKey(value)
+    if (!date) return null
+    const point = days.get(date) ?? createDoctorActivityPoint(date)
     days.set(date, point)
+    return point
+  }
+
+  input.consultations.forEach((row) => {
+    const assignedPoint = pointFor(row.created_at)
+    if (assignedPoint) assignedPoint.assigned_consultations += 1
+    const completedPoint = pointFor(row.completed_at)
+    if (completedPoint) completedPoint.completed_consultations += 1
+  })
+  input.appointments.forEach((row) => {
+    const point = pointFor(row.scheduled_date)
+    if (point) point.scheduled_appointments += 1
+  })
+  input.prescriptions.forEach((row) => {
+    const point = pointFor(row.created_at)
+    if (point) point.prescriptions_written += 1
+  })
+  input.evaluations.forEach((row) => {
+    const point = pointFor(row.evaluated_at)
+    if (point) point.clearance_evaluations += 1
   })
 
-  return Array.from(days.values()).sort((a, b) =>
-    a.date.localeCompare(b.date),
-  )
+  return sortActivityDays(days)
+}
+
+// Aggregates Nurse workflow events by their meaningful event dates.
+function buildNurseActivityDTOs(input: {
+  checkIns: CheckInActivityRow[]
+  consultations: ClinicianConsultationActivityRow[]
+  triage: TimestampRow[]
+}): NurseDashboardActivityDTO[] {
+  const days = new Map<string, NurseDashboardActivityDTO>()
+  const pointFor = (value: string | null) => {
+    const date = toDateKey(value)
+    if (!date) return null
+    const point = days.get(date) ?? createNurseActivityPoint(date)
+    days.set(date, point)
+    return point
+  }
+
+  input.consultations.forEach((row) => {
+    const assignedPoint = pointFor(row.created_at)
+    if (assignedPoint) assignedPoint.assigned_consultations += 1
+    const completedPoint = pointFor(row.completed_at)
+    if (completedPoint) completedPoint.completed_consultations += 1
+  })
+  input.triage.forEach((row) => {
+    const point = pointFor(row.created_at)
+    if (point) point.triage_assessments += 1
+  })
+  input.checkIns.forEach((row) => {
+    const point = pointFor(row.check_in_time)
+    if (point) point.patient_check_ins += 1
+  })
+
+  return sortActivityDays(days)
+}
+
+// Creates an empty Doctor workflow point for one day.
+function createDoctorActivityPoint(date: string): DoctorDashboardActivityDTO {
+  return {
+    date,
+    assigned_consultations: 0,
+    completed_consultations: 0,
+    scheduled_appointments: 0,
+    prescriptions_written: 0,
+    clearance_evaluations: 0,
+  }
+}
+
+// Creates an empty Nurse workflow point for one day.
+function createNurseActivityPoint(date: string): NurseDashboardActivityDTO {
+  return {
+    date,
+    assigned_consultations: 0,
+    completed_consultations: 0,
+    triage_assessments: 0,
+    patient_check_ins: 0,
+  }
 }
 
 // Maps one assigned appointment into the minimized dashboard contract.
@@ -324,6 +516,21 @@ function toAppointmentDTO(row: AppointmentQueryRow): DashboardAppointmentDTO {
     employee_number: null,
     department: null,
   }
+}
+
+// Converts a timestamp or date into the chart's ISO date key.
+function toDateKey(value: string | null | undefined): string | null {
+  if (!value || value.length < 10) return null
+  return value.slice(0, 10)
+}
+
+// Sorts a daily activity map in ascending chronological order.
+function sortActivityDays<T extends DashboardActivityPoint>(
+  days: Map<string, T>,
+): T[] {
+  return Array.from(days.values()).sort((a, b) =>
+    a.date.localeCompare(b.date),
+  )
 }
 
 // Normalizes Supabase to-one relationships returned as an object or array.

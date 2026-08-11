@@ -67,11 +67,9 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // 1. Verify session with the Supabase Auth server (JWT validation)
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  // 1. Validate the signed session claims before any route authorization.
+  const { data: claimsData, error } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
 
   const isAuthPage = pathname === "/login";
   const isKioskPage = pathname.startsWith("/rfid-kiosk");
@@ -82,7 +80,7 @@ export async function proxy(request: NextRequest) {
     isKioskPage || isUnauthorizedPage || isSettingsPage || isAuthPage;
 
   // Unauthenticated access check
-  if (!user || error) {
+  if (!userId || error) {
     if (!isAuthPage && !isKioskPage && !isUnauthorizedPage) {
       const loginUrl = new URL("/login", request.url);
       const redirectResponse = NextResponse.redirect(loginUrl);
@@ -120,7 +118,7 @@ export async function proxy(request: NextRequest) {
         admin
           .from("user_sessions")
           .select("id")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("session_token", clientSessionToken ?? "")
           .is("revoked_at", null)
           .gt("expires_at", new Date().toISOString())
@@ -128,7 +126,7 @@ export async function proxy(request: NextRequest) {
         admin
           .from("user_roles")
           .select("role:roles(name)")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .limit(1),
       ]);
       isValidSessionToken = Boolean(session);

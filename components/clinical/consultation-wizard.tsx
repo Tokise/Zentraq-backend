@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Clock3, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -10,13 +10,21 @@ import {
 } from "@/actions/admin/visits/overview";
 import {
   finalizeConsultationWorkflow,
+  getAvailableReviewDoctors,
   getClinicalWorkflowRole,
   getVisitReasonCatalog,
+  type AvailableReviewDoctor,
 } from "@/actions/clinical/visits";
 import {
   getMedicineCatalog,
   type Medicine,
 } from "@/actions/clinical/prescriptions";
+import {
+  deletePrescriptionFavoriteAction,
+  getPrescriptionFavoritesAction,
+  savePrescriptionFavoriteAction,
+  type PrescriptionFavorite,
+} from "@/actions/clinical/prescription-favorites";
 import {
   ConsultationWizardShell,
   type ClinicalWorkflowRole,
@@ -109,7 +117,7 @@ export function ConsultationWizard({
   const [patientComplaint, setPatientComplaint] = useState("");
   const [customPatientComplaint, setCustomPatientComplaint] = useState("");
   const [vitalsDisposition, setVitalsDisposition] = useState<
-    "required" | "not_required" | ""
+    "required" | "not_required" | "existing" | ""
   >("");
   const [skipReasonChoice, setSkipReasonChoice] = useState("");
   const [customSkipReason, setCustomSkipReason] = useState("");
@@ -126,6 +134,12 @@ export function ConsultationWizard({
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpReason, setFollowUpReason] = useState("");
   const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [availableDoctors, setAvailableDoctors] = useState<
+    AvailableReviewDoctor[]
+  >([]);
+  const [selectedReviewDoctorId, setSelectedReviewDoctorId] =
+    useState<string>("__pending__");
+  const [favorites, setFavorites] = useState<PrescriptionFavorite[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
 
@@ -145,16 +159,27 @@ export function ConsultationWizard({
       }
       setConsultation(detail.consultation);
       setRole(workflowRole);
+      const isHandoffReview = Boolean(
+        workflowRole === "doctor" && detail.consultation.nurse_handoff_at,
+      );
       if (visitReasonCatalog.error) toast.error(visitReasonCatalog.error);
       setVisitReasonOptions(visitReasonCatalog.reasons);
       setPatientComplaint(detail.consultation.patient_complaint ?? "");
       setCustomPatientComplaint("");
-      setNotes(detail.consultation.consultation_notes ?? "");
-      setStep("details");
-      setVitalsDisposition("");
+      setNotes(isHandoffReview ? "" : detail.consultation.consultation_notes ?? "");
+      setStep(isHandoffReview ? "handoff" : "details");
+      setVitalsDisposition(isHandoffReview ? "existing" : "");
       setSkipReasonChoice("");
       setCustomSkipReason("");
-      setVitals(emptyVitals);
+      setVitals({
+        temperature: detail.consultation.triage?.temperature?.toString() ?? "",
+        blood_pressure: detail.consultation.triage?.blood_pressure ?? "",
+        heart_rate: detail.consultation.triage?.heart_rate?.toString() ?? "",
+        respiratory_rate:
+          detail.consultation.triage?.respiratory_rate?.toString() ?? "",
+        oxygen_saturation:
+          detail.consultation.triage?.oxygen_saturation?.toString() ?? "",
+      });
       setDiagnosisCode("");
       setDiagnosisDescription("");
       setTreatmentPlan("");
@@ -164,6 +189,14 @@ export function ConsultationWizard({
       setPrescriptions([]);
       setFollowUpDate("");
       setFollowUpReason("");
+      setSelectedReviewDoctorId("__pending__");
+      if (workflowRole === "nurse") {
+        const doctorResult = await getAvailableReviewDoctors();
+        if (doctorResult.error) toast.error(doctorResult.error);
+        setAvailableDoctors(doctorResult.doctors);
+      } else {
+        setAvailableDoctors([]);
+      }
     }
     void loadWorkflow();
   }, [consultationId, onOpenChange, open]);
@@ -172,9 +205,16 @@ export function ConsultationWizard({
   useEffect(() => {
     if (!open || !role || role === "nurse") return;
     async function loadMedicines() {
-      const result = await getMedicineCatalog();
+      const [result, favoriteResult] = await Promise.all([
+        getMedicineCatalog(),
+        role === "doctor"
+          ? getPrescriptionFavoritesAction()
+          : Promise.resolve({ error: null, favorites: [] }),
+      ]);
       if (result.error) toast.error(result.error);
       else setMedicines(result.medicines);
+      if (favoriteResult.error) toast.error(favoriteResult.error);
+      else setFavorites(favoriteResult.favorites);
     }
     void loadMedicines();
   }, [open, role]);
@@ -185,6 +225,9 @@ export function ConsultationWizard({
   );
 
   const canMakeClinicalPlan = role === "admin" || role === "doctor";
+  const isNurseHandoffReview = Boolean(
+    role === "doctor" && consultation?.nurse_handoff_at,
+  );
   const resolvedPatientComplaint =
     patientComplaint === "__other__"
       ? customPatientComplaint.trim()
@@ -196,6 +239,7 @@ export function ConsultationWizard({
 
   // Requires a complaint selection before the clinician advances from Visit.
   function validateVisit() {
+    if (isNurseHandoffReview) return true;
     if (!resolvedPatientComplaint) {
       toast.error("Choose or enter the visit reason.");
       return false;
@@ -205,6 +249,7 @@ export function ConsultationWizard({
 
   // Validates the vital-sign choice before allowing forward navigation.
   function validateVitals() {
+    if (isNurseHandoffReview) return true;
     if (!vitalsDisposition) {
       toast.error("Choose whether vital signs are required.");
       return false;
@@ -228,8 +273,10 @@ export function ConsultationWizard({
     if (!role) return;
     const steps: ConsultationWizardStep[] =
       role === "nurse"
-        ? ["details", "vitals", "notes", "review"]
-        : ["details", "vitals", "notes", "clinical_plan", "review"];
+        ? ["details", "vitals", "notes", "doctor_selection", "review"]
+        : isNurseHandoffReview
+          ? ["handoff", "clinical_plan", "review"]
+          : ["details", "vitals", "notes", "clinical_plan", "review"];
     const currentIndex = steps.indexOf(step);
     const nextIndex = steps.indexOf(nextStep);
 
@@ -237,15 +284,27 @@ export function ConsultationWizard({
       setStep(nextStep);
       return;
     }
-    if (nextIndex > steps.indexOf("details") && !validateVisit()) {
+    if (
+      steps.includes("details") &&
+      nextIndex > steps.indexOf("details") &&
+      !validateVisit()
+    ) {
       setStep("details");
       return;
     }
-    if (nextIndex > steps.indexOf("vitals") && !validateVitals()) {
+    if (
+      steps.includes("vitals") &&
+      nextIndex > steps.indexOf("vitals") &&
+      !validateVitals()
+    ) {
       setStep("vitals");
       return;
     }
-    if (nextIndex > steps.indexOf("notes") && !notes.trim()) {
+    if (
+      steps.includes("notes") &&
+      nextIndex > steps.indexOf("notes") &&
+      !notes.trim()
+    ) {
       toast.error("Enter the consultation outcome before continuing.");
       setStep("notes");
       return;
@@ -268,17 +327,17 @@ export function ConsultationWizard({
   // Validates the review payload and commits it atomically through the server action.
   async function submitReview() {
     if (!consultation || !role) return;
-    if (!validateVisit()) {
+    if (!isNurseHandoffReview && !validateVisit()) {
       setStep("details");
       return;
     }
-    if (!validateVitals()) {
+    if (!isNurseHandoffReview && !validateVitals()) {
       setStep("vitals");
       return;
     }
     if (!notes.trim()) {
       toast.error("Enter the consultation outcome before submitting.");
-      setStep("notes");
+      setStep(isNurseHandoffReview ? "clinical_plan" : "notes");
       return;
     }
 
@@ -286,7 +345,13 @@ export function ConsultationWizard({
     const result = await finalizeConsultationWorkflow({
       consultation_id: consultation.id,
       patient_complaint: resolvedPatientComplaint,
-      vitals_disposition: vitalsDisposition,
+      review_doctor_id:
+        role === "nurse" && selectedReviewDoctorId !== "__pending__"
+          ? selectedReviewDoctorId
+          : null,
+      vitals_disposition: isNurseHandoffReview
+        ? "existing"
+        : vitalsDisposition,
       vitals_skip_reason: resolvedSkipReason || undefined,
       vitals: {
         ...(vitals.temperature
@@ -369,6 +434,7 @@ export function ConsultationWizard({
         open={open}
         patientName={consultation.patient_name ?? "Patient"}
         role={role}
+        isNurseHandoffReview={isNurseHandoffReview}
         step={step}
         submitting={submitting}
       >
@@ -380,6 +446,9 @@ export function ConsultationWizard({
           followUpDate={followUpDate}
           followUpReason={followUpReason}
           medicines={medicines}
+          availableDoctors={availableDoctors}
+          favorites={favorites}
+          isNurseHandoffReview={isNurseHandoffReview}
           notes={notes}
           onAddPrescription={addPrescription}
           onRemovePrescription={(index) =>
@@ -401,6 +470,9 @@ export function ConsultationWizard({
           setNotes={setNotes}
           setPatientComplaint={setPatientComplaint}
           setPendingPrescription={setPrescription}
+          selectedReviewDoctorId={selectedReviewDoctorId}
+          setSelectedReviewDoctorId={setSelectedReviewDoctorId}
+          setFavorites={setFavorites}
           customSkipReason={customSkipReason}
           resolvedSkipReason={resolvedSkipReason}
           setCustomSkipReason={setCustomSkipReason}
@@ -462,8 +534,10 @@ interface WorkflowStepProps {
   setPatientComplaint: (value: string) => void;
   customPatientComplaint: string;
   setCustomPatientComplaint: (value: string) => void;
-  vitalsDisposition: "required" | "not_required" | "";
-  setVitalsDisposition: (value: "required" | "not_required") => void;
+  vitalsDisposition: "required" | "not_required" | "existing" | "";
+  setVitalsDisposition: (
+    value: "required" | "not_required" | "existing",
+  ) => void;
   skipReasonChoice: string;
   setSkipReasonChoice: (value: string) => void;
   customSkipReason: string;
@@ -484,6 +558,12 @@ interface WorkflowStepProps {
   treatmentFollowUpDays: string;
   setTreatmentFollowUpDays: (value: string) => void;
   medicines: Medicine[];
+  availableDoctors: AvailableReviewDoctor[];
+  selectedReviewDoctorId: string;
+  setSelectedReviewDoctorId: (value: string) => void;
+  favorites: PrescriptionFavorite[];
+  setFavorites: (value: PrescriptionFavorite[]) => void;
+  isNurseHandoffReview: boolean;
   pendingPrescription: PrescriptionDraft;
   setPendingPrescription: (value: PrescriptionDraft) => void;
   prescriptions: PrescriptionDraft[];
@@ -497,6 +577,10 @@ interface WorkflowStepProps {
 
 // Renders the current client-only workflow step before the final review.
 function WorkflowStep(props: WorkflowStepProps) {
+  if (props.step === "handoff") {
+    return <NurseHandoffSummary {...props} />;
+  }
+
   if (props.step === "details") {
     const availableReasons = Array.from(
       new Set(
@@ -661,16 +745,210 @@ function WorkflowStep(props: WorkflowStepProps) {
 
   if (props.step === "clinical_plan") return <ClinicalPlan {...props} />;
 
+  if (props.step === "doctor_selection") {
+    return <DoctorSelectionStep {...props} />;
+  }
+
   return <ReviewStep {...props} />;
+}
+
+// Shows Nurse-entered clinical information without allowing Doctor edits.
+function NurseHandoffSummary(props: WorkflowStepProps) {
+  const triage = props.consultation.triage;
+  const vitals = [
+    ["Temperature", triage?.temperature ? `${triage.temperature} °C` : null],
+    ["Blood pressure", triage?.blood_pressure],
+    ["Heart rate", triage?.heart_rate ? `${triage.heart_rate} bpm` : null],
+    [
+      "Respiratory rate",
+      triage?.respiratory_rate ? `${triage.respiratory_rate}/min` : null,
+    ],
+    [
+      "Oxygen saturation",
+      triage?.oxygen_saturation ? `${triage.oxygen_saturation}%` : null,
+    ],
+  ].filter((item) => item[1]);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="font-semibold">Nurse handoff</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          This assessment is read-only. Add your own clinical review in the next
+          step.
+        </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-lg border border-border p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Visit reason
+          </p>
+          <p className="mt-2 font-medium">
+            {props.consultation.patient_complaint ?? "Not recorded"}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Submitted by
+          </p>
+          <p className="mt-2 font-medium">
+            {props.consultation.nurse_name ?? "Nurse"}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {props.consultation.nurse_handoff_at
+              ? new Date(props.consultation.nurse_handoff_at).toLocaleString()
+              : "Time not recorded"}
+          </p>
+        </div>
+      </div>
+      <div className="rounded-lg border border-border p-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Nurse handoff note
+        </p>
+        <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
+          {props.consultation.nurse_handoff_note ?? "No handoff note recorded"}
+        </p>
+      </div>
+      <div className="rounded-lg border border-border p-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Vital signs and triage
+        </p>
+        {vitals.length > 0 ? (
+          <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {vitals.map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-xs text-muted-foreground">{label}</dt>
+                <dd className="mt-1 font-medium">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="mt-2 text-sm">
+            Vitals not required — {props.consultation.vitals_skip_reason ?? "reason not recorded"}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Lets the Nurse select an available Doctor or preserve pending assignment.
+function DoctorSelectionStep(props: WorkflowStepProps) {
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="font-semibold">Choose a reviewing Doctor</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Availability combines the Doctor&apos;s schedule, active blocks, and
+          expiring on-duty status.
+        </p>
+      </div>
+      <RadioGroup
+        onValueChange={props.setSelectedReviewDoctorId}
+        value={props.selectedReviewDoctorId}
+      >
+        {props.availableDoctors.map((doctor) => (
+          <label
+            className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-4 has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20"
+            key={doctor.clinicAccountId}
+          >
+            <RadioGroupItem value={doctor.clinicAccountId} />
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">{doctor.displayName}</span>
+              <span className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <Clock3 className="size-3.5" />
+                Available until {new Date(doctor.availableUntil).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+                <span>· {doctor.activeReviewCount} active reviews</span>
+              </span>
+            </span>
+          </label>
+        ))}
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-4 has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/20">
+          <RadioGroupItem value="__pending__" />
+          <span>
+            <span className="block font-medium">Pending assignment</span>
+            <span className="text-sm text-muted-foreground">
+              Save safely for the first eligible on-duty Doctor to claim.
+            </span>
+          </span>
+        </label>
+      </RadioGroup>
+    </div>
+  );
 }
 
 // Renders the Doctor and Admin diagnosis, treatment, prescription, and follow-up fields.
 function ClinicalPlan(props: WorkflowStepProps) {
+  const [favoriteLabel, setFavoriteLabel] = useState("");
+  const [selectedFavoriteId, setSelectedFavoriteId] = useState("");
   const [tomorrow] = useState(() => {
     const nextDay = new Date();
     nextDay.setDate(nextDay.getDate() + 1);
     return nextDay.toISOString().slice(0, 10);
   });
+
+  // Applies a Doctor-owned favorite while keeping every field editable.
+  function applyFavorite(favoriteId: string) {
+    setSelectedFavoriteId(favoriteId);
+    const favorite = props.favorites.find((item) => item.id === favoriteId);
+    if (!favorite) return;
+    props.setPendingPrescription({
+      medicine_id: favorite.medicineId,
+      dosage: favorite.dosage ?? "",
+      frequency: favorite.frequency ?? "",
+      duration_days: favorite.durationDays?.toString() ?? "",
+      quantity: favorite.quantity?.toString() ?? "",
+      instructions: favorite.instructions ?? "",
+    });
+  }
+
+  // Saves the current editable prescription values as a Doctor favorite.
+  async function saveFavorite() {
+    if (!favoriteLabel.trim() || !props.pendingPrescription.medicine_id) {
+      toast.error("Choose a medicine and enter a favorite label.");
+      return;
+    }
+    const result = await savePrescriptionFavoriteAction({
+      medicineId: props.pendingPrescription.medicine_id,
+      label: favoriteLabel,
+      dosage: props.pendingPrescription.dosage || undefined,
+      frequency: props.pendingPrescription.frequency || undefined,
+      durationDays: props.pendingPrescription.duration_days
+        ? Number(props.pendingPrescription.duration_days)
+        : undefined,
+      quantity: props.pendingPrescription.quantity
+        ? Number(props.pendingPrescription.quantity)
+        : undefined,
+      instructions: props.pendingPrescription.instructions || undefined,
+    });
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    const refreshed = await getPrescriptionFavoritesAction();
+    if (!refreshed.error) props.setFavorites(refreshed.favorites);
+    setFavoriteLabel("");
+    toast.success("Prescription favorite saved.");
+  }
+
+  // Removes the selected Doctor favorite without changing the draft.
+  async function deleteFavorite() {
+    if (!selectedFavoriteId) return;
+    const result = await deletePrescriptionFavoriteAction(selectedFavoriteId);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    props.setFavorites(
+      props.favorites.filter((item) => item.id !== selectedFavoriteId),
+    );
+    setSelectedFavoriteId("");
+    toast.success("Prescription favorite removed.");
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -679,6 +957,22 @@ function ClinicalPlan(props: WorkflowStepProps) {
           Optional clinical decisions are committed only from Review.
         </p>
       </div>
+      {props.isNurseHandoffReview && (
+        <section className="space-y-2 rounded-lg border border-border bg-muted/20 p-4">
+          <Label htmlFor="doctor-review-note">Doctor review note</Label>
+          <Textarea
+            id="doctor-review-note"
+            maxLength={5000}
+            onChange={(event) => props.setNotes(event.target.value)}
+            placeholder="Your assessment and review of the Nurse handoff"
+            rows={5}
+            value={props.notes}
+          />
+          <p className="text-xs text-muted-foreground">
+            The Nurse handoff remains unchanged and is stored separately.
+          </p>
+        </section>
+      )}
       <Separator />
       <section className="space-y-3">
         <h4 className="font-medium">Diagnosis</h4>
@@ -742,39 +1036,85 @@ function ClinicalPlan(props: WorkflowStepProps) {
       <Separator />
       <section className="space-y-3">
         <h4 className="font-medium">Prescription</h4>
+        {props.role === "doctor" && props.favorites.length > 0 && (
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1 space-y-1">
+                <Label>Prescription favorite</Label>
+                <SearchableCombobox
+                  ariaLabel="Prescription favorite"
+                  emptyText="No favorite matches your search."
+                  onValueChange={applyFavorite}
+                  options={props.favorites.map((favorite) => ({
+                    label: favorite.label,
+                    value: favorite.id,
+                  }))}
+                  placeholder="Apply a saved favorite"
+                  searchPlaceholder="Search favorites"
+                  value={selectedFavoriteId}
+                />
+              </div>
+              <Button
+                disabled={!selectedFavoriteId}
+                onClick={() => void deleteFavorite()}
+                type="button"
+                variant="outline"
+              >
+                <Trash2 className="size-4" />
+                Delete favorite
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <Label htmlFor="medicine">Medicine</Label>
-            <Select
+          <div className="space-y-1 sm:col-span-2">
+            <Label>Medicine</Label>
+            <SearchableCombobox
+              ariaLabel="Medicine"
+              emptyText="No approved medicine matches your search."
               onValueChange={(medicineId) =>
                 props.setPendingPrescription({
                   ...props.pendingPrescription,
-                  medicine_id: medicineId ?? "",
+                  medicine_id: medicineId,
                 })
               }
-              value={props.pendingPrescription.medicine_id || null}
-            >
-              <SelectTrigger className="w-full" id="medicine">
-                <SelectValue placeholder="Choose medicine" />
-              </SelectTrigger>
-              <SelectContent>
-                {props.medicines.map((medicine) => (
-                  <SelectItem key={medicine.id} value={medicine.id}>
-                    {medicine.generic_name}
-                    {medicine.brand_name ? ` (${medicine.brand_name})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={props.medicines.map((medicine) => ({
+                label: `${medicine.generic_name}${
+                  medicine.brand_name ? ` (${medicine.brand_name})` : ""
+                } — ${medicine.available_stock} ${medicine.unit} available`,
+                value: medicine.id,
+              }))}
+              placeholder="Search approved medicines"
+              searchPlaceholder="Search medicine or brand"
+              value={props.pendingPrescription.medicine_id}
+            />
+            {props.pendingPrescription.medicine_id && (
+              <p className="text-xs text-muted-foreground">
+                {(() => {
+                  const selected = props.medicines.find(
+                    (medicine) =>
+                      medicine.id === props.pendingPrescription.medicine_id,
+                  );
+                  if (!selected) return "Medicine unavailable";
+                  if (selected.available_stock <= 0) return "Out of stock";
+                  if (selected.available_stock <= selected.min_stock_level) {
+                    return `Low stock: ${selected.available_stock} ${selected.unit}`;
+                  }
+                  return `Available stock: ${selected.available_stock} ${selected.unit}`;
+                })()}
+              </p>
+            )}
           </div>
           <VitalInput
             label="Quantity"
+            min={1}
             onChange={(quantity) =>
               props.setPendingPrescription({
                 ...props.pendingPrescription,
                 quantity,
               })
             }
+            type="number"
             value={props.pendingPrescription.quantity}
           />
           <VitalInput
@@ -787,17 +1127,120 @@ function ClinicalPlan(props: WorkflowStepProps) {
             }
             value={props.pendingPrescription.dosage}
           />
-          <VitalInput
-            label="Frequency"
-            onChange={(frequency) =>
-              props.setPendingPrescription({
-                ...props.pendingPrescription,
-                frequency,
-              })
-            }
-            value={props.pendingPrescription.frequency}
-          />
+          <div className="space-y-2 sm:col-span-2">
+            <VitalInput
+              label="Frequency"
+              onChange={(frequency) =>
+                props.setPendingPrescription({
+                  ...props.pendingPrescription,
+                  frequency,
+                })
+              }
+              value={props.pendingPrescription.frequency}
+            />
+            <div className="flex flex-wrap gap-2" aria-label="Frequency quick picks">
+              {["Once daily", "Twice daily", "Three times daily", "As needed"].map(
+                (frequency) => (
+                  <Button
+                    key={frequency}
+                    onClick={() =>
+                      props.setPendingPrescription({
+                        ...props.pendingPrescription,
+                        frequency,
+                      })
+                    }
+                    size="sm"
+                    type="button"
+                    variant={
+                      props.pendingPrescription.frequency === frequency
+                        ? "default"
+                        : "outline"
+                    }
+                  >
+                    {frequency}
+                  </Button>
+                ),
+              )}
+            </div>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <VitalInput
+              label="Duration in days"
+              min={1}
+              onChange={(durationDays) =>
+                props.setPendingPrescription({
+                  ...props.pendingPrescription,
+                  duration_days: durationDays,
+                })
+              }
+              type="number"
+              value={props.pendingPrescription.duration_days}
+            />
+            <div className="flex flex-wrap gap-2" aria-label="Duration quick picks">
+              {[3, 5, 7, 14, 30].map((days) => (
+                <Button
+                  key={days}
+                  onClick={() =>
+                    props.setPendingPrescription({
+                      ...props.pendingPrescription,
+                      duration_days: String(days),
+                    })
+                  }
+                  size="sm"
+                  type="button"
+                  variant={
+                    props.pendingPrescription.duration_days === String(days)
+                      ? "default"
+                      : "outline"
+                  }
+                >
+                  {days} days
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <Label htmlFor="prescription-instructions">Instructions</Label>
+            <Textarea
+              id="prescription-instructions"
+              maxLength={1000}
+              onChange={(event) =>
+                props.setPendingPrescription({
+                  ...props.pendingPrescription,
+                  instructions: event.target.value,
+                })
+              }
+              placeholder="Optional patient instructions"
+              value={props.pendingPrescription.instructions}
+            />
+          </div>
         </div>
+        {props.role === "doctor" && (
+          <div className="flex flex-col gap-2 rounded-lg border border-border p-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1">
+              <Label htmlFor="favorite-label">Favorite label</Label>
+              <Input
+                id="favorite-label"
+                maxLength={80}
+                onChange={(event) => setFavoriteLabel(event.target.value)}
+                placeholder="Example: Standard fever care"
+                value={favoriteLabel}
+              />
+            </div>
+            <Button
+              disabled={
+                !favoriteLabel.trim() ||
+                !props.pendingPrescription.medicine_id
+              }
+              onClick={() => void saveFavorite()}
+              type="button"
+              variant="outline"
+            >
+              <Star className="size-4" />
+              Save as favorite
+            </Button>
+          </div>
+        )}
         <Button
           onClick={props.onAddPrescription}
           type="button"
@@ -894,16 +1337,36 @@ function ReviewStep(props: WorkflowStepProps) {
               ? "Will be recorded"
               : props.vitalsDisposition === "not_required"
                 ? `Not needed — ${props.resolvedSkipReason || "Reason required"}`
-                : "Not selected"}
+                : props.vitalsDisposition === "existing"
+                  ? "Using the Nurse assessment shown in the handoff"
+                  : "Not selected"}
           </p>
         </div>
         <Separator />
         <div>
-          <p className="text-xs text-muted-foreground">Outcome note</p>
+          <p className="text-xs text-muted-foreground">
+            {props.isNurseHandoffReview ? "Doctor review note" : "Outcome note"}
+          </p>
           <p className="mt-1 whitespace-pre-wrap">
             {props.notes || "No outcome note"}
           </p>
         </div>
+        {props.role === "nurse" && (
+          <>
+            <Separator />
+            <div>
+              <p className="text-xs text-muted-foreground">Review assignment</p>
+              <p className="mt-1 font-medium">
+                {props.selectedReviewDoctorId === "__pending__"
+                  ? "Pending assignment"
+                  : props.availableDoctors.find(
+                      (doctor) =>
+                        doctor.clinicAccountId === props.selectedReviewDoctorId,
+                    )?.displayName ?? "Selected Doctor"}
+              </p>
+            </div>
+          </>
+        )}
         {props.role !== "nurse" && (
           <>
             <Separator />

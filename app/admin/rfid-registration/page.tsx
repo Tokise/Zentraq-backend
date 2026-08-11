@@ -1,6 +1,11 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import {
+  useState,
+  useEffect,
+  useRef,
+  type CSSProperties,
+} from "react"
 import { PageHeader } from "@/components/common/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -15,7 +20,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { createStudentAccount, resetStudentPassword, registerStudentProfile, updateStudentProfile, generateStudentId as generateStudentIdAction, lookupStudentByRfid } from "@/actions/admin/rfid/registration"
+import {
+  createStudentAccount,
+  generateStudentId as generateStudentIdAction,
+  lookupStudentByRfid,
+  registerStudentProfile,
+  updateStudentProfile,
+} from "@/actions/admin/rfid/registration"
+import { resetPortalPasswordAction } from "@/actions/admin/accounts/patient-portal"
 import { PasswordStrengthInput } from "@/components/common/password-strength-input"
 import { checkPassword } from "@/lib/validation/password"
 import {
@@ -618,10 +630,12 @@ export default function RfidRegistrationPage() {
       }
 
       if (result.data) {
-        toast.success("Profile updated!")
-        setSearchedProfile(result.data as PatientProfile)
-        setMode("SUCCESS")
-        setResetTimer(8)
+        const updatedProfile = result.data as PatientProfile
+        toast.success("Profile and photo saved!")
+        setSearchedProfile(updatedProfile)
+        setPhoto(updatedProfile.clinic_photo_url)
+        setAccountEmail(updatedProfile.email || "")
+        setStep(2)
       }
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Update failed"))
@@ -683,11 +697,11 @@ export default function RfidRegistrationPage() {
 
     setResettingPassword(true)
     try {
-      const formData = new FormData()
-      formData.set("studentAccountId", searchedProfile.id)
-      formData.set("newPassword", resetPassword)
-
-      const result = await resetStudentPassword(formData)
+      const result = await resetPortalPasswordAction({
+        newPassword: resetPassword,
+        role: searchedProfile.role,
+        targetId: searchedProfile.id,
+      })
 
       if (result.error) {
         toast.error(result.error)
@@ -723,23 +737,59 @@ export default function RfidRegistrationPage() {
             const stepNum = i + 1
             const isActive = step === stepNum
             const isDone = step > stepNum
+            const connectorDone = step > i
+            const circleStyle: CSSProperties = isDone
+              ? {
+                  backgroundColor: "var(--primary, #1f7a58)",
+                  borderColor: "var(--primary, #1f7a58)",
+                  color: "var(--primary-foreground, #ffffff)",
+                }
+              : isActive
+                ? {
+                    backgroundColor: "var(--primary, #1f7a58)",
+                    borderColor: "var(--primary, #1f7a58)",
+                    boxShadow: "0 0 0 4px rgb(31 122 88 / 18%)",
+                    color: "var(--primary-foreground, #ffffff)",
+                  }
+                : {
+                    backgroundColor: "var(--muted, #e2e9e3)",
+                    borderColor: "var(--border, #d1ddd4)",
+                    color: "var(--muted-foreground, #526058)",
+                  }
+            const labelStyle: CSSProperties = {
+              color: isDone
+                ? "var(--primary, #1f7a58)"
+                : isActive
+                  ? "var(--primary, #1f7a58)"
+                  : "var(--muted-foreground, #526058)",
+            }
             return (
               <div key={label} className="flex items-center">
                 {i > 0 && (
-                  <div className={`w-8 h-px mx-1 ${isDone ? "bg-zinc-400" : "bg-zinc-200"}`} />
-                )}
-                <div className="flex flex-col items-center gap-0.5">
                   <div
-                    className={`size-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-colors ${isDone
-                      ? "bg-zinc-800 text-white"
-                      : isActive
-                        ? "bg-zinc-900 text-white"
-                        : "bg-zinc-100 text-zinc-400 border border-zinc-200"
-                      }`}
+                    aria-hidden
+                    className="mx-1 h-0.5 w-8 rounded-full transition-colors"
+                    style={{
+                      backgroundColor: connectorDone
+                        ? "var(--primary, #1f7a58)"
+                        : "var(--border, #d1ddd4)",
+                    }}
+                  />
+                )}
+                <div className="flex flex-col items-center gap-1">
+                  <div
+                    aria-current={isActive ? "step" : undefined}
+                    className="flex size-7 items-center justify-center rounded-full border text-xs font-semibold transition-all"
+                    style={circleStyle}
                   >
-                    {isDone ? <Check className="size-3" /> : stepNum}
+                    {isDone ? <Check className="size-3.5" /> : stepNum}
                   </div>
-                  <span className={`text-[9px] ${isActive || isDone ? "text-zinc-600 font-medium" : "text-zinc-300"}`}>
+                  <span
+                    className={`text-[10px] transition-colors ${
+                      isActive || isDone ? "font-semibold" : ""
+                    }`}
+                    style={labelStyle}
+                  >
                     {label}
                   </span>
                 </div>
@@ -769,7 +819,7 @@ export default function RfidRegistrationPage() {
               <Button
                 type="submit"
                 disabled={loading || !rfidUid.trim()}
-                className="w-full h-10 bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800"
+                className="h-10 w-full"
               >
                 {loading ? <RefreshCw className="size-4 animate-spin mr-1.5" /> : null}
                 {loading ? "Searching..." : "Continue"}
@@ -843,7 +893,7 @@ export default function RfidRegistrationPage() {
                         size="sm"
                         onClick={generateStudentId}
                         disabled={generatingId}
-                        className="h-9 cursor-pointer px-2 shrink-0"
+                        className="h-9 shrink-0 px-2"
                         title="Generate a new ID"
                       >
                         <RefreshCw className={`size-3.5 ${generatingId ? "animate-spin" : ""}`} />
@@ -903,10 +953,10 @@ export default function RfidRegistrationPage() {
               )}
 
               <div className="flex gap-2 justify-end pt-3 border-t border-border">
-                <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="cursor-pointer">
+                <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="border-destructive/35 text-destructive hover:bg-destructive/10 hover:text-destructive">
                   Cancel
                 </Button>
-                <Button type="submit" size="sm" className="bg-zinc-900 text-white cursor-pointer hover:bg-zinc-800 flex items-center gap-1">
+                <Button type="submit" size="sm" className="flex items-center gap-1">
                   Next <ArrowRight className="size-3.5" />
                 </Button>
               </div>
@@ -944,7 +994,7 @@ export default function RfidRegistrationPage() {
                   </Button>
                 )}
                 {cameraActive && !photo && (
-                  <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 text-white cursor-pointer hover:bg-zinc-800">
+                  <Button type="button" size="sm" onClick={capturePhoto}>
                     <Check className="size-3.5 mr-1" /> Capture
                   </Button>
                 )}
@@ -962,17 +1012,17 @@ export default function RfidRegistrationPage() {
 
               <div className="text-center">
                 <input type="file" accept="image/*" id="photo-upload" onChange={handlePhotoUpload} className="hidden" />
-                <label htmlFor="photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-border cursor-pointer hover:bg-muted text-xs font-medium text-foreground">
+                <label htmlFor="photo-upload" className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-primary/35 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10">
                   <ImageIcon className="size-3.5" /> Upload File
                 </label>
               </div>
             </div>
 
             <div className="flex gap-2 justify-between pt-3 border-t border-border">
-              <Button type="button" variant="outline" size="sm" onClick={() => { stopCamera(); setStep(2) }} className="flex items-center cursor-pointer gap-1">
+              <Button type="button" variant="outline" size="sm" onClick={() => { stopCamera(); setStep(2) }} className="flex items-center gap-1">
                 <ArrowLeft className="size-3.5" /> Back
               </Button>
-              <Button type="button" size="sm" onClick={() => setStep(4)} className="bg-zinc-900 text-white cursor-pointer hover:bg-zinc-800 flex items-center gap-1">
+              <Button type="button" size="sm" onClick={() => setStep(4)} className="flex items-center gap-1">
                 Review <ArrowRight className="size-3.5" />
               </Button>
             </div>
@@ -1042,14 +1092,14 @@ export default function RfidRegistrationPage() {
 
             <div className="flex gap-2 justify-between pt-3 border-t border-border">
               <Button type="button" variant="outline" size="sm" onClick={() => setStep(3)} className="flex items-center gap-1">
-                <ArrowLeft className="size-3.5 cursor-pointer" /> Back
+                <ArrowLeft className="size-3.5" /> Back
               </Button>
               <Button
                 type="button"
                 size="sm"
                 onClick={handleRegister}
                 disabled={loading}
-                className="bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800 min-w-[130px]"
+                className="min-w-[130px]"
               >
                 {loading ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Saving...</> : "Register & Next"}
               </Button>
@@ -1085,16 +1135,16 @@ export default function RfidRegistrationPage() {
                     <span className="text-muted-foreground">Password</span>
                     <span className="font-mono text-foreground flex items-center gap-2">
                       {showPassword ? accountPassword : "••••••••"}
-                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-muted-foreground hover:text-foreground">
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="rounded-md p-1 text-primary transition-colors hover:bg-primary/10">
                         {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                       </button>
-                      <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="text-muted-foreground hover:text-foreground">
+                      <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="rounded-md p-1 text-primary transition-colors hover:bg-primary/10">
                         <Copy className="size-3.5" />
                       </button>
                     </span>
                   </div>
                 </div>
-                <Button size="sm" onClick={finishWizard} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                <Button size="sm" onClick={finishWizard}>
                   Complete Registration
                 </Button>
               </div>
@@ -1126,10 +1176,10 @@ export default function RfidRegistrationPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 pt-2 border-t border-border">
-                  <Button size="sm" onClick={handleCreateAccount} disabled={creatingAccount} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                  <Button size="sm" onClick={handleCreateAccount} disabled={creatingAccount}>
                     {creatingAccount ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Creating Account...</> : <><UserCheck className="size-3.5 mr-1" /> Create Portal Account</>}
                   </Button>
-                  <Button type="button" variant="ghost" size="sm" onClick={handleSkipAccount} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                  <Button type="button" variant="ghost" size="sm" onClick={handleSkipAccount} className="text-primary hover:bg-primary/10 hover:text-primary">
                     Skip — register card only
                   </Button>
                 </div>
@@ -1168,10 +1218,10 @@ export default function RfidRegistrationPage() {
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 cursor-pointer h-9 text-xs flex items-center justify-center gap-1.5" onClick={() => openEditMode(searchedProfile)}>
+              <Button variant="outline" className="h-9 flex-1 text-xs" onClick={() => openEditMode(searchedProfile)}>
                 <Pencil className="size-3.5" /> Edit Info
               </Button>
-              <Button variant="outline" className="flex-1 cursor-pointer h-9 text-xs" onClick={resetScanner}>
+              <Button className="h-9 flex-1 text-xs" onClick={resetScanner}>
                 Done (Esc)
               </Button>
             </div>
@@ -1192,20 +1242,20 @@ export default function RfidRegistrationPage() {
               return (
                 <div key={label} className="flex items-center">
                   {i > 0 && (
-                    <div className={`w-8 h-px mx-1 ${isDone ? "bg-zinc-400" : "bg-zinc-200"}`} />
+                    <div className={`mx-1 h-0.5 w-8 ${isDone ? "bg-primary" : "bg-border"}`} />
                   )}
                   <div className="flex flex-col items-center gap-0.5">
                     <div
                       className={`size-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-colors ${isDone
-                        ? "bg-zinc-800 text-white"
+                        ? "bg-primary text-primary-foreground"
                         : isActive
-                          ? "bg-zinc-900 text-white"
-                          : "bg-zinc-100 text-zinc-400 border border-zinc-200"
+                          ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
+                          : "border border-border bg-muted text-muted-foreground"
                         }`}
                     >
                       {isDone ? <Check className="size-3" /> : stepNum}
                     </div>
-                    <span className={`text-[9px] ${isActive || isDone ? "text-zinc-600 font-medium" : "text-zinc-300"}`}>
+                    <span className={`text-[9px] ${isActive || isDone ? "font-medium text-primary" : "text-muted-foreground"}`}>
                       {label}
                     </span>
                   </div>
@@ -1241,12 +1291,12 @@ export default function RfidRegistrationPage() {
                     <div className="flex flex-wrap justify-center gap-2">
                       {!cameraActive && (
                         <Button type="button" variant="outline" size="sm" onClick={startCamera}>
-                          <Camera className="size-3.5 cursor-pointer mr-1" /> {photo ? "Retake Photo" : "Take Photo"}
+                          <Camera className="mr-1 size-3.5" /> {photo ? "Retake Photo" : "Take Photo"}
                         </Button>
                       )}
                       {cameraActive && (
                         <>
-                          <Button type="button" size="sm" onClick={capturePhoto} className="bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800">
+                          <Button type="button" size="sm" onClick={capturePhoto}>
                             <Check className="size-3.5 mr-1" /> Capture
                           </Button>
                           <Button type="button" variant="ghost" size="sm" onClick={stopCamera} className="text-red-500 cursor-pointer hover:bg-red-50">
@@ -1255,7 +1305,7 @@ export default function RfidRegistrationPage() {
                         </>
                       )}
                       <input type="file" accept="image/*" id="edit-photo-upload" onChange={handlePhotoUpload} className="hidden" />
-                      <label htmlFor="edit-photo-upload" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-border cursor-pointer hover:bg-muted text-xs font-medium text-foreground">
+                      <label htmlFor="edit-photo-upload" className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-primary/35 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10">
                         <ImageIcon className="size-3.5" /> Upload
                       </label>
                     </div>
@@ -1366,11 +1416,20 @@ export default function RfidRegistrationPage() {
                     )}
 
                     <div className="flex gap-2 justify-end pt-3 border-t border-border">
-                      <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="cursor-pointer">
+                      <Button type="button" variant="outline" size="sm" onClick={resetScanner} className="border-destructive/35 text-destructive hover:bg-destructive/10 hover:text-destructive">
                         Cancel
                       </Button>
-                      <Button type="button" size="sm" onClick={() => setStep(2)} className="bg-zinc-900 text-white cursor-pointer hover:bg-zinc-800 flex items-center gap-1">
-                        Next <ArrowRight className="size-3.5" />
+                      <Button
+                        disabled={loading}
+                        size="sm"
+                        type="submit"
+                      >
+                        {loading ? (
+                          <RefreshCw className="size-3.5 animate-spin" />
+                        ) : (
+                          <ArrowRight className="size-3.5" />
+                        )}
+                        {loading ? "Saving..." : "Save & Continue"}
                       </Button>
                     </div>
                   </form>
@@ -1408,7 +1467,7 @@ export default function RfidRegistrationPage() {
                               size="sm"
                               onClick={handleResetPassword}
                               disabled={resettingPassword}
-                              className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer"
+                              className="flex-1"
                             >
                               {resettingPassword ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Resetting...</> : "Confirm Reset"}
                             </Button>
@@ -1417,7 +1476,7 @@ export default function RfidRegistrationPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => { setShowResetForm(false); setResetPassword("") }}
-                              className="text-muted-foreground hover:text-foreground cursor-pointer"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                             >
                               Cancel
                             </Button>
@@ -1429,11 +1488,11 @@ export default function RfidRegistrationPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => setShowResetForm(true)}
-                            className="flex-1 cursor-pointer"
+                            className="flex-1"
                           >
                             <RotateCcw className="size-3.5 mr-1" /> Reset Password
                           </Button>
-                          <Button size="sm" onClick={finishWizard} className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                          <Button size="sm" onClick={finishWizard} className="flex-1">
                             Done (Esc)
                           </Button>
                         </div>
@@ -1461,10 +1520,10 @@ export default function RfidRegistrationPage() {
                       </div>
 
                       <div className="flex flex-col gap-2 pt-2 border-t border-border">
-                        <Button size="sm" onClick={handleCreateEditAccount} disabled={creatingAccount} className="bg-zinc-900 text-white hover:bg-zinc-800 cursor-pointer">
+                        <Button size="sm" onClick={handleCreateEditAccount} disabled={creatingAccount}>
                           {creatingAccount ? <><RefreshCw className="size-3.5 animate-spin mr-1" /> Creating...</> : <><UserCheck className="size-3.5 mr-1" /> Create Account</>}
                         </Button>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => setStep(1)} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setStep(1)} className="text-primary hover:bg-primary/10 hover:text-primary">
                           <ArrowLeft className="size-3.5 mr-1" /> Back to Edit
                         </Button>
                       </div>
@@ -1505,10 +1564,10 @@ export default function RfidRegistrationPage() {
                   <span className="text-muted-foreground">Password</span>
                   <span className="font-mono text-foreground flex items-center gap-2">
                     {showPassword ? accountPassword : "••••••••"}
-                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="text-muted-foreground hover:text-foreground">
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="rounded-md p-1 text-primary transition-colors hover:bg-primary/10">
                       {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                     </button>
-                    <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="text-muted-foreground hover:text-foreground">
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(accountPassword); toast.success("Copied!") }} className="rounded-md p-1 text-primary transition-colors hover:bg-primary/10">
                       <Copy className="size-3.5" />
                     </button>
                   </span>
@@ -1533,7 +1592,7 @@ export default function RfidRegistrationPage() {
               </div>
             </div>
 
-            <Button className="w-full h-9 text-xs bg-zinc-900 cursor-pointer text-white hover:bg-zinc-800" onClick={resetScanner}>
+            <Button className="h-9 w-full text-xs" onClick={resetScanner}>
               Register Another (Esc)
             </Button>
             {resetTimer !== null && (

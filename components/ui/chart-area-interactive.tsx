@@ -79,9 +79,10 @@ export function ChartAreaInteractive({
     const startDate = new Date(referenceDate)
     startDate.setDate(startDate.getDate() - days + 1)
 
-    return sorted.filter(
-      (item) => new Date(`${item.date}T00:00:00`) >= startDate,
-    )
+    return sorted.filter((item) => {
+      const itemDate = new Date(`${item.date}T00:00:00`)
+      return itemDate >= startDate && itemDate <= referenceDate
+    })
   }, [data, timeRange])
 
   // Toggles one metric while retaining at least one visible series.
@@ -141,7 +142,7 @@ export function ChartAreaInteractive({
               <button
                 aria-pressed={visible}
                 className={cn(
-                  "inline-flex min-h-9 items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+                  "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
                   visible
                     ? "border-border bg-muted text-foreground"
                     : "border-transparent bg-muted/40 text-muted-foreground",

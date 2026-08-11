@@ -10,6 +10,7 @@ import {
   Loader2,
   Pill,
   Plus,
+  Stethoscope,
   Syringe,
   X,
 } from "lucide-react"
@@ -317,6 +318,103 @@ function ClinicalOverview({
     <>
       <div className="grid gap-4 lg:grid-cols-2">
       <ClinicalSectionCard
+        className="lg:col-span-2"
+        emptyLabel="No completed consultations recorded."
+        icon={<Stethoscope className="size-4" />}
+        title="Consultation Timeline"
+      >
+        {clinical.consultations.map((item) => (
+          <ClinicalListItem
+            badge="completed"
+            details={[
+              {
+                label: "Visit",
+                value: `${item.visitType.replaceAll("-", " ")} · ${formatDateTime(item.checkedInAt)}`,
+              },
+              {
+                label: "Nurse handoff",
+                value: item.nurseHandoffNote
+                  ? `${item.nurseName ?? "Nurse"}: ${item.nurseHandoffNote}`
+                  : null,
+              },
+              {
+                label: "Vital signs and triage",
+                value: formatConsultationVitals(item),
+              },
+              {
+                label: "Doctor review",
+                value: item.doctorReviewNote
+                  ? `${item.doctorName ?? "Doctor"}: ${item.doctorReviewNote}`
+                  : null,
+              },
+              {
+                label: "Diagnosis",
+                value: item.diagnoses.length
+                  ? item.diagnoses
+                      .map((diagnosis) =>
+                        [diagnosis.code, diagnosis.description]
+                          .filter(Boolean)
+                          .join(" — "),
+                      )
+                      .join("; ")
+                  : null,
+              },
+              {
+                label: "Treatment",
+                value: item.treatments.length
+                  ? item.treatments
+                      .flatMap((treatment) => [
+                        treatment.plan,
+                        treatment.instructions,
+                      ])
+                      .filter(Boolean)
+                      .join(" · ")
+                  : null,
+              },
+              {
+                label: "Prescriptions",
+                value: item.prescriptions.length
+                  ? item.prescriptions
+                      .map((prescription) =>
+                        [
+                          prescription.medicineName,
+                          prescription.dosage,
+                          prescription.frequency,
+                          prescription.durationDays
+                            ? `${prescription.durationDays} days`
+                            : null,
+                          prescription.status,
+                        ]
+                          .filter(Boolean)
+                          .join(" · "),
+                      )
+                      .join("; ")
+                  : null,
+              },
+              {
+                label: "Follow-up",
+                value: item.followUps.length
+                  ? item.followUps
+                      .map((followUp) =>
+                        [
+                          formatDate(followUp.scheduledDate),
+                          followUp.reason,
+                          followUp.status,
+                        ]
+                          .filter(Boolean)
+                          .join(" · "),
+                      )
+                      .join("; ")
+                  : null,
+              },
+            ]}
+            key={item.id}
+            title={item.patientComplaint ?? "Consultation"}
+            titleLabel="Visit reason"
+          />
+        ))}
+      </ClinicalSectionCard>
+      <ClinicalSectionCard
         emptyLabel="No medical history recorded."
         icon={<ClipboardList className="size-4" />}
         onAdd={
@@ -329,12 +427,18 @@ function ClinicalOverview({
         {clinical.medicalHistory.map((item) => (
           <ClinicalListItem
             badge={item.status}
-            details={joinDetails([
-              item.diagnosedDate ? formatDate(item.diagnosedDate) : null,
-              item.notes,
-            ])}
+            details={[
+              {
+                label: "Diagnosed",
+                value: item.diagnosedDate
+                  ? formatDate(item.diagnosedDate)
+                  : null,
+              },
+              { label: "Notes", value: item.notes },
+            ]}
             key={item.id}
             title={item.condition}
+            titleLabel="Condition"
           />
         ))}
       </ClinicalSectionCard>
@@ -352,9 +456,13 @@ function ClinicalOverview({
         {clinical.allergies.map((item) => (
           <ClinicalListItem
             badge={item.severity}
-            details={joinDetails([item.reaction, item.notes])}
+            details={[
+              { label: "Reaction", value: item.reaction },
+              { label: "Notes", value: item.notes },
+            ]}
             key={item.id}
             title={item.allergen}
+            titleLabel="Allergen"
           />
         ))}
       </ClinicalSectionCard>
@@ -371,13 +479,22 @@ function ClinicalOverview({
       >
         {clinical.currentMedications.map((item) => (
           <ClinicalListItem
-            details={joinDetails([
-              item.dosage,
-              item.frequency,
-              item.notes,
-            ])}
+            details={[
+              { label: "Dosage", value: item.dosage },
+              { label: "Frequency", value: item.frequency },
+              {
+                label: "Started",
+                value: item.startDate ? formatDate(item.startDate) : null,
+              },
+              {
+                label: "Ends",
+                value: item.endDate ? formatDate(item.endDate) : null,
+              },
+              { label: "Notes", value: item.notes },
+            ]}
             key={item.id}
             title={item.medicineName}
+            titleLabel="Medication"
           />
         ))}
       </ClinicalSectionCard>
@@ -394,15 +511,23 @@ function ClinicalOverview({
       >
         {clinical.immunizations.map((item) => (
           <ClinicalListItem
-            details={joinDetails([
-              item.administeredDate
-                ? formatDate(item.administeredDate)
-                : null,
-              item.doseNumber ? `Dose ${item.doseNumber}` : null,
-              item.notes,
-            ])}
+            details={[
+              {
+                label: "Administered",
+                value: item.administeredDate
+                  ? formatDate(item.administeredDate)
+                  : null,
+              },
+              {
+                label: "Dose",
+                value: item.doseNumber ? String(item.doseNumber) : null,
+              },
+              { label: "Lot", value: item.lotNumber },
+              { label: "Notes", value: item.notes },
+            ]}
             key={item.id}
             title={item.vaccineName}
+            titleLabel="Vaccine"
           />
         ))}
       </ClinicalSectionCard>
@@ -416,15 +541,24 @@ function ClinicalOverview({
         {clinical.prescriptions.map((item) => (
           <ClinicalListItem
             badge={item.status}
-            details={joinDetails([
-              item.dosage,
-              item.frequency,
-              item.durationDays ? `${item.durationDays} days` : null,
-              item.quantity ? `Qty ${item.quantity}` : null,
-              item.instructions,
-            ])}
+            details={[
+              { label: "Dosage", value: item.dosage },
+              { label: "Frequency", value: item.frequency },
+              {
+                label: "Duration",
+                value: item.durationDays
+                  ? `${item.durationDays} days`
+                  : null,
+              },
+              {
+                label: "Quantity",
+                value: item.quantity ? String(item.quantity) : null,
+              },
+              { label: "Instructions", value: item.instructions },
+            ]}
             key={item.id}
             title={item.medicineName}
+            titleLabel="Medication"
           />
         ))}
       </ClinicalSectionCard>
@@ -438,6 +572,38 @@ function ClinicalOverview({
       />
     </>
   )
+}
+
+// Formats one consultation's recorded or explicitly skipped vital signs.
+function formatConsultationVitals(
+  consultation: ComplianceRecordDTO["clinical"]["consultations"][number],
+): string | null {
+  if (!consultation.triage) {
+    return consultation.vitalsSkipReason
+      ? `Not required — ${consultation.vitalsSkipReason}`
+      : null
+  }
+
+  const values = [
+    consultation.triage.temperature
+      ? `${consultation.triage.temperature} °C`
+      : null,
+    consultation.triage.bloodPressure
+      ? `BP ${consultation.triage.bloodPressure}`
+      : null,
+    consultation.triage.heartRate
+      ? `HR ${consultation.triage.heartRate} bpm`
+      : null,
+    consultation.triage.respiratoryRate
+      ? `RR ${consultation.triage.respiratoryRate}/min`
+      : null,
+    consultation.triage.oxygenSaturation
+      ? `SpO₂ ${consultation.triage.oxygenSaturation}%`
+      : null,
+    consultation.triage.notes,
+  ].filter((value): value is string => Boolean(value))
+
+  return values.length ? values.join(" · ") : null
 }
 
 // Collects one validated role-aware clinical entry for the selected patient.
@@ -733,37 +899,73 @@ function ClinicalSectionCard({
 // Renders one masked clinical fact without exposing internal actor identifiers.
 function ClinicalListItem({
   title,
+  titleLabel,
   details,
   badge,
 }: {
   title: string
-  details: string | null
+  titleLabel: string
+  details: Array<{
+    label: string
+    value: string | null | undefined
+  }>
   badge?: string | null
 }) {
+  const visibleDetails = details.filter(
+    (detail): detail is { label: string; value: string } =>
+      Boolean(detail.value),
+  )
+
   return (
-    <div className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
-      <div className="min-w-0">
-        <SensitiveField className="font-medium" value={title} />
-        {details && (
+    <article
+      className={
+        "grid gap-4 py-5 first:pt-0 last:pb-0 " +
+        "sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start"
+      }
+    >
+      <div className="min-w-0 space-y-4">
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {titleLabel}
+          </p>
           <SensitiveField
-            className="mt-1 text-sm text-muted-foreground"
-            value={details}
+            ariaLabel={`${titleLabel.toLowerCase()} value`}
+            className="w-full min-w-0 items-start"
+            textClassName={
+              "min-w-0 flex-1 break-words whitespace-normal font-sans " +
+              "text-base font-semibold leading-6"
+            }
+            value={title}
           />
+        </div>
+
+        {visibleDetails.length > 0 && (
+          <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+            {visibleDetails.map((detail) => (
+              <div className="min-w-0 space-y-1" key={detail.label}>
+                <dt className="text-xs font-medium text-muted-foreground">
+                  {detail.label}
+                </dt>
+                <dd className="text-sm leading-6 text-foreground">
+                  <SensitiveField
+                    ariaLabel={`${detail.label.toLowerCase()} value`}
+                    className="w-full min-w-0 items-start"
+                    textClassName="min-w-0 flex-1 break-words whitespace-normal font-sans leading-6"
+                    value={detail.value}
+                  />
+                </dd>
+              </div>
+            ))}
+          </dl>
         )}
       </div>
       {badge && (
-        <Badge className="shrink-0 capitalize" variant="outline">
+        <Badge className="w-fit shrink-0 capitalize" variant="outline">
           {badge.replaceAll("_", " ")}
         </Badge>
       )}
-    </div>
+    </article>
   )
-}
-
-// Joins optional clinical details into one compact readable line.
-function joinDetails(values: Array<string | null | undefined>): string | null {
-  const details = values.filter((value): value is string => Boolean(value))
-  return details.length ? details.join(" · ") : null
 }
 
 // Renders annual exam history and the Admin-only upload dialog.
@@ -1586,4 +1788,12 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   })
+}
+
+// Formats a consultation timestamp using the user's local clinic display.
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value))
 }

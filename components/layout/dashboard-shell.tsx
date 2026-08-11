@@ -106,9 +106,11 @@ export function DashboardShell({
       {/* Mobile sidebar overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/40"
+          <button
+            aria-label="Close navigation menu"
+            className="absolute inset-0 cursor-pointer bg-black/40"
             onClick={() => setMobileOpen(false)}
+            type="button"
           />
           <div className="absolute inset-y-0 left-0 w-64 animate-in slide-in-from-left">
             <AppSidebar

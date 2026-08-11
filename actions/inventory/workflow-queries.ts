@@ -30,6 +30,8 @@ export interface QueueConsultation {
   status: string
   check_in_time: string
   doctor_name: string | null
+  claimed_by_name: string | null
+  claimed_by_role: StaffRole | null
 }
 
 type RelatedValue<T> = T | T[] | null
@@ -48,33 +50,73 @@ interface QueueConsultationQueryRow {
   status: string
   created_at: string
   doctor: RelatedValue<{ display_name: string | null }>
+  claimant: RelatedValue<{
+    display_name: string | null
+    role: StaffRole | null
+  }>
   clinic_visits: RelatedValue<QueueVisitRelation>
 }
 
-// Returns active consultations while applying clinician assignment on the server.
+const CLAIMED_CONSULTATION_STATUSES = new Set(["in-progress", "completed"])
+
+// Returns consultations currently or previously owned by the active clinic account.
 export async function getConsultationQueue(statuses?: string[]) {
   const actor = await staff(["admin", "doctor", "nurse"])
   if (!actor) return { error: "Access denied", consultations: [] as QueueConsultation[] }
   const admin = createAdminClient()
-  let assignedId: string | null = null
-  if (actor.role !== "admin") {
-    const { data: account } = await admin
-      .from("clinic_accounts")
-      .select("id")
-      .eq("user_id", actor.id)
-      .eq("is_active", true)
-      .maybeSingle()
-    assignedId = account?.id ?? null
-    if (!assignedId) return { error: "Active clinic account not found", consultations: [] as QueueConsultation[] }
+  const { data: account } = await admin
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", actor.id)
+    .eq("role", actor.role)
+    .eq("is_active", true)
+    .maybeSingle()
+
+  if (!account) {
+    return {
+      error: "Active clinic account not found",
+      consultations: [] as QueueConsultation[],
+    }
   }
 
-  let query = admin
+  const requestedStatuses = statuses
+    ? Array.from(
+        new Set(
+          statuses.filter((status) => CLAIMED_CONSULTATION_STATUSES.has(status)),
+        ),
+      )
+    : Array.from(CLAIMED_CONSULTATION_STATUSES)
+
+  if (requestedStatuses.length === 0) {
+    return { error: null, consultations: [] as QueueConsultation[] }
+  }
+
+  const query = admin
     .from("consultations")
-    .select("id, patient_complaint, status, created_at, doctor:clinic_accounts!consultations_doctor_id_fkey(display_name), clinic_visits(patient_type, check_in_time, students(first_name, last_name), faculty(first_name, last_name), staff(first_name, last_name))")
+    .select(`
+      id,
+      patient_complaint,
+      status,
+      created_at,
+      doctor:clinic_accounts!consultations_doctor_id_fkey(display_name),
+      claimant:clinic_accounts!consultations_claimed_by_clinic_account_id_fkey(
+        display_name,
+        role
+      ),
+      clinic_visits(
+        patient_type,
+        check_in_time,
+        students(first_name, last_name),
+        faculty(first_name, last_name),
+        staff(first_name, last_name)
+      )
+    `)
+    .eq("claimed_by_user_id", actor.id)
+    .eq("claimed_by_clinic_account_id", account.id)
+    .in("status", requestedStatuses)
     .order("created_at", { ascending: false })
     .limit(100)
-  if (statuses?.length) query = query.in("status", statuses)
-  if (assignedId) query = query.or(`doctor_id.eq.${assignedId},nurse_id.eq.${assignedId}`)
+
   const { data, error } = await query
   const rows = (data ?? []) as unknown as QueueConsultationQueryRow[]
   return {
@@ -87,6 +129,7 @@ export async function getConsultationQueue(statuses?: string[]) {
           ? firstRelation(visit.faculty)
           : firstRelation(visit?.staff)
       const doctor = firstRelation(item.doctor)
+      const claimant = firstRelation(item.claimant)
       return {
         id: item.id,
         patient_name: `${patient?.first_name ?? ""} ${patient?.last_name ?? ""}`.trim() || "Unknown patient",
@@ -94,6 +137,8 @@ export async function getConsultationQueue(statuses?: string[]) {
         status: item.status,
         check_in_time: visit?.check_in_time ?? item.created_at,
         doctor_name: doctor?.display_name ?? null,
+        claimed_by_name: claimant?.display_name ?? null,
+        claimed_by_role: claimant?.role ?? null,
       }
     }),
   }
@@ -122,11 +167,88 @@ export async function getStaffHealthConsultations() {
   }
 }
 
+export interface InventoryMedicine {
+  id: string
+  name: string
+  stock: number
+  minimum: number
+  unit: string
+  expiry: string | null
+}
+
+// Returns every active approved medicine, including products with no stock rows.
 export async function getInventoryQueue() {
   const actor = await staff(["admin", "doctor", "nurse"])
-  if (!actor) return { error: "Access denied", medicines: [] as Array<{ id: string; name: string; stock: number; minimum: number; expiry: string | null }> }
-  const { data, error } = await createAdminClient().from("v_medicine_stock_summary").select("medicine_id, generic_name, total_quantity, min_stock_level, nearest_expiry").order("generic_name").limit(100)
-  return { error: error?.message ?? null, medicines: (data ?? []).map((item) => ({ id: item.medicine_id, name: item.generic_name, stock: Number(item.total_quantity), minimum: item.min_stock_level, expiry: item.nearest_expiry })) }
+  if (!actor) {
+    return {
+      error: "Access denied",
+      medicines: [] as InventoryMedicine[],
+    }
+  }
+
+  const admin = createAdminClient()
+  const { data: medicines, error } = await admin
+    .from("medicines")
+    .select(
+      "id,generic_name,brand_name,unit,min_stock_level,is_active,approval_status",
+    )
+    .eq("is_active", true)
+    .eq("approval_status", "approved")
+    .order("generic_name")
+    .limit(500)
+
+  if (error) {
+    return {
+      error: "Unable to load medicine inventory",
+      medicines: [] as InventoryMedicine[],
+    }
+  }
+
+  const medicineIds = (medicines ?? []).map((medicine) => medicine.id)
+  const stockByMedicine = new Map<string, number>()
+  const expiryByMedicine = new Map<string, string>()
+
+  if (medicineIds.length > 0) {
+    const { data: stockRows, error: stockError } = await admin
+      .from("medicine_stock")
+      .select("medicine_id,quantity,expiry_date")
+      .in("medicine_id", medicineIds)
+
+    if (stockError) {
+      return {
+        error: "Unable to load medicine inventory",
+        medicines: [] as InventoryMedicine[],
+      }
+    }
+
+    for (const stockRow of stockRows ?? []) {
+      const quantity = Number(stockRow.quantity ?? 0)
+      stockByMedicine.set(
+        stockRow.medicine_id,
+        (stockByMedicine.get(stockRow.medicine_id) ?? 0) + quantity,
+      )
+
+      if (quantity <= 0 || !stockRow.expiry_date) continue
+      const currentExpiry = expiryByMedicine.get(stockRow.medicine_id)
+      if (!currentExpiry || stockRow.expiry_date < currentExpiry) {
+        expiryByMedicine.set(stockRow.medicine_id, stockRow.expiry_date)
+      }
+    }
+  }
+
+  return {
+    error: null,
+    medicines: (medicines ?? []).map((medicine) => ({
+      id: medicine.id,
+      name: medicine.brand_name
+        ? `${medicine.generic_name} (${medicine.brand_name})`
+        : medicine.generic_name,
+      stock: stockByMedicine.get(medicine.id) ?? 0,
+      minimum: medicine.min_stock_level ?? 0,
+      unit: medicine.unit,
+      expiry: expiryByMedicine.get(medicine.id) ?? null,
+    })),
+  }
 }
 
 export async function getIncidentQueue(includeClosed = false) {

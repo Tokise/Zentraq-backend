@@ -16,10 +16,16 @@ export type AuditAction =
   | "OPERATOR_CREATED"
   | "OPERATOR_REMOVED"
   | "STUDENT_ACCOUNT_CREATED"
+  | "PATIENT_PROFILE_CREATED"
+  | "PATIENT_PROFILE_UPDATED"
+  | "PORTAL_ACCOUNT_CREATED"
   | "NOTIFICATION_SENT"
   | "NOTIFICATION_READ"
   | "NOTIFICATION_UNREAD"
   | "NOTIFICATION_DELETED"
+  | "NOTIFICATION_JOB_ENQUEUED"
+  | "REPORT_REQUESTED"
+  | "REPORT_DOWNLOADED"
   | "ROLE_CREATED"
   | "ROLE_UPDATED"
   | "ROLE_DELETED"
@@ -36,6 +42,7 @@ export type AuditAction =
   | "FACULTY_PASSWORD_RESET"
   | "RFID_LOOKUP"
   | "RFID_NO_MATCH"
+  | "SERVERLESS_PILOT_JOB_ENQUEUED"
 
 export interface AuditLogOptions {
   action: AuditAction
@@ -68,7 +75,10 @@ export async function logAuditEvent(options: AuditLogOptions): Promise<void> {
       user_agent: userAgent,
     })
   } catch (err) {
-    // Audit logging failure should not crash main workflow, but must be logged to stdout
-    console.error("[AuditLogger Error] Failed to persist audit log:", err)
+    const code =
+      typeof err === "object" && err !== null && "code" in err
+        ? String(err.code)
+        : "AUDIT_WRITE_FAILED"
+    console.error(JSON.stringify({ code, event: "audit_write_failed" }))
   }
 }

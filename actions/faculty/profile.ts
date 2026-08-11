@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin"
 import { cookies } from "next/headers"
 import { createClient } from "@/utils/supabase/server"
 import { getUserRole } from "@/lib/auth/get-user-role"
+import { resolveProfilePhotoUrl } from "@/lib/storage/profile-photos"
 
 export interface FacultyProfileDTO {
     firstName: string
@@ -94,7 +95,10 @@ export async function getFacultyProfileDTO() {
             position: data.position || null,
             email: data.email || auth.user.email || null,
             phone: data.phone || null,
-            profilePhotoUrl: data.profile_photo_url || null,
+            profilePhotoUrl: await resolveProfilePhotoUrl(
+                admin,
+                data.profile_photo_url || null,
+            ),
         }
 
         return { error: null, profile }

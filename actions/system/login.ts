@@ -13,6 +13,7 @@ import { getDefaultRouteForRole } from "@/lib/auth/role-routes";
 const COOKIE_NAME = "zentraq_session_token";
 const ONE_WEEK_SECONDS = 60 * 60 * 24 * 7;
 
+// Authenticates credentials and establishes the role-bound application session.
 export async function login(formData: FormData) {
   const cookieStore = await cookies();
   const requestHeaders = await headers();
@@ -47,6 +48,7 @@ export async function login(formData: FormData) {
   const role = await getUserRole(data.user.id);
   if (!role) {
     await supabase.auth.signOut();
+    cookieStore.delete(COOKIE_NAME);
     return {
       error: "This account has no assigned role. Contact an administrator.",
     };
@@ -54,11 +56,23 @@ export async function login(formData: FormData) {
 
   const sessionToken = randomBytes(32).toString("hex");
   const admin = createAdminClient();
-  await admin
+  const { error: revokeError } = await admin
     .from("user_sessions")
     .update({ revoked_at: new Date().toISOString() })
     .eq("user_id", data.user.id)
     .is("revoked_at", null);
+  if (revokeError) {
+    await supabase.auth.signOut();
+    cookieStore.delete(COOKIE_NAME);
+    await logAuditEvent({
+      action: "AUTH_LOGIN_FAILED",
+      userId: data.user.id,
+      email: data.user.email,
+      details: { reason: "session_revocation_failed" },
+    });
+    return { error: "Unable to establish a secure session" };
+  }
+
   const { error: sessionError } = await admin.from("user_sessions").insert({
     user_id: data.user.id,
     session_token: sessionToken,
@@ -66,7 +80,17 @@ export async function login(formData: FormData) {
     user_agent: requestHeaders.get("user-agent"),
     expires_at: new Date(Date.now() + ONE_WEEK_SECONDS * 1000).toISOString(),
   });
-  if (sessionError) return { error: "Unable to establish a secure session" };
+  if (sessionError) {
+    await supabase.auth.signOut();
+    cookieStore.delete(COOKIE_NAME);
+    await logAuditEvent({
+      action: "AUTH_LOGIN_FAILED",
+      userId: data.user.id,
+      email: data.user.email,
+      details: { reason: "session_creation_failed" },
+    });
+    return { error: "Unable to establish a secure session" };
+  }
 
   cookieStore.set(COOKIE_NAME, sessionToken, {
     httpOnly: true,
@@ -88,6 +112,7 @@ export async function login(formData: FormData) {
   };
 }
 
+// Revokes the application session and signs the current user out of Supabase.
 export async function logout() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);

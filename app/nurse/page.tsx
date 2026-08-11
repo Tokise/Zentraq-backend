@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/common/status-badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   getDashboardDataAction,
+  type DashboardActivityScope,
   type DashboardActivityDTO,
   type DashboardAppointmentDTO,
   type DashboardConsultationDTO,
@@ -56,6 +57,8 @@ export default function NurseDashboardPage() {
   const [consultations, setConsultations] = useState<DashboardConsultationDTO[]>([])
   const [appointments, setAppointments] = useState<DashboardAppointmentDTO[]>([])
   const [activity, setActivity] = useState<DashboardActivityDTO[]>([])
+  const [activityScope, setActivityScope] =
+    useState<DashboardActivityScope>("nurse")
   const [stats, setStats] = useState({
     patientsToday: 0,
     consultations: 0,
@@ -71,6 +74,7 @@ export default function NurseDashboardPage() {
         setConsultations(result.data.consultations)
         setAppointments(result.data.appointments)
         setActivity(result.data.activity)
+        setActivityScope(result.data.activityScope)
         setStats({
           patientsToday: result.data.stats.patientsToday,
           consultations: result.data.stats.consultations,
@@ -178,6 +182,7 @@ export default function NurseDashboardPage() {
 
         <ClinicalDashboardCharts
           activity={activity}
+          activityScope={activityScope}
           appointments={appointments}
           consultations={consultations}
           loading={loading}

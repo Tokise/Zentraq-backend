@@ -3,6 +3,7 @@
 import { getActionActor, hasAnyRole } from "@/lib/security/action-guard"
 import { createAdminClient } from "@/utils/supabase/admin"
 import { logAuditEvent } from "@/lib/audit-logger"
+import { resolveProfilePhotoUrl } from "@/lib/storage/profile-photos"
 
 type StaffRole = "admin" | "doctor" | "nurse"
 
@@ -249,10 +250,18 @@ export async function getStaffMedicalRecord(staffId: string) {
     return { error: "Unable to load the staff medical record", record: null }
   }
 
+  const signedProfile = {
+    ...profile,
+    profile_photo_url: await resolveProfilePhotoUrl(
+      admin,
+      profile.profile_photo_url,
+    ),
+  }
+
   return {
     error: null,
     record: {
-      profile,
+      profile: signedProfile,
       history: history.history,
       allergies: allergies.allergies,
       medications: medications.medications,

@@ -952,10 +952,6 @@ export const notificationQueries = {
             .eq('receiver_id', receiverId)
             .is('read_at', null);
     },
-
-    async create(supabase: SupabaseClient, data: Record<string, unknown>) {
-        return supabase.from('notifications').insert(data).select(NOTIFICATION_COLUMNS).single();
-    },
 };
 
 /**

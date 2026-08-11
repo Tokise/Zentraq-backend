@@ -2,8 +2,9 @@
 
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
-import { createAdminClient } from "@/utils/supabase/admin";
 import { logAuditEvent } from "@/lib/audit-logger";
+import { assertSameOrigin } from "@/lib/security/action-guard";
+import { z } from "zod";
 
 export type NotificationType =
   | "appointment"
@@ -24,29 +25,30 @@ export interface NotificationDTO {
 
 async function currentUser() {
   const store = await cookies();
+  const supabase = createClient(store);
   const {
     data: { user },
-  } = await createClient(store).auth.getUser();
-  return user;
+  } = await supabase.auth.getUser();
+  return { supabase, user };
 }
 
 export async function getNotifications(options?: { limit?: number }) {
-  const user = await currentUser();
+  const { supabase, user } = await currentUser();
   if (!user)
     return {
       error: "Not authenticated",
       notifications: [] as NotificationDTO[],
     };
-  const { data, error } = await createAdminClient()
+  const { data, error } = await supabase
     .from("notifications")
     .select(
       "id, title, message, type, entity_type, entity_id, read_at, created_at",
     )
     .eq("receiver_id", user.id)
     .order("created_at", { ascending: false })
-    .limit(Math.min(options?.limit ?? 20, 30));
+    .limit(Math.max(1, Math.min(options?.limit ?? 20, 30)));
   return {
-    error: error?.message ?? null,
+    error: error ? "Unable to load notifications" : null,
     notifications: (data ?? []).map((item) => ({
       id: item.id,
       title: item.title,
@@ -61,45 +63,55 @@ export async function getNotifications(options?: { limit?: number }) {
 }
 
 export async function getUnreadNotificationCount() {
-  const user = await currentUser();
+  const { supabase, user } = await currentUser();
   if (!user) return { error: "Not authenticated", count: 0 };
-  const { count, error } = await createAdminClient()
+  const { count, error } = await supabase
     .from("notifications")
     .select("id", { count: "exact", head: true })
     .eq("receiver_id", user.id)
     .is("read_at", null);
-  return { error: error?.message ?? null, count: count ?? 0 };
+  return {
+    error: error ? "Unable to load notification count" : null,
+    count: count ?? 0,
+  };
 }
 
 export async function markNotificationAsRead(id: string, isRead: boolean) {
-  const user = await currentUser();
+  const { supabase, user } = await currentUser();
   if (!user) return { error: "Not authenticated" };
-  const { error } = await createAdminClient()
+  const parsedId = z.string().uuid().safeParse(id);
+  if (!parsedId.success || !(await assertSameOrigin())) {
+    return { error: "Unable to update notification" };
+  }
+  const { error } = await supabase
     .from("notifications")
     .update({ read_at: isRead ? new Date().toISOString() : null })
-    .eq("id", id)
+    .eq("id", parsedId.data)
     .eq("receiver_id", user.id);
   if (!error)
     await logAuditEvent({
       action: isRead ? "NOTIFICATION_READ" : "NOTIFICATION_UNREAD",
       userId: user.id,
       email: user.email,
-      resource: id,
+      resource: parsedId.data,
     });
-  return error ? { error: error.message } : { success: true };
+  return error ? { error: "Unable to update notification" } : { success: true };
 }
 
 export async function markAllNotificationsAsRead() {
-  const user = await currentUser();
+  const { supabase, user } = await currentUser();
   if (!user) return { error: "Not authenticated" };
-  const { data, error } = await createAdminClient()
+  if (!(await assertSameOrigin())) {
+    return { error: "Unable to update notifications" };
+  }
+  const { data, error } = await supabase
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
     .eq("receiver_id", user.id)
     .is("read_at", null)
     .select("id");
   return error
-    ? { error: error.message }
+    ? { error: "Unable to update notifications" }
     : { success: true, updatedCount: data?.length ?? 0 };
 }
 
@@ -107,80 +119,4 @@ export async function markAllNotificationsAsRead() {
 // Dismissal maps to read rather than deleting a record.
 export async function deleteNotification(id: string) {
   return markNotificationAsRead(id, true);
-}
-
-export async function createNotificationAction(params: {
-  receiverId: string;
-  title: string;
-  message: string;
-  type: NotificationType;
-  relatedResource?: string;
-  relatedResourceId?: string;
-}) {
-  const user = await currentUser();
-  if (!user) return { error: "Not authenticated" };
-  if (!params.receiverId || !params.title.trim() || !params.message.trim())
-    return { error: "Receiver, title, and message are required" };
-  const { error } = await createAdminClient()
-    .from("notifications")
-    .insert({
-      sender_id: user.id,
-      receiver_id: params.receiverId,
-      title: params.title.trim(),
-      message: params.message.trim(),
-      type: params.type,
-      entity_type: params.relatedResource ?? null,
-      entity_id: params.relatedResourceId ?? null,
-    });
-  if (!error)
-    await logAuditEvent({
-      action: "NOTIFICATION_SENT",
-      userId: user.id,
-      email: user.email,
-      details: { type: params.type },
-    });
-  return error ? { error: error.message } : { success: true };
-}
-
-export async function searchUsersForNotificationAction(query: string) {
-  const user = await currentUser();
-  if (!user || query.trim().length < 2)
-    return {
-      error: user ? null : "Not authenticated",
-      users: [] as Array<{
-        id: string;
-        email: string | null;
-        role: string | null;
-      }>,
-    };
-  const admin = createAdminClient();
-  const term = query.trim();
-  const { data, error } = await admin
-    .from("users")
-    .select("id, email, user_roles(role:roles(name))")
-    .ilike("email", `%${term}%`)
-    .limit(10);
-  if (error)
-    return {
-      error: error.message,
-      users: [] as Array<{
-        id: string;
-        email: string | null;
-        role: string | null;
-      }>,
-    };
-  return {
-    error: null,
-    users: (data ?? []).map((item) => {
-      const relations =
-        (item as { user_roles?: Array<{ role?: unknown }> }).user_roles ?? [];
-      const relation = relations[0]?.role;
-      const entry = Array.isArray(relation) ? relation[0] : relation;
-      const role =
-        typeof entry === "object" && entry !== null && "name" in entry
-          ? (entry as { name?: string }).name
-          : null;
-      return { id: item.id, email: item.email, role };
-    }),
-  };
 }

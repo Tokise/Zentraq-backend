@@ -4,8 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getActionActor, hasAnyRole } from "@/lib/security/action-guard";
 import { logAuditEvent } from "@/lib/audit-logger";
-
-const MIN_PASSWORD_LENGTH = 12;
+import {
+  preparePortalEmailChange,
+  rollbackPortalEmailChange,
+} from "@/lib/auth/sync-patient-portal-email";
+import { checkPassword } from "@/lib/validation/password";
 
 export interface FacultyAccountDTO {
   id: string;
@@ -109,15 +112,16 @@ export async function createFacultyAccountAction(
   const firstName = value(formData, "firstName"),
     lastName = value(formData, "lastName"),
     email = value(formData, "email").toLowerCase();
-  const password = value(formData, "password"),
+  const password = String(formData.get("password") ?? ""),
     employeeNumber = value(formData, "employeeNumber");
   if (!firstName || !lastName || !email || !employeeNumber)
     return {
       error: "First name, last name, email, and employee number are required",
     };
-  if (password.length < MIN_PASSWORD_LENGTH)
+  const passwordCheck = checkPassword(password);
+  if (!passwordCheck.valid)
     return {
-      error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      error: `Password needs: ${passwordCheck.missing.join(", ")}`,
     };
 
   const admin = createAdminClient();
@@ -194,11 +198,34 @@ export async function updateFacultyAccountAction(
     employeeNumber = value(formData, "employeeNumber");
   if (!id || !firstName || !lastName || !employeeNumber)
     return { error: "First name, last name, and employee number are required" };
-  const { error } = await createAdminClient()
+
+  const admin = createAdminClient();
+  const { data: existing, error: fetchError } = await admin
+    .from("faculty")
+    .select("user_id, email")
+    .eq("id", id)
+    .maybeSingle();
+  if (fetchError || !existing) {
+    return { error: fetchError?.message ?? "Faculty account not found" };
+  }
+
+  const nextEmail = formData.has("email")
+    ? value(formData, "email").toLowerCase() || null
+    : existing.email;
+  const { change: emailChange, error: emailError } =
+    await preparePortalEmailChange({
+      currentProfileEmail: existing.email,
+      nextProfileEmail: nextEmail,
+      userId: existing.user_id,
+    });
+  if (emailError) return { error: emailError };
+
+  const { error } = await admin
     .from("faculty")
     .update({
       first_name: firstName,
       last_name: lastName,
+      email: nextEmail,
       employee_number: employeeNumber,
       department: value(formData, "department") || null,
       position: value(formData, "position") || null,
@@ -207,7 +234,14 @@ export async function updateFacultyAccountAction(
         value(formData, "activeStatus") === "true" ? "active" : "inactive",
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) {
+    const rolledBack = await rollbackPortalEmailChange(emailChange);
+    return {
+      error: rolledBack
+        ? error.message
+        : "The profile update failed and the login email could not be restored",
+    };
+  }
   await logAuditEvent({
     action: "FACULTY_ACCOUNT_UPDATED",
     userId: actor.id,
@@ -237,50 +271,6 @@ export async function archiveFacultyAccountAction(
   });
   revalidatePath("/admin/faculty-accounts");
   return { success: true };
-}
-
-export async function resetFacultyPasswordAction(
-  formData: FormData,
-): Promise<{
-  success?: boolean;
-  error?: string;
-  email?: string | null;
-  password?: string;
-}> {
-  const actor = await requireAdmin();
-  if (!actor) return { error: "Unauthorized" };
-  const id = value(formData, "facultyId"),
-    password = value(formData, "newPassword");
-  if (!id || password.length < MIN_PASSWORD_LENGTH)
-    return {
-      error: `A faculty ID and a ${MIN_PASSWORD_LENGTH}-character password are required`,
-    };
-  const admin = createAdminClient();
-  const { data: faculty, error: fetchError } = await admin
-    .from("faculty")
-    .select("user_id, email")
-    .eq("id", id)
-    .maybeSingle();
-  if (fetchError || !faculty?.user_id)
-    return {
-      error: fetchError?.message ?? "Faculty member has no linked portal login",
-    };
-  const { error } = await admin.auth.admin.updateUserById(faculty.user_id, {
-    password,
-  });
-  if (error) return { error: error.message };
-  await admin
-    .from("user_sessions")
-    .update({ revoked_at: new Date().toISOString() })
-    .eq("user_id", faculty.user_id)
-    .is("revoked_at", null);
-  await logAuditEvent({
-    action: "FACULTY_PASSWORD_RESET",
-    userId: actor.id,
-    email: actor.email,
-    resource: faculty.user_id,
-  });
-  return { success: true, email: faculty.email, password };
 }
 
 function value(formData: FormData, key: string): string {

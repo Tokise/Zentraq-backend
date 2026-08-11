@@ -80,6 +80,7 @@ export function ClinicalVisitHistoryWorkspace() {
                 <TableHead>Type</TableHead>
                 <TableHead>Visit type</TableHead>
                 <TableHead>Visit reason</TableHead>
+                <TableHead>Handled by</TableHead>
                 <TableHead>Check-in</TableHead>
                 <TableHead>Check-out</TableHead>
                 <TableHead>Status</TableHead>
@@ -101,6 +102,9 @@ export function ClinicalVisitHistoryWorkspace() {
                   <TableCell className="max-w-64 truncate">
                     {visit.patient_complaint || "—"}
                   </TableCell>
+                  <TableCell>
+                    <ClinicianAttribution visit={visit} />
+                  </TableCell>
                   <TableCell>{formatDateTime(visit.check_in_time)}</TableCell>
                   <TableCell>
                     {visit.check_out_time
@@ -120,7 +124,6 @@ export function ClinicalVisitHistoryWorkspace() {
                       }
                       size="sm"
                       type="button"
-                      variant="outline"
                     >
                       <EyeIcon className="size-4" />
                       View
@@ -149,6 +152,43 @@ export function ClinicalVisitHistoryWorkspace() {
         }}
         open={Boolean(selectedConsultationId)}
       />
+    </div>
+  )
+}
+
+// Displays final ownership and any different preceding claimant without duplication.
+function ClinicianAttribution({
+  visit,
+}: {
+  visit: ClinicalVisitHistoryRow
+}) {
+  const primaryName = visit.completed_by_name ?? visit.claimed_by_name
+  const primaryRole = visit.completed_by_role ?? visit.claimed_by_role
+  const claimantDiffers = Boolean(
+    visit.claimed_by_name &&
+      visit.completed_by_name &&
+      (visit.claimed_by_name !== visit.completed_by_name ||
+        visit.claimed_by_role !== visit.completed_by_role),
+  )
+
+  if (!primaryName) {
+    return <span className="text-muted-foreground">Not recorded</span>
+  }
+
+  return (
+    <div className="min-w-40 space-y-1">
+      <div>
+        <p className="font-medium">{primaryName}</p>
+        <p className="text-xs capitalize text-muted-foreground">
+          {visit.completed_by_name ? "Completed" : "Claimed"} by{" "}
+          {primaryRole ?? "clinic staff"}
+        </p>
+      </div>
+      {claimantDiffers && (
+        <p className="text-xs text-muted-foreground">
+          Last claimed by {visit.claimed_by_name} ({visit.claimed_by_role})
+        </p>
+      )}
     </div>
   )
 }

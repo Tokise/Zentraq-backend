@@ -13,6 +13,7 @@ import {
   DispenseMedicineSchema,
   FinalizeConsultationWorkflowSchema,
   IssueCertificateSchema,
+  ReassignConsultationReviewSchema,
 } from "@/lib/validation/schemas";
 import { cookies } from "next/headers";
 import {
@@ -131,6 +132,7 @@ export async function finalizeConsultationWorkflow(
     {
       p_consultation_id: parsed.data.consultation_id,
       p_patient_complaint: parsed.data.patient_complaint,
+      p_review_doctor_id: parsed.data.review_doctor_id ?? null,
       p_vitals_disposition: parsed.data.vitals_disposition,
       p_vitals_skip_reason: parsed.data.vitals_skip_reason ?? null,
       p_vitals: parsed.data.vitals,
@@ -152,6 +154,140 @@ export async function finalizeConsultationWorkflow(
 
   const status = data as "completed" | "awaiting_doctor_review";
   return { success: true, data: { status } };
+}
+
+export interface AvailableReviewDoctor {
+  clinicAccountId: string;
+  displayName: string;
+  availableUntil: string;
+  activeReviewCount: number;
+}
+
+interface AvailableReviewDoctorRow {
+  clinic_account_id: string;
+  display_name: string;
+  available_until: string;
+  active_review_count: number;
+}
+
+export interface ClinicianDutyStatus {
+  isOnDuty: boolean;
+  expiresAt: string | null;
+}
+
+interface ClinicianDutyStatusRow {
+  is_on_duty: boolean;
+  expires_at: string | null;
+}
+
+// Returns selectable on-duty Doctors without exposing schedule internals.
+export async function getAvailableReviewDoctors(): Promise<{
+  error: string | null;
+  doctors: AvailableReviewDoctor[];
+}> {
+  const actor = await staff(["admin", "nurse"]);
+  if (!actor) return { error: "Access denied", doctors: [] };
+
+  const supabase = createClient(await cookies());
+  const { data, error } = await supabase.rpc(
+    "get_available_review_doctors",
+  );
+  if (error) {
+    return { error: "Unable to load available Doctors", doctors: [] };
+  }
+
+  return {
+    error: null,
+    doctors: ((data ?? []) as AvailableReviewDoctorRow[]).map((doctor) => ({
+      clinicAccountId: doctor.clinic_account_id,
+      displayName: doctor.display_name,
+      availableUntil: doctor.available_until,
+      activeReviewCount: Number(doctor.active_review_count),
+    })),
+  };
+}
+
+// Returns the current Doctor's expiring duty state.
+export async function getMyClinicianDutyStatus(): Promise<{
+  error: string | null;
+  status: ClinicianDutyStatus | null;
+}> {
+  const actor = await staff(["doctor"]);
+  if (!actor) return { error: "Access denied", status: null };
+
+  const supabase = createClient(await cookies());
+  const { data, error } = await supabase.rpc(
+    "get_my_clinician_duty_status",
+  );
+  const row = ((data ?? []) as ClinicianDutyStatusRow[])[0];
+  if (error || !row) {
+    return { error: "Unable to load duty status", status: null };
+  }
+
+  return {
+    error: null,
+    status: {
+      isOnDuty: row.is_on_duty,
+      expiresAt: row.expires_at,
+    },
+  };
+}
+
+// Changes the current Doctor's duty state inside an active schedule window.
+export async function setMyClinicianDutyStatus(
+  isOnDuty: boolean,
+): Promise<ActionResult<ClinicianDutyStatus>> {
+  const actor = await staff(["doctor"]);
+  if (!actor || !(await assertSameOrigin()) || typeof isOnDuty !== "boolean") {
+    return forbidden();
+  }
+
+  const supabase = createClient(await cookies());
+  const { data, error } = await supabase.rpc(
+    "set_my_clinician_duty_status",
+    { requested_on_duty: isOnDuty },
+  );
+  const row = ((data ?? []) as ClinicianDutyStatusRow[])[0];
+  if (error || !row) {
+    return {
+      success: false,
+      error: error?.message ?? "Unable to change duty status",
+      code: "INVALID_STATE",
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      isOnDuty: row.is_on_duty,
+      expiresAt: row.expires_at,
+    },
+  };
+}
+
+// Reassigns an unclaimed Nurse handoff to an available Doctor or pending pool.
+export async function reassignConsultationReview(
+  input: unknown,
+): Promise<ActionResult<null>> {
+  const actor = await staff(["admin", "nurse"]);
+  if (!actor || !(await assertSameOrigin())) return forbidden();
+  const parsed = ReassignConsultationReviewSchema.safeParse(input);
+  if (!parsed.success) return invalid();
+
+  const supabase = createClient(await cookies());
+  const { error } = await supabase.rpc("reassign_consultation_review", {
+    requested_consultation_id: parsed.data.consultation_id,
+    requested_doctor_id: parsed.data.review_doctor_id,
+  });
+  if (error) {
+    return {
+      success: false,
+      error: error.message,
+      code: "INVALID_STATE",
+    };
+  }
+
+  return { success: true, data: null };
 }
 
 // Returns the current clinic role for role-specific consultation controls.
