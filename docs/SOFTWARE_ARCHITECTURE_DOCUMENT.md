@@ -35,11 +35,12 @@ Status terms used throughout this document:
    - [Folder structure and integrations](#16-folder-structure-and-integrations)
 2. [Infrastructure and Architecture](#2-infrastructure-and-architecture)
    - [Architecture style and topology](#21-architecture-style-and-topology)
-   - [Layers and trust boundaries](#22-layers-and-trust-boundaries)
-   - [Supabase data infrastructure](#23-supabase-data-infrastructure)
-   - [Database architecture and schema authority](#24-database-architecture-and-schema-authority)
-   - [Database object catalog](#25-database-object-catalog)
-   - [Transactions, failure modes, and deployment](#26-transactions-failure-modes-and-deployment)
+   - [Microservices foundation: service-oriented modular monolith](#22-microservices-foundation-service-oriented-modular-monolith)
+   - [Layers and trust boundaries](#23-layers-and-trust-boundaries)
+   - [Supabase data infrastructure](#24-supabase-data-infrastructure)
+   - [Database architecture and schema authority](#25-database-architecture-and-schema-authority)
+   - [Database object catalog](#26-database-object-catalog)
+   - [Transactions, failure modes, and deployment](#27-transactions-failure-modes-and-deployment)
 3. [Roles and Permissions](#3-roles-and-permissions)
    - [Role definitions](#31-role-definitions)
    - [Module and data-scope matrix](#32-module-and-data-scope-matrix)
@@ -138,7 +139,19 @@ lockfile during normal work.
 #### System context
 
 ```mermaid
-flowchart LR
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
     Patient["Student, faculty, or staff patient"]
     Clinician["Doctor or nurse"]
     Admin["Clinic administrator"]
@@ -161,6 +174,18 @@ flowchart LR
 #### Module interaction
 
 ```mermaid
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
 flowchart TB
     Portals["Role-specific App Router portals"]
     Workspaces["Shared domain workspaces and UI components"]
@@ -187,23 +212,31 @@ flowchart TB
 #### Authorized request and data flow
 
 ```mermaid
-sequenceDiagram
-    actor User
-    participant Browser
-    participant Proxy as proxy.ts
-    participant Page as Server page/action
-    participant Guard as Action guard and Zod
-    participant DB as Supabase
-    participant DTO as DTO/mask builder
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
+    User["User opens a portal route<br/>or submits a form"]
+    Browser["Browser sends Supabase cookies<br/>and the session token"]
+    Proxy["proxy.ts validates the request"]
+    Session["Supabase validates the Auth user,<br/>active session, and role mapping"]
+    Page["Matching role tree loads<br/>the server page or action"]
+    Guard["Action guard resolves the actor<br/>and validates authorization and input"]
+    Database["Supabase executes a scoped query,<br/>mutation, or RPC"]
+    DTO["DTO and mask builder selects<br/>role-appropriate fields"]
+    Result["Browser receives the minimized result"]
 
-    User->>Browser: Open a portal route or submit a form
-    Browser->>Proxy: Request with Supabase cookies and session token
-    Proxy->>DB: Validate Auth user, active session, and role mapping
-    Proxy-->>Page: Allow the matching role tree
-    Page->>Guard: Resolve actor and validate authorization/input
-    Guard->>DB: Execute scoped query, mutation, or RPC
-    DB-->>DTO: Return selected records
-    DTO-->>Browser: Return minimized role-appropriate data
+    User --> Browser --> Proxy --> Session --> Page --> Guard
+    Guard --> Database --> DTO --> Result
 ```
 
 The service-role client is protected by `server-only`, but it bypasses RLS.
@@ -213,17 +246,27 @@ filters are part of the effective security boundary.
 #### Realtime data flow
 
 ```mermaid
-sequenceDiagram
-    participant DB as PostgreSQL trigger
-    participant RT as Supabase Realtime
-    participant Browser
-    participant Action as Authorized Server Action
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
+    Trigger["PostgreSQL trigger detects<br/>a relevant change"]
+    Realtime["Supabase Realtime broadcasts<br/>a minimal changed=true event"]
+    Browser["Browser receives a private<br/>topic notification"]
+    Action["Browser requests current data<br/>through an authorized Server Action"]
+    Query["Server Action queries using<br/>the current role and scope"]
+    Result["Browser receives a minimized DTO"]
 
-    DB->>RT: Broadcast minimal changed=true event
-    RT-->>Browser: Private topic notification
-    Browser->>Action: Reload authorized data
-    Action->>DB: Query using current role and scope
-    DB-->>Browser: Return minimized DTO
+    Trigger --> Realtime --> Browser --> Action --> Query --> Result
 ```
 
 Realtime events are invalidations, not clinical record payloads. Topic policies
@@ -253,7 +296,19 @@ clinician-facing label is **Visit reason**. Historical complaint column names
 remain only in compatibility migrations.
 
 ```mermaid
-flowchart LR
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
     CheckIn["Walk-in, appointment, or RFID check-in"]
     Waiting["Waiting queue"]
     Claim["Admin, doctor, or nurse claims consultation"]
@@ -281,7 +336,19 @@ insert. The target migration and RPC grants remain deployment-unverified.
 #### Appointment workflow
 
 ```mermaid
-flowchart LR
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
     Request["Patient selects clinician, date, and available time"]
     Validate["Server validates ownership, availability, blocks, and conflicts"]
     Schedule["Create scheduled appointment"]
@@ -309,7 +376,19 @@ production use.
 #### RFID workflow
 
 ```mermaid
-flowchart LR
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
     Scan["RFID identifier entered"]
     RPC["check_in_rfid RPC"]
     Profile["Resolve patient profile"]
@@ -324,7 +403,19 @@ flowchart LR
 #### Reporting workflow
 
 ```mermaid
-flowchart LR
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
     Actor["Admin, doctor, or nurse"]
     Action["Dashboard or report Server Action"]
     Scope{"Admin role?"}
@@ -502,6 +593,18 @@ database outage can affect all modules, and service-role misuse in one action ca
 cross domain boundaries.
 
 ```mermaid
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
 flowchart TB
     subgraph Client["Untrusted client environment"]
         Browser["Browser and RFID workstation"]
@@ -537,7 +640,72 @@ deployment is plausible, not verified by source. The Next.js runtime may be
 deployed elsewhere if environment, network, and server-only requirements are
 met.
 
-### 2.2 Layers and trust boundaries
+### 2.2 Microservices foundation: service-oriented modular monolith
+
+For capstone architecture terminology, Zentraq implements a **microservices
+foundation through a service-oriented modular monolith**. The application has
+clear internal service boundaries, but those services run in one Next.js
+deployment, use internal Server Action and TypeScript contracts, and share one
+primary Supabase platform. They are not independently deployed network services.
+
+```mermaid
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
+    Users["User roles<br/>Student, faculty, staff,<br/>nurse, doctor, administrator"]
+    RFID["RFID workstation<br/>Identifier input"]
+
+    subgraph Deployment["Single Next.js deployment — service-oriented modular monolith"]
+        direction TB
+        Web["Presentation layer<br/>Role-specific Next.js portals"]
+        Security["Server-side boundary<br/>Authentication, authorization,<br/>validation, scoping, minimized DTOs"]
+        Domains["Logical domain services<br/>Identity and Access · Patient Registry<br/>Scheduling · Clinical Records<br/>Pharmacy and Inventory · Notifications<br/>Reporting and Audit · Integrations"]
+
+        Web --> Security --> Domains
+    end
+
+    Supabase["Shared Supabase platform<br/>Auth · PostgreSQL · RLS · RPC<br/>Storage · private Realtime"]
+    OpenRouter["Optional OpenRouter<br/>Appointment decision support"]
+    Future["Future integrations<br/>OSAS and Registrar secure APIs<br/>Not currently implemented"]
+
+    Users --> Web
+    RFID --> Web
+    Domains --> Supabase
+    Supabase -.->|private invalidation events| Web
+    Domains -.->|optional server-only request| OpenRouter
+    Future -.->|future integration boundary| Domains
+```
+
+| Logical service | Current responsibility and ownership boundary |
+| --- | --- |
+| Identity and Access | Authenticates users, validates active sessions, and resolves roles for administrator, doctor, nurse, student, faculty, and staff; it must not store clinical data |
+| Patient Registry | Owns demographics, institutional identifiers, contact and emergency-contact data, patient type, and RFID association |
+| Scheduling | Owns appointments, clinician availability, schedule blocks, conflict checks, booking, rescheduling, cancellation, and check-in state |
+| Clinical Records | Owns consultations, visit reasons, triage, vitals, diagnoses, treatments, prescriptions, follow-ups, and protected clinical documents |
+| Pharmacy and Inventory | Owns medicine definitions, stock, batches, dispensing, expiry, and restocking workflows |
+| Notifications | Owns announcements, reminders, private user notifications, and their delivery or read state |
+| Reporting and Audit | Produces role-scoped aggregates and records implemented audit events without becoming an unrestricted secondary PHI store |
+| Integrations | Coordinates RFID input and optional OpenRouter evaluation; OSAS and Registrar synchronization remain future work |
+
+These boundaries improve maintainability and make later extraction possible, but
+they do not provide independent scaling, release, or failure isolation today.
+A future move to independently deployed microservices would require authenticated
+service APIs, separate release pipelines and credentials, enforceable data
+ownership, service-to-service authorization, monitoring, idempotent retries, and
+failure handling. That additional operational complexity is not required by the
+current source-verified deployment.
+
+### 2.3 Layers and trust boundaries
 
 | Layer | Responsibility | Must not do |
 | --- | --- | --- |
@@ -583,7 +751,7 @@ reviewed actions. Announcement media may use a public presentation path.
 Authorization must be checked before generating a sensitive signed URL; the URL
 expiry limits exposure but does not replace access control.
 
-### 2.3 Supabase data infrastructure
+### 2.4 Supabase data infrastructure
 
 | Capability | Current implementation | Verification boundary |
 | --- | --- | --- |
@@ -603,7 +771,7 @@ special attention because ordinary PostgreSQL views can execute with owner
 permissions; app-facing views should be `security_invoker` where supported or
 otherwise protected with explicit grants and safe underlying access.
 
-### 2.4 Database architecture and schema authority
+### 2.5 Database architecture and schema authority
 
 The repository has two different forms of database evidence:
 
@@ -619,7 +787,20 @@ signatures, owners, and storage policies.
 #### Core clinical relationship model
 
 ```mermaid
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
 erDiagram
+    direction TB
     USERS ||--o{ USER_ROLES : assigned
     ROLES ||--o{ USER_ROLES : maps
     USERS ||--o| STUDENTS : authenticates
@@ -642,7 +823,20 @@ erDiagram
 #### Scheduling and operations relationship model
 
 ```mermaid
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
 erDiagram
+    direction TB
     STUDENTS ||--o{ APPOINTMENTS : requests
     FACULTY ||--o{ APPOINTMENTS : requests
     STAFF ||--o{ APPOINTMENTS : requests
@@ -659,7 +853,7 @@ erDiagram
     CLEARANCE_REQUESTS ||--o{ CLEARANCE_EVALUATIONS : evaluated_by
 ```
 
-### 2.5 Database object catalog
+### 2.6 Database object catalog
 
 Catalog status abbreviations:
 
@@ -896,7 +1090,7 @@ uses `clinic_accounts`, role-specific patient profiles, `appointments`,
 Do not delete or treat the older objects as canonical solely from this document;
 first inspect live dependencies and migration history.
 
-### 2.6 Transactions, failure modes, and deployment
+### 2.7 Transactions, failure modes, and deployment
 
 #### Transaction and concurrency boundaries
 
@@ -1014,7 +1208,19 @@ access while individual mutations use narrower lists.
 ### 3.3 Authorization enforcement
 
 ```mermaid
-flowchart LR
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
     Request["Request"]
     Auth["Supabase Auth"]
     Session["Active user_sessions token"]
@@ -1082,7 +1288,19 @@ change every action's authorization behavior.
 #### Data lifecycle
 
 ```mermaid
-flowchart LR
+---
+config:
+  theme: base
+  themeVariables:
+    fontSize: "24px"
+  flowchart:
+    nodeSpacing: 50
+    rankSpacing: 70
+  er:
+    fontSize: 24
+    layoutDirection: TB
+---
+flowchart TB
     Collect["Collect for declared clinic purpose"]
     Validate["Validate and classify"]
     Store["Store in PostgreSQL or private bucket"]
@@ -1378,7 +1596,7 @@ after the relevant source, deployed configuration, and role behavior are tested.
 - [ ] Tables match the context schema and are not mislabeled as confirmed live.
 - [ ] Views and RPCs match current code references and migration evidence.
 - [ ] `patient_complaint` is canonical outside historical compatibility discussion.
-- [ ] No documentation claims internal microservices, universal audit coverage,
+- [ ] No documentation claims independently deployed internal microservices, universal audit coverage,
       browser-free Supabase use, deployed migration state, or legal compliance.
 - [ ] Markdown contains no broken encoding and `git diff --check` passes.
 
