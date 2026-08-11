@@ -4,8 +4,17 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { cookies } from "next/headers";
 import { createClient } from "@/utils/supabase/server";
 import { getUserRole } from "@/lib/auth/get-user-role";
-import { revalidatePath } from "next/cache";
 import { logAuditEvent } from "@/lib/audit-logger";
+import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  getServerlessFeatureStatus,
+  isServerlessFeatureEnabled,
+} from "@/lib/serverless/feature-flags";
+import { assertSameOrigin } from "@/lib/security/action-guard";
+import { resolveProfilePhotoUrl } from "@/lib/storage/profile-photos";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function requireClinicStaff() {
   const cookieStore = await cookies();
@@ -18,6 +27,16 @@ async function requireClinicStaff() {
   const role = await getUserRole(user.id);
   if (!role || !["admin", "doctor", "nurse"].includes(role))
     return { error: "Access Denied", user: null, role: null };
+  const { data: clinicAccount } = await createAdminClient()
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("role", role)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!clinicAccount) {
+    return { error: "Access Denied", user: null, role: null };
+  }
   return { error: null, user, role: role as "admin" | "doctor" | "nurse" };
 }
 
@@ -41,6 +60,51 @@ export interface RfidCheckInResult {
   lastName: string;
   clinicPhotoUrl: string | null;
   createdNew: boolean;
+}
+
+export interface RfidServerlessDiagnostic {
+  globallyEnabled: boolean;
+  canaryRestricted: boolean;
+  enabledForCurrentOperator: boolean;
+  lastExecutionPath: "edge" | "legacy" | null;
+  lastExecutedAt: string | null;
+}
+
+// Returns sanitized RFID rollout and last-path diagnostics to an Admin only.
+export async function getRfidServerlessDiagnosticAction(): Promise<{
+  error: string | null;
+  diagnostic: RfidServerlessDiagnostic | null;
+}> {
+  const auth = await requireClinicStaff();
+  if (auth.error || !auth.user || auth.role !== "admin") {
+    return { error: "Access denied", diagnostic: null };
+  }
+
+  const rollout = getServerlessFeatureStatus("rfid", auth.user.id);
+  const { data } = await createAdminClient()
+    .from("audit_logs")
+    .select("metadata,created_at")
+    .eq("user_id", auth.user.id)
+    .eq("action", "RFID_SCAN")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const metadata = data?.metadata as Record<string, unknown> | null;
+  const executionPath = metadata?.executionPath;
+
+  return {
+    error: null,
+    diagnostic: {
+      globallyEnabled: rollout.globallyEnabled,
+      canaryRestricted: rollout.canaryRestricted,
+      enabledForCurrentOperator: rollout.enabledForUser,
+      lastExecutionPath:
+        executionPath === "edge" || executionPath === "legacy"
+          ? executionPath
+          : null,
+      lastExecutedAt: data?.created_at ?? null,
+    },
+  };
 }
 
 export interface RfidQueueItem {
@@ -70,7 +134,10 @@ type QueueVisitRow = {
   student_id: string | null;
   faculty_id: string | null;
   staff_id: string | null;
-  consultations: { id: string } | Array<{ id: string }> | null;
+  consultations:
+    | { id: string; review_doctor_id: string | null }
+    | Array<{ id: string; review_doctor_id: string | null }>
+    | null;
   students: QueuePatientRow | QueuePatientRow[] | null;
   faculty: QueuePatientRow | QueuePatientRow[] | null;
   staff: QueuePatientRow | QueuePatientRow[] | null;
@@ -112,18 +179,21 @@ export async function getRfidQueue(): Promise<{
   const auth = await requireClinicStaff();
   if (auth.error || !auth.user) return { error: auth.error, queue: [] };
 
-  const { data, error } = await createAdminClient()
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("clinic_queue_entries")
     .select(
-      "id, status, priority, created_at, claimed_by, clinic_visits(patient_type, student_id, faculty_id, staff_id, consultations(id), students(user_id, first_name, last_name, profile_photo_url), faculty(user_id, first_name, last_name, profile_photo_url), staff(user_id, first_name, last_name, profile_photo_url))",
+      "id, status, priority, created_at, claimed_by, clinic_visits(patient_type, student_id, faculty_id, staff_id, consultations(id, review_doctor_id), students(user_id, first_name, last_name, profile_photo_url), faculty(user_id, first_name, last_name, profile_photo_url), staff(user_id, first_name, last_name, profile_photo_url))",
     )
     .in("status", ["waiting", "claimed", "awaiting_doctor_review"])
+    .or(`claimed_by.is.null,claimed_by.eq.${auth.user.id}`)
     .order("priority", { ascending: false })
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(100);
 
-  if (error) return { error: error.message, queue: [] };
+  if (error) return { error: "Unable to load the clinic queue", queue: [] };
 
-  const { data: account } = await createAdminClient()
+  const { data: account } = await admin
     .from("clinic_accounts")
     .select("id")
     .eq("user_id", auth.user.id)
@@ -132,6 +202,17 @@ export async function getRfidQueue(): Promise<{
   if (!account) {
     return { error: "Active clinic account not found", queue: [] };
   }
+
+  const { data: duty } = await admin
+    .from("clinician_duty_status")
+    .select("is_on_duty,expires_at")
+    .eq("clinic_account_id", account.id)
+    .maybeSingle();
+  const isOnDuty = Boolean(
+    duty?.is_on_duty &&
+      duty.expires_at &&
+      new Date(duty.expires_at).getTime() > Date.now(),
+  );
 
   const rows = (data ?? []) as unknown as QueueQueryRow[];
   const claimantUserIds = Array.from(
@@ -144,7 +225,7 @@ export async function getRfidQueue(): Promise<{
   const claimantNames = new Map<string, string>();
 
   if (claimantUserIds.length > 0) {
-    const { data: claimantAccounts } = await createAdminClient()
+    const { data: claimantAccounts } = await admin
       .from("clinic_accounts")
       .select("user_id, display_name")
       .in("user_id", claimantUserIds)
@@ -158,13 +239,15 @@ export async function getRfidQueue(): Promise<{
   }
 
   const queue = rows
-    .filter((item) => {
-      if (item.status === "waiting") return true;
-      if (item.status === "awaiting_doctor_review") {
-        return auth.role === "admin" || auth.role === "doctor";
-      }
-      return auth.role === "admin" || item.claimed_by === auth.user.id;
-    })
+    .filter((item) =>
+      canAccessQueueItem(
+        item,
+        auth.user.id,
+        auth.role,
+        account.id,
+        isOnDuty,
+      ),
+    )
     .flatMap((item): RfidQueueItem[] => {
       const visit = firstRelation(item.clinic_visits);
       const patient = visit?.patient_type === "student"
@@ -196,37 +279,113 @@ export async function getRfidQueue(): Promise<{
           ? (claimantNames.get(item.claimed_by) ?? null)
           : null,
         claimedByCurrentUser: item.claimed_by === auth.user.id,
-        canStartConsultation:
-          item.status === "waiting" ||
-          (item.status === "awaiting_doctor_review" &&
-            (auth.role === "admin" || auth.role === "doctor")) ||
-          item.claimed_by === auth.user.id,
+        canStartConsultation: canAccessQueueItem(
+          item,
+          auth.user.id,
+          auth.role,
+          account.id,
+          isOnDuty,
+        ),
       }];
     })
     .filter((item) => Boolean(item.patientId && item.consultationId));
 
+  const queueWithSignedPhotos = await Promise.all(
+    queue.map(async (item) => ({
+      ...item,
+      profilePhotoUrl: await resolveProfilePhotoUrl(
+        admin,
+        item.profilePhotoUrl,
+      ),
+    })),
+  );
+
   return {
     error: null,
-    queue,
+    queue: queueWithSignedPhotos,
   };
+}
+
+// Allows unclaimed eligible work or work already claimed by the current operator.
+function canAccessQueueItem(
+  item: QueueQueryRow,
+  userId: string,
+  role: "admin" | "doctor" | "nurse",
+  clinicAccountId: string,
+  isOnDuty: boolean,
+): boolean {
+  if (item.claimed_by === userId) return true;
+  if (item.claimed_by) return false;
+  if (item.status === "waiting") return true;
+  if (item.status !== "awaiting_doctor_review" || role !== "doctor") {
+    return false;
+  }
+
+  const consultation = firstRelation(
+    firstRelation(item.clinic_visits)?.consultations ?? null,
+  );
+  return consultation?.review_doctor_id
+    ? consultation.review_doctor_id === clinicAccountId
+    : isOnDuty;
 }
 
 // Atomically queues an RFID patient or returns their existing active check-in.
 export async function checkInRfid(
   rfidUid: string,
+  eventId?: string,
 ): Promise<{ error: string | null; result: RfidCheckInResult | null }> {
   const auth = await requireClinicStaff();
   if (auth.error || !auth.user) return { error: auth.error, result: null };
+  if (!(await assertSameOrigin())) {
+    return { error: "Invalid request origin", result: null };
+  }
+
+  const uid = rfidUid.trim();
+  if (uid.length < 4 || uid.length > 64 || /[\u0000-\u001F\u007F]/.test(uid)) {
+    return { error: "Invalid RFID UID format", result: null };
+  }
+
+  const rate = checkRateLimit(`rfid-check-in:${auth.user.id}`, 90, 60 * 1000);
+  if (!rate.success) {
+    return { error: "Too many check-in attempts. Try again shortly.", result: null };
+  }
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
+  const requestEventId = eventId?.trim() || crypto.randomUUID();
+  if (!UUID_PATTERN.test(requestEventId)) {
+    return { error: "Invalid check-in request", result: null };
+  }
+
+  if (isServerlessFeatureEnabled("rfid", auth.user.id)) {
+    const { data, error } = await supabase.functions.invoke("rfid-check-in", {
+      body: { eventId: requestEventId, rfidUid: uid },
+    });
+    const result = data?.result as RfidCheckInResult | undefined;
+    if (error || !result) {
+      return { error: "Unable to check in this card", result: null };
+    }
+    result.clinicPhotoUrl = await resolveProfilePhotoUrl(
+      createAdminClient(),
+      result.clinicPhotoUrl,
+    );
+    await logRfidExecution(
+      auth.user.id,
+      auth.user.email ?? null,
+      requestEventId,
+      "edge",
+      result,
+    );
+    return { error: null, result };
+  }
+
   const { data, error } = await supabase.rpc("check_in_rfid", {
-    p_rfid_uid: rfidUid.trim(),
+    p_rfid_uid: uid,
   });
 
   if (error || !data?.[0]) {
     return {
-      error: error?.message || "Unable to check in patient",
+      error: "Unable to check in this card",
       result: null,
     };
   }
@@ -245,19 +404,45 @@ export async function checkInRfid(
     patientId: item.patient_id,
     firstName: item.first_name,
     lastName: item.last_name,
-    clinicPhotoUrl: profile?.profile_photo_url ?? item.clinic_photo_url ?? null,
+    clinicPhotoUrl: await resolveProfilePhotoUrl(
+      createAdminClient(),
+      profile?.profile_photo_url ?? item.clinic_photo_url ?? null,
+    ),
     createdNew: item.created_new,
   };
 
-  await logAuditEvent({
-    action: "RFID_SCAN",
-    userId: auth.user.id,
-    email: auth.user.email,
-    resource: result.queueEntryId,
-    details: { createdNew: result.createdNew, patientType: result.patientType },
-  });
+  await logRfidExecution(
+    auth.user.id,
+    auth.user.email ?? null,
+    requestEventId,
+    "legacy",
+    result,
+  );
 
   return { error: null, result };
+}
+
+// Writes a PHI-free audit record for either RFID execution path.
+async function logRfidExecution(
+  userId: string,
+  email: string | null,
+  eventId: string,
+  executionPath: "edge" | "legacy",
+  result: RfidCheckInResult,
+) {
+  await logAuditEvent({
+    action: "RFID_SCAN",
+    userId,
+    email,
+    resource: result.queueEntryId,
+    details: {
+      eventId,
+      executionPath,
+      resultStatus: "success",
+      createdNew: result.createdNew,
+      patientType: result.patientType,
+    },
+  });
 }
 
 /**
@@ -289,8 +474,11 @@ export async function getKioskStudentProfile(rfidUid: string) {
       .maybeSingle();
 
     if (error) {
-      console.error("[getKioskStudentProfile DB Error]:", error);
-      return { error: error.message, profile: null };
+      console.error(JSON.stringify({
+        code: error.code ?? "DATABASE_ERROR",
+        event: "rfid_profile_lookup_failed",
+      }));
+      return { error: "Unable to look up this card", profile: null };
     }
 
     if (!data) {
@@ -307,69 +495,22 @@ export async function getKioskStudentProfile(rfidUid: string) {
       studentNumber: data.patient_type === "student" ? data.identifier || null : null,
       employeeNumber: data.patient_type !== "student" ? data.identifier || null : null,
       department: data.department || null,
-      clinicPhotoUrl: data.profile_photo_url || null,
+      clinicPhotoUrl: await resolveProfilePhotoUrl(
+        admin,
+        data.profile_photo_url || null,
+      ),
     };
 
     return { error: null, profile };
-  } catch (err: unknown) {
-    console.error("[getKioskStudentProfile Exception]:", err);
+  } catch {
+    console.error(JSON.stringify({
+      code: "RFID_PROFILE_LOOKUP_FAILED",
+      event: "rfid_profile_lookup_failed",
+    }));
     return {
-      error: getErrorMessage(err, "Failed to look up student"),
+      error: "Unable to look up this card",
       profile: null,
     };
-  }
-}
-
-// Creates a legacy student RFID consultation for callers outside the queue RPC.
-export async function createConsultation(
-  profileId: string,
-  patientName: string,
-  patientComplaint: string,
-) {
-  try {
-    const auth = await requireClinicStaff();
-    if (auth.error || !auth.user) return { error: auth.error };
-    const admin = createAdminClient();
-    const { data: visit, error: visitError } = await admin
-      .from("clinic_visits")
-      .insert({
-        patient_type: "student",
-        student_id: profileId,
-        visit_type: "rfid",
-        created_by: auth.user.id,
-      })
-      .select("id")
-      .single();
-    if (visitError || !visit)
-      return { error: visitError?.message || "Unable to create clinic visit" };
-    const { data: account } = await admin
-      .from("clinic_accounts")
-      .select("id, role")
-      .eq("user_id", auth.user.id)
-      .maybeSingle();
-    const { data, error } = await admin
-      .from("consultations")
-      .insert({
-        visit_id: visit.id,
-        patient_complaint: patientComplaint,
-        doctor_id: account?.role === "doctor" ? account.id : null,
-        nurse_id: account?.role === "nurse" ? account.id : null,
-        status: "in-progress",
-      })
-      .select("id")
-      .single();
-    if (error) return { error: error.message };
-    await logAuditEvent({
-      action: "RFID_SCAN",
-      userId: auth.user.id,
-      email: auth.user.email,
-      resource: data?.id,
-      details: { patientName, patientComplaint },
-    });
-    revalidatePath("/consultations");
-    return { success: true, data };
-  } catch (err: unknown) {
-    return { error: getErrorMessage(err, "Server error") };
   }
 }
 
@@ -454,6 +595,3 @@ function firstRelation<T>(value: T | T[] | null): T | null {
 }
 
 // Converts an unknown exception into a safe user-facing message.
-function getErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
-}

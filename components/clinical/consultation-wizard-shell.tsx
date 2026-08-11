@@ -20,9 +20,11 @@ import { cn } from "@/lib/utils"
 
 export type ClinicalWorkflowRole = "admin" | "doctor" | "nurse"
 export type ConsultationWizardStep =
+  | "handoff"
   | "details"
   | "vitals"
   | "notes"
+  | "doctor_selection"
   | "clinical_plan"
   | "review"
 
@@ -38,7 +40,17 @@ const nurseSteps: Array<{ key: ConsultationWizardStep; label: string }> = [
   { key: "details", label: "Visit" },
   { key: "vitals", label: "Vitals" },
   { key: "notes", label: "Notes" },
+  { key: "doctor_selection", label: "Doctor" },
   { key: "review", label: "Review" },
+]
+
+const doctorReviewSteps: Array<{
+  key: ConsultationWizardStep
+  label: string
+}> = [
+  { key: "handoff", label: "Nurse handoff" },
+  { key: "clinical_plan", label: "Clinical plan" },
+  { key: "review", label: "Final review" },
 ]
 
 interface ConsultationWizardShellProps {
@@ -51,6 +63,7 @@ interface ConsultationWizardShellProps {
   onRequestClose: () => void
   onSubmitReview: () => void
   submitting: boolean
+  isNurseHandoffReview?: boolean
   children: React.ReactNode
 }
 
@@ -65,9 +78,15 @@ export function ConsultationWizardShell({
   onRequestClose,
   onSubmitReview,
   submitting,
+  isNurseHandoffReview = false,
   children,
 }: ConsultationWizardShellProps) {
-  const steps = role === "nurse" ? nurseSteps : doctorSteps
+  const steps =
+    role === "nurse"
+      ? nurseSteps
+      : isNurseHandoffReview
+        ? doctorReviewSteps
+        : doctorSteps
   const index = steps.findIndex((item) => item.key === step)
   const isLastStep = index === steps.length - 1
 
@@ -95,7 +114,11 @@ export function ConsultationWizardShell({
             aria-label="Consultation workflow"
             className={cn(
               "grid h-auto w-full grid-cols-2 gap-1 rounded-xl p-1 group-data-horizontal/tabs:h-auto",
-              role === "nurse" ? "sm:grid-cols-4" : "sm:grid-cols-5",
+              role === "nurse"
+                ? "sm:grid-cols-5"
+                : isNurseHandoffReview
+                  ? "sm:grid-cols-3"
+                  : "sm:grid-cols-5",
             )}
           >
             {steps.map((item) => (

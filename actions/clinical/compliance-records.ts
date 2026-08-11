@@ -11,6 +11,7 @@ import {
   type ActionActor,
 } from "@/lib/security/action-guard"
 import { createAdminClient } from "@/utils/supabase/admin"
+import { resolveProfilePhotoUrl } from "@/lib/storage/profile-photos"
 
 export type PatientProfileRole = "student" | "faculty" | "staff"
 export type ClinicRole = "admin" | "doctor" | "nurse"
@@ -36,7 +37,16 @@ const searchSchema = z.object({
   position: z.string().trim().max(100).optional(),
   patientRole: z.enum(["faculty", "staff"]).optional(),
   department: z.string().trim().max(100).optional(),
-})
+}).refine(
+  (input) =>
+    [input.query, input.department, input.position].some(
+      (value) => (value?.trim().length ?? 0) >= 2,
+    ),
+  {
+    message: "Enter at least two characters in a search field",
+    path: ["query"],
+  },
+)
 const recordSchema = z.object({
   patientId: uuidSchema,
   patientRole: patientRoleSchema,
@@ -216,12 +226,47 @@ export interface ClinicalPrescriptionDTO {
   createdAt: string
 }
 
+export interface ClinicalConsultationDTO {
+  id: string
+  visitType: string
+  checkedInAt: string
+  completedAt: string | null
+  patientComplaint: string | null
+  vitalsDisposition: string
+  vitalsSkipReason: string | null
+  nurseName: string | null
+  doctorName: string | null
+  nurseHandoffNote: string | null
+  nurseHandoffAt: string | null
+  doctorReviewNote: string | null
+  triage: {
+    temperature: number | null
+    bloodPressure: string | null
+    heartRate: number | null
+    respiratoryRate: number | null
+    oxygenSaturation: number | null
+    notes: string | null
+  } | null
+  diagnoses: Array<{ description: string | null; code: string | null }>
+  treatments: Array<{
+    plan: string | null
+    instructions: string | null
+  }>
+  prescriptions: ClinicalPrescriptionDTO[]
+  followUps: Array<{
+    scheduledDate: string
+    reason: string | null
+    status: string
+  }>
+}
+
 export interface ClinicalRecordDTO {
   medicalHistory: ClinicalHistoryDTO[]
   allergies: ClinicalAllergyDTO[]
   currentMedications: ClinicalMedicationDTO[]
   immunizations: ClinicalImmunizationDTO[]
   prescriptions: ClinicalPrescriptionDTO[]
+  consultations: ClinicalConsultationDTO[]
 }
 
 export interface ComplianceRecordDTO {
@@ -304,7 +349,12 @@ export async function searchPatientProfilesAction(input: unknown): Promise<{
   const actor = await requireClinicActor()
   const parsed = searchSchema.safeParse(input)
   if (!actor || !parsed.success) {
-    return emptySearchResult(parsed.success ? parsed.data.page : 1, "Access denied")
+    return emptySearchResult(
+      parsed.success ? parsed.data.page : 1,
+      actor && !parsed.success
+        ? firstValidationError(parsed.error)
+        : "Access denied",
+    )
   }
 
   if (parsed.data.scope === "student") {
@@ -327,7 +377,7 @@ export async function getOwnPatientProfileAction(): Promise<{
 
   return {
     error: null,
-    profile: toProfileDTO(resolved.row, resolved.role),
+    profile: await toProfileDTO(resolved.row, resolved.role),
   }
 }
 
@@ -380,7 +430,7 @@ export async function getComplianceRecordAction(input: unknown): Promise<{
   return {
     error: null,
     record: {
-      profile: toProfileDTO(profileRow, parsed.data.patientRole),
+      profile: await toProfileDTO(profileRow, parsed.data.patientRole),
       clinical: clinical.data,
       exams: compliance.exams,
       sickLeave: compliance.sickLeave,
@@ -1101,10 +1151,10 @@ function profileSelect() {
 }
 
 // Converts a database profile into the explicit client DTO.
-function toProfileDTO(
+async function toProfileDTO(
   row: ProfileRow,
   role: PatientProfileRole,
-): PatientProfileDTO {
+): Promise<PatientProfileDTO> {
   return {
     id: row.id,
     role,
@@ -1125,7 +1175,10 @@ function toProfileDTO(
     birthDate: role === "student" ? row.birth_date ?? null : null,
     gender: role === "student" ? row.gender ?? null : null,
     bloodType: role === "student" ? row.blood_type ?? null : null,
-    profilePhotoUrl: row.profile_photo_url,
+    profilePhotoUrl: await resolveProfilePhotoUrl(
+      createAdminClient(),
+      row.profile_photo_url,
+    ),
     status: row.status,
     createdAt: row.created_at,
   }
@@ -1142,6 +1195,7 @@ async function loadClinicalData(
     currentMedications: [],
     immunizations: [],
     prescriptions: [],
+    consultations: [],
   }
   const admin = createAdminClient()
   const idColumn = `${patientRole}_id`
@@ -1174,7 +1228,45 @@ async function loadClinicalData(
         .order("administered_date", { ascending: false }),
       admin
         .from("clinic_visits")
-        .select("consultations(id,status)")
+        .select(`
+          visit_type,
+          check_in_time,
+          consultations(
+            id,
+            status,
+            completed_at,
+            patient_complaint,
+            vitals_disposition,
+            vitals_skip_reason,
+            nurse_handoff_note,
+            nurse_handoff_at,
+            doctor_review_note,
+            doctor:clinic_accounts!consultations_doctor_id_fkey(display_name),
+            nurse:clinic_accounts!consultations_nurse_id_fkey(display_name),
+            triage_assessments(
+              temperature,
+              blood_pressure,
+              heart_rate,
+              respiratory_rate,
+              oxygen_saturation,
+              notes
+            ),
+            diagnoses(icd10_code,description),
+            treatments(treatment_plan,instructions),
+            prescriptions(
+              id,
+              dosage,
+              frequency,
+              duration_days,
+              quantity,
+              instructions,
+              status,
+              created_at,
+              medicines(generic_name,brand_name)
+            ),
+            follow_ups(scheduled_date,reason,status)
+          )
+        `)
         .eq(idColumn, patientId),
     ])
   const baseError =
@@ -1185,13 +1277,64 @@ async function loadClinicalData(
     visitResult.error?.message
   if (baseError) return { error: baseError, data: empty }
 
+  type Relation<T> = T | T[] | null
+  interface ConsultationTimelineRow {
+    id: string
+    status: string
+    completed_at: string | null
+    patient_complaint: string | null
+    vitals_disposition: string
+    vitals_skip_reason: string | null
+    nurse_handoff_note: string | null
+    nurse_handoff_at: string | null
+    doctor_review_note: string | null
+    doctor: Relation<{ display_name: string | null }>
+    nurse: Relation<{ display_name: string | null }>
+    triage_assessments: Relation<{
+      temperature: number | null
+      blood_pressure: string | null
+      heart_rate: number | null
+      respiratory_rate: number | null
+      oxygen_saturation: number | null
+      notes: string | null
+    }>
+    diagnoses: Array<{
+      icd10_code: string | null
+      description: string | null
+    }> | null
+    treatments: Array<{
+      treatment_plan: string | null
+      instructions: string | null
+    }> | null
+    prescriptions: Array<{
+      id: string
+      dosage: string | null
+      frequency: string | null
+      duration_days: number | null
+      quantity: number | null
+      instructions: string | null
+      status: string
+      created_at: string
+      medicines: Relation<{
+        generic_name: string
+        brand_name: string | null
+      }>
+    }> | null
+    follow_ups: Array<{
+      scheduled_date: string
+      reason: string | null
+      status: string
+    }> | null
+  }
   const visitRows = (visitResult.data ?? []) as unknown as Array<{
+    visit_type: string
+    check_in_time: string
     consultations:
-      | { id: string; status: string }
-      | Array<{ id: string; status: string }>
+      | ConsultationTimelineRow
+      | ConsultationTimelineRow[]
       | null
   }>
-  const consultationIds = visitRows.flatMap((visit) => {
+  const completedConsultations = visitRows.flatMap((visit) => {
     const relation = visit.consultations
     const consultations = Array.isArray(relation)
       ? relation
@@ -1200,8 +1343,15 @@ async function loadClinicalData(
         : []
     return consultations
       .filter((consultation) => consultation.status === "completed")
-      .map((consultation) => consultation.id)
+      .map((consultation) => ({
+        consultation,
+        checkedInAt: visit.check_in_time,
+        visitType: visit.visit_type,
+      }))
   })
+  const consultationIds = completedConsultations.map(
+    ({ consultation }) => consultation.id,
+  )
   const prescriptionResult = consultationIds.length
     ? await admin
         .from("prescriptions")
@@ -1329,6 +1479,80 @@ async function loadClinicalData(
           createdAt: row.created_at,
         }
       }),
+      consultations: completedConsultations
+        .map(({ consultation, checkedInAt, visitType }) => {
+          const doctor = Array.isArray(consultation.doctor)
+            ? consultation.doctor[0]
+            : consultation.doctor
+          const nurse = Array.isArray(consultation.nurse)
+            ? consultation.nurse[0]
+            : consultation.nurse
+          const triage = Array.isArray(consultation.triage_assessments)
+            ? consultation.triage_assessments[0]
+            : consultation.triage_assessments
+          return {
+            id: consultation.id,
+            visitType,
+            checkedInAt,
+            completedAt: consultation.completed_at,
+            patientComplaint: consultation.patient_complaint,
+            vitalsDisposition: consultation.vitals_disposition,
+            vitalsSkipReason: consultation.vitals_skip_reason,
+            nurseName: nurse?.display_name ?? null,
+            doctorName: doctor?.display_name ?? null,
+            nurseHandoffNote: consultation.nurse_handoff_note,
+            nurseHandoffAt: consultation.nurse_handoff_at,
+            doctorReviewNote: consultation.doctor_review_note,
+            triage: triage
+              ? {
+                  temperature: triage.temperature,
+                  bloodPressure: triage.blood_pressure,
+                  heartRate: triage.heart_rate,
+                  respiratoryRate: triage.respiratory_rate,
+                  oxygenSaturation: triage.oxygen_saturation,
+                  notes: triage.notes,
+                }
+              : null,
+            diagnoses: (consultation.diagnoses ?? []).map((diagnosis) => ({
+              description: diagnosis.description,
+              code: diagnosis.icd10_code,
+            })),
+            treatments: (consultation.treatments ?? []).map((treatment) => ({
+              plan: treatment.treatment_plan,
+              instructions: treatment.instructions,
+            })),
+            prescriptions: (consultation.prescriptions ?? []).map(
+              (prescription) => {
+                const medicine = Array.isArray(prescription.medicines)
+                  ? prescription.medicines[0]
+                  : prescription.medicines
+                return {
+                  id: prescription.id,
+                  medicineName: medicine?.brand_name
+                    ? `${medicine.generic_name} (${medicine.brand_name})`
+                    : medicine?.generic_name ?? "Medicine",
+                  dosage: prescription.dosage,
+                  frequency: prescription.frequency,
+                  durationDays: prescription.duration_days,
+                  quantity: prescription.quantity,
+                  instructions: prescription.instructions,
+                  status: prescription.status,
+                  createdAt: prescription.created_at,
+                }
+              },
+            ),
+            followUps: (consultation.follow_ups ?? []).map((followUp) => ({
+              scheduledDate: followUp.scheduled_date,
+              reason: followUp.reason,
+              status: followUp.status,
+            })),
+          }
+        })
+        .sort(
+          (left, right) =>
+            new Date(right.completedAt ?? right.checkedInAt).getTime() -
+            new Date(left.completedAt ?? left.checkedInAt).getTime(),
+        ),
     },
   }
 }

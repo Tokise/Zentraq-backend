@@ -54,7 +54,7 @@ export function SearchableCombobox({
       <ComboboxPrimitive.Trigger
         aria-label={ariaLabel}
         className={cn(
-          "flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-border bg-field px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 data-placeholder:text-muted-foreground",
+          "flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-border bg-field px-3 text-sm text-foreground outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 data-placeholder:text-muted-foreground",
           className,
         )}
       >
@@ -68,11 +68,12 @@ export function SearchableCombobox({
         <ComboboxPrimitive.Positioner
           align="start"
           className="isolate z-50"
+          collisionPadding={16}
           sideOffset={4}
         >
           <ComboboxPrimitive.Popup
             aria-label={ariaLabel}
-            className="w-(--anchor-width) min-w-64 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
+            className="flex max-h-(--available-height) w-(--anchor-width) min-w-64 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
           >
             <div className="flex items-center gap-2 border-b border-border px-3">
               <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -85,10 +86,10 @@ export function SearchableCombobox({
             <ComboboxPrimitive.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
               {emptyText}
             </ComboboxPrimitive.Empty>
-            <ComboboxPrimitive.List className="max-h-64 overflow-y-auto p-1">
+            <ComboboxPrimitive.List className="min-h-0 max-h-48 overflow-y-auto p-1">
               {(option: ComboboxOption) => (
                 <ComboboxPrimitive.Item
-                  className="relative flex cursor-default items-center rounded-lg py-2 pr-8 pl-3 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                  className="relative flex cursor-pointer items-center rounded-lg py-2 pr-8 pl-3 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   key={option.value}
                   value={option}
                 >

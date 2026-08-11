@@ -77,7 +77,7 @@ export default function AdminClearanceHistoryPage() {
                   }}
               className={`px-3 py-2 text-sm font-medium cursor-pointer transition-colors capitalize ${
                 statusFilter === status
-                  ? "bg-zinc-900 text-white"
+                  ? "bg-primary text-primary-foreground"
                   : "bg-white text-zinc-600 hover:bg-zinc-50"
               }`}
             >

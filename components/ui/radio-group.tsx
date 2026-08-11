@@ -42,7 +42,7 @@ function RadioGroupItem({
       {...props}
       checked={group.value === value}
       className={cn(
-        "size-4 shrink-0 accent-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+        "size-4 shrink-0 cursor-pointer accent-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed",
         className,
       )}
       id={id}

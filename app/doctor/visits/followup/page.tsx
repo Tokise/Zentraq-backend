@@ -150,7 +150,6 @@ export default function DoctorVisitFollowupPage() {
                       <Button
                         onClick={() => openDetail(consultation.id)}
                         size="sm"
-                        variant="outline"
                       >
                         Schedule Follow-up
                       </Button>

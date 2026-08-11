@@ -37,7 +37,6 @@ export interface DailyConsultation {
   total_consultations: number
   student_consultations: number
   faculty_consultations: number
-  walk_in_visits: number
   appointment_visits: number
   rfid_visits: number
 }
@@ -68,6 +67,17 @@ export interface ClearanceCompletion {
   approval_rate: number
 }
 
+export interface AnalyticsOverview {
+  active_incidents: number
+  faculty_consultations: number
+  low_stock_medicines: number
+  pending_clearances: number
+  period_end: string
+  period_start: string
+  student_consultations: number
+  total_consultations: number
+}
+
 // Returns bounded daily aggregate consultation counts for clinic reports.
 export async function getDailyConsultations(params?: {
   start_date?: string
@@ -83,7 +93,6 @@ export async function getDailyConsultations(params?: {
       total_consultations,
       student_consultations,
       faculty_consultations,
-      walk_in_visits,
       appointment_visits,
       rfid_visits
     `)

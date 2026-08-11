@@ -29,6 +29,16 @@ export async function createAdminAppointmentAction(params: {
   const admin = createAdminClient()
   const idColumn = params.patientType === "student" ? "student_id" : "faculty_id"
 
+  const { data: clinicAccount } = await admin
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", actor.id)
+    .eq("role", actor.role)
+    .eq("is_active", true)
+    .maybeSingle()
+
+  if (!clinicAccount) return { error: "Active clinic account not found" }
+
   // Verify patient exists
   const table = params.patientType === "student" ? "students" : "faculty"
   const { data: patient, error: patientError } = await admin
@@ -47,6 +57,7 @@ export async function createAdminAppointmentAction(params: {
     scheduled_date: params.scheduledDate || null,
     scheduled_time: params.scheduledTime || null,
     priority: params.priority ?? null,
+    doctor_id: clinicAccount.id,
     status: "pending",
   })
 

@@ -1,6 +1,6 @@
 # Zentraq Software Architecture Document
 
-**Version:** 3.0
+**Version:** 3.1
 
 **Status:** Current-system baseline
 
@@ -640,13 +640,14 @@ deployment is plausible, not verified by source. The Next.js runtime may be
 deployed elsewhere if environment, network, and server-only requirements are
 met.
 
-### 2.2 Microservices foundation: service-oriented modular monolith
+### 2.2 Microservices foundation: staged serverless boundaries
 
-For capstone architecture terminology, Zentraq implements a **microservices
-foundation through a service-oriented modular monolith**. The application has
-clear internal service boundaries, but those services run in one Next.js
-deployment, use internal Server Action and TypeScript contracts, and share one
-primary Supabase platform. They are not independently deployed network services.
+Zentraq remains a **service-oriented modular monolith** for identity, sessions,
+scheduling, inventory, and clinical records. Notifications, aggregate report
+generation, and RFID check-in now have source-defined serverless boundaries,
+but each remains disabled and deployment-unverified until its staged migration,
+function deployment, and role tests succeed. All services initially share the
+same Supabase PostgreSQL source of truth.
 
 ```mermaid
 ---
@@ -705,6 +706,14 @@ ownership, service-to-service authorization, monitoring, idempotent retries, and
 failure handling. That additional operational complexity is not required by the
 current source-verified deployment.
 
+The repository contains a deployment-unverified platform pilot plus production
+source for queued notification delivery, queued aggregate workbooks, synchronous
+authenticated RFID check-in, and private profile-photo Storage. Only the
+notification migration is currently staged; later migration templates are held
+outside `supabase/migrations` to enforce one-domain releases. The extraction
+sequence, security invariants, manual commands, and verification gates are in
+[`SERVERLESS_MICROSERVICES_MIGRATION.md`](./SERVERLESS_MICROSERVICES_MIGRATION.md).
+
 ### 2.3 Layers and trust boundaries
 
 | Layer | Responsibility | Must not do |
@@ -721,7 +730,8 @@ current source-verified deployment.
 
 #### Authentication and session flow
 
-1. Supabase Auth validates the user's session through `auth.getUser()`.
+1. `proxy.ts` validates signed identity claims through `auth.getClaims()`;
+   server workflows call `auth.getUser()` when they require a fresh Auth row.
 2. `proxy.ts` reads the HttpOnly `zentraq_session_token` cookie.
 3. A server-only service-role query verifies an active, unrevoked
    `user_sessions` row and resolves `user_roles -> roles`.
@@ -755,13 +765,15 @@ expiry limits exposure but does not replace access control.
 
 | Capability | Current implementation | Verification boundary |
 | --- | --- | --- |
-| Auth | SSR browser/server clients and `auth.getUser()` | Provider settings and MFA are deployment-unverified |
+| Auth | SSR clients use `auth.getClaims()` for page/proxy identity and `auth.getUser()` for fresh Auth records | Provider settings and MFA are deployment-unverified |
 | Data API | Local exposed schemas are `public` and `graphql_public`; new-object auto-exposure is unset | Grants and live exposure must be checked |
 | PostgreSQL | Local major version 17 | Remote version must match before migration work |
 | RLS | Policies and remediation migrations exist for sensitive domains | Applied policies and policy behavior need live tests |
 | RPC | Authenticated functions handle check-in, claiming, consultation finalization, and program approval | Signatures, grants, and function owners need live verification |
-| Storage | Enabled locally with a 50 MiB limit; student document bucket migration exists | Bucket creation, privacy, MIME limits, and policies need live verification |
+| Storage | Private document flows exist; a staged 150 KiB profile-photo bucket template stores object paths rather than data URLs | Bucket creation, privacy, MIME limits, and policies need live verification |
 | Realtime | Private broadcast policies and trigger functions exist | Publication, topic policy, and target-project settings need live verification |
+| Edge Functions | Named-secret notification/report workers and a user-authenticated RFID check-in function are source-defined | Function deployment, keys, JWT enforcement, and role behavior are deployment-unverified |
+| Queues | Dedicated metadata-only notification/report PGMQ queues and service-role-only worker RPCs are source-defined | Migration state, queue grants, retries, dead-letter behavior, and Cron need live verification |
 | Migrations | Imperative, versioned SQL files; `schema_paths` is empty | Migration order and applied history need CLI/MCP verification |
 | Seed | `supabase/seed.sql` enabled locally | Never treat development seed identities as production data |
 | Network | Local network restrictions are disabled | Production network restrictions are operational/deployment controls |

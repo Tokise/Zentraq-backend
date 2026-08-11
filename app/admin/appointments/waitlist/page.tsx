@@ -175,7 +175,7 @@ export default function AdminAppointmentWaitlistPage() {
                         {new Date(a.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openDetail(a.id)}>
+                        <Button size="sm" className="h-8 text-xs" onClick={() => openDetail(a.id)}>
                           Review
                         </Button>
                       </TableCell>

@@ -2,7 +2,6 @@
 
 import { getActionActor, hasAnyRole } from "@/lib/security/action-guard"
 import { createAdminClient } from "@/utils/supabase/admin"
-import { logAuditEvent } from "@/lib/audit-logger"
 
 type StaffRole = "admin" | "doctor" | "nurse"
 
@@ -26,6 +25,43 @@ export interface AppointmentOverviewRow {
   created_at: string
 }
 
+interface IdentifierRelation {
+  employee_number?: string | null
+  student_number?: string | null
+}
+
+interface AppointmentDetailRow {
+  faculty: IdentifierRelation | IdentifierRelation[] | null
+  id: string
+  reason: string | null
+  staff: IdentifierRelation | IdentifierRelation[] | null
+  students: IdentifierRelation | IdentifierRelation[] | null
+}
+
+interface ReminderPatientRelation {
+  first_name: string | null
+  last_name: string | null
+}
+
+interface ReminderAppointmentRelation {
+  faculty: ReminderPatientRelation | ReminderPatientRelation[] | null
+  scheduled_date: string | null
+  scheduled_time: string | null
+  students: ReminderPatientRelation | ReminderPatientRelation[] | null
+}
+
+interface ReminderQueryRow {
+  appointment_id: string
+  appointments:
+    | ReminderAppointmentRelation
+    | ReminderAppointmentRelation[]
+    | null
+  id: string
+  remind_at: string
+  sent_at: string | null
+  status: string
+}
+
 export async function getAppointmentsOverviewAction(params?: {
   status?: string
   searchQuery?: string
@@ -38,7 +74,19 @@ export async function getAppointmentsOverviewAction(params?: {
   const admin = createAdminClient()
   let query = admin
     .from("v_appointment_overview")
-    .select("id, patient_type, patient_first_name, patient_last_name, scheduled_date, scheduled_time, priority, status, doctor_id, doctor_name, created_at")
+    .select(`
+      id,
+      patient_type,
+      patient_first_name,
+      patient_last_name,
+      scheduled_date,
+      scheduled_time,
+      priority,
+      status,
+      doctor_id,
+      doctor_name,
+      created_at
+    `)
     .order("created_at", { ascending: false })
     .limit(200)
 
@@ -48,24 +96,23 @@ export async function getAppointmentsOverviewAction(params?: {
   if (params?.fromDate) query = query.gte("scheduled_date", params.fromDate)
   if (params?.toDate) query = query.lte("scheduled_date", params.toDate)
 
-  if (actor.role === "doctor" || actor.role === "nurse") {
-    const { data: clinicAccount } = await admin
-      .from("clinic_accounts")
-      .select("id")
-      .eq("user_id", actor.id)
-      .eq("is_active", true)
-      .maybeSingle()
+  const { data: clinicAccount } = await admin
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", actor.id)
+    .eq("role", actor.role)
+    .eq("is_active", true)
+    .maybeSingle()
 
-    if (!clinicAccount) {
-      return { error: "Active clinic account not found", appointments: [] }
-    }
-    query = query.eq("doctor_id", clinicAccount.id)
+  if (!clinicAccount) {
+    return { error: "Active clinic account not found", appointments: [] }
   }
+  query = query.eq("doctor_id", clinicAccount.id)
 
   const { data, error } = await query
   if (error) return { error: error.message, appointments: [] as AppointmentOverviewRow[] }
 
-  const appointments = (data ?? []).map((item) => ({
+  const appointments: AppointmentOverviewRow[] = (data ?? []).map((item) => ({
     id: item.id,
     patient_type: item.patient_type,
     patient_name: `${item.patient_first_name ?? ""} ${item.patient_last_name ?? ""}`.trim() || null,
@@ -93,7 +140,8 @@ export async function getAppointmentsOverviewAction(params?: {
       `)
       .in("id", ids)
 
-    const detailMap = new Map((details ?? []).map((d: any) => {
+    const detailRows = (details ?? []) as unknown as AppointmentDetailRow[]
+    const detailMap = new Map(detailRows.map((d) => {
       const student = Array.isArray(d.students) ? d.students[0] : d.students
       const faculty = Array.isArray(d.faculty) ? d.faculty[0] : d.faculty
       const staff = Array.isArray(d.staff) ? d.staff[0] : d.staff
@@ -101,7 +149,11 @@ export async function getAppointmentsOverviewAction(params?: {
         d.id,
         {
           reason: d.reason ?? "",
-          identifier: student?.student_number ?? faculty?.employee_number ?? staff?.employee_number ?? null,
+          identifier:
+            student?.student_number ??
+            faculty?.employee_number ??
+            staff?.employee_number ??
+            null,
         },
       ]
     }))
@@ -135,25 +187,39 @@ export async function getAppointmentRemindersAction(): Promise<{
   if (!actor) return { error: "Access denied", reminders: [] }
 
   const admin = createAdminClient()
+  const { data: clinicAccount } = await admin
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", actor.id)
+    .eq("role", actor.role)
+    .eq("is_active", true)
+    .maybeSingle()
+
+  if (!clinicAccount) {
+    return { error: "Active clinic account not found", reminders: [] }
+  }
+
   const { data, error } = await admin
     .from("appointment_reminders")
     .select(`
       id, appointment_id, remind_at, sent_at, status,
-      appointments(
-        id, scheduled_date, scheduled_time,
+      appointments!inner(
+        id, doctor_id, scheduled_date, scheduled_time,
         students(first_name, last_name),
         faculty(first_name, last_name)
       )
     `)
+    .eq("appointments.doctor_id", clinicAccount.id)
     .order("remind_at", { ascending: true })
     .limit(100)
 
   if (error) return { error: error.message, reminders: [] }
 
-  const reminders = (data ?? []).map((row: any) => {
-    const appointment = Array.isArray(row.appointments) ? row.appointments[0] : row.appointments
-    const student = appointment && Array.isArray(appointment.students) ? appointment.students[0] : appointment?.students
-    const faculty = appointment && Array.isArray(appointment.faculty) ? appointment.faculty[0] : appointment?.faculty
+  const reminderRows = (data ?? []) as unknown as ReminderQueryRow[]
+  const reminders = reminderRows.map((row) => {
+    const appointment = firstRelation(row.appointments)
+    const student = firstRelation(appointment?.students ?? null)
+    const faculty = firstRelation(appointment?.faculty ?? null)
     const patientName = student
       ? `${student.first_name} ${student.last_name}`
       : faculty ? `${faculty.first_name} ${faculty.last_name}` : null
@@ -170,4 +236,9 @@ export async function getAppointmentRemindersAction(): Promise<{
   })
 
   return { error: null, reminders }
+}
+
+// Normalizes one Supabase relation returned as either an object or an array.
+function firstRelation<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value
 }

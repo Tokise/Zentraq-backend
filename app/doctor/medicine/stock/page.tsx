@@ -1,80 +1,116 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/common/page-header"
-import { Card, CardContent } from "@/components/ui/card"
-import { Loader2, Package } from "lucide-react"
-import { toast } from "sonner"
-import { getMedicineStock } from "@/actions/clinical/prescriptions"
+import { useCallback, useEffect, useState } from "react";
+import { Package } from "lucide-react";
+import { toast } from "sonner";
 
+import {
+  getInventoryQueue,
+  type InventoryMedicine,
+} from "@/actions/inventory/workflow-queries";
+import { EmptyState } from "@/components/common/empty-state";
+import { PageHeader } from "@/components/common/page-header";
+import { StatusBadge } from "@/components/common/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+// Shows Doctors the same current aggregate stock used by prescribing.
 export default function DoctorMedicineStockPage() {
-  const [stock, setStock] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [medicines, setMedicines] = useState<InventoryMedicine[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await getMedicineStock()
-      if (res.error) {
-        toast.error(res.error)
-        setStock([])
-      } else {
-        setStock(res.stock)
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load medicine stock")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  // Reloads approved medicine stock without exposing stock mutation controls.
+  const loadInventory = useCallback(async () => {
+    setLoading(true);
+    const result = await getInventoryQueue();
+    if (result.error) toast.error(result.error);
+    setMedicines(result.medicines);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    const initialLoad = window.setTimeout(() => void loadInventory(), 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [loadInventory]);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Medicine Stock" description="Current inventory levels." />
+      <PageHeader
+        description="Approved medicines and their current aggregate quantities."
+        title="Medicine Stock"
+      />
 
-      <Card className="shadow-sm">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : stock.length === 0 ? (
-            <div className="py-16 text-center">
-              <Package className="size-8 text-zinc-300 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No medicines in stock.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-left text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Medicine</th>
-                    <th className="px-4 py-3 font-medium">Batch</th>
-                    <th className="px-4 py-3 font-medium">Quantity</th>
-                    <th className="px-4 py-3 font-medium">Expiry</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {stock.map((s) => (
-                    <tr key={s.id} className="hover:bg-zinc-50/50">
-                      <td className="px-4 py-3 font-medium">{s.medicines?.generic_name || "—"}</td>
-                      <td className="px-4 py-3 font-mono text-zinc-600">{s.batch_number || "N/A"}</td>
-                      <td className="px-4 py-3 font-semibold">{s.quantity}</td>
-                      <td className="px-4 py-3 text-zinc-500">
-                        {s.expiry_date ? new Date(s.expiry_date).toLocaleDateString() : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="border border-border bg-card">
+        {loading ? (
+          <div className="space-y-3 p-4">
+            {Array.from({ length: 5 }, (_, index) => (
+              <Skeleton className="h-10 w-full" key={index} />
+            ))}
+          </div>
+        ) : medicines.length === 0 ? (
+          <div className="p-6">
+            <EmptyState
+              description="No approved medicines are available."
+              icon={Package}
+              title="No medicines found"
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Medicine</TableHead>
+                  <TableHead>Available stock</TableHead>
+                  <TableHead>Minimum level</TableHead>
+                  <TableHead>Nearest expiry</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {medicines.map((medicine) => {
+                  const status =
+                    medicine.stock === 0
+                      ? { label: "Out of stock", value: "danger" as const }
+                      : medicine.stock <= medicine.minimum
+                        ? { label: "Low stock", value: "warning" as const }
+                        : { label: "In stock", value: "success" as const };
+                  return (
+                    <TableRow key={medicine.id}>
+                      <TableCell className="font-medium">
+                        {medicine.name}
+                      </TableCell>
+                      <TableCell className="font-semibold">
+                        {medicine.stock} {medicine.unit}
+                      </TableCell>
+                      <TableCell>
+                        {medicine.minimum} {medicine.unit}
+                      </TableCell>
+                      <TableCell>
+                        {medicine.expiry
+                          ? new Date(medicine.expiry).toLocaleDateString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={status.value}>
+                          {status.label}
+                        </StatusBadge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </div>
-  )
+  );
 }

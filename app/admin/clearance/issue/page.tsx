@@ -151,7 +151,7 @@ export default function AdminClearanceIssuePage() {
             }}
             className={`px-4 py-2 text-sm font-medium cursor-pointer transition-colors ${
               viewMode === mode
-                ? "bg-zinc-900 text-white"
+                ? "bg-primary text-primary-foreground"
                 : "bg-white text-zinc-600 hover:bg-zinc-50"
             }`}
           >
@@ -194,7 +194,7 @@ export default function AdminClearanceIssuePage() {
                         <TableCell className="text-sm text-zinc-600 max-w-[280px] truncate">{c.purpose || "—"}</TableCell>
                         <TableCell>{statusBadge(c.status)}</TableCell>
                         <TableCell className="text-right">
-                          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openDetail(c.id)}>
+                          <Button size="sm" className="h-8 text-xs" onClick={() => openDetail(c.id)}>
                             <Award className="size-3.5 mr-1" /> Process
                           </Button>
                         </TableCell>

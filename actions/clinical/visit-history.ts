@@ -3,6 +3,8 @@
 import { getActionActor, hasAnyRole } from "@/lib/security/action-guard"
 import { createAdminClient } from "@/utils/supabase/admin"
 
+type ClinicRole = "admin" | "doctor" | "nurse"
+
 export interface ClinicalVisitHistoryRow {
   consultation_id: string
   visit_id: string
@@ -13,6 +15,10 @@ export interface ClinicalVisitHistoryRow {
   check_in_time: string
   check_out_time: string | null
   status: string
+  claimed_by_name: string | null
+  claimed_by_role: ClinicRole | null
+  completed_by_name: string | null
+  completed_by_role: ClinicRole | null
 }
 
 interface NamedPatient {
@@ -35,6 +41,14 @@ interface HistoryQueryRow {
   id: string
   patient_complaint: string | null
   status: string
+  claimant:
+    | { display_name: string | null; role: ClinicRole | null }
+    | Array<{ display_name: string | null; role: ClinicRole | null }>
+    | null
+  completed_by:
+    | { display_name: string | null; role: ClinicRole | null }
+    | Array<{ display_name: string | null; role: ClinicRole | null }>
+    | null
   clinic_visits: HistoryVisitRelation | HistoryVisitRelation[] | null
 }
 
@@ -49,23 +63,19 @@ export async function getClinicalVisitHistory(): Promise<{
   }
 
   const admin = createAdminClient()
-  let clinicAccountId: string | null = null
+  const { data: account, error: accountError } = await admin
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", actor.id)
+    .eq("role", actor.role)
+    .eq("is_active", true)
+    .maybeSingle()
 
-  if (actor.role !== "admin") {
-    const { data: account, error: accountError } = await admin
-      .from("clinic_accounts")
-      .select("id")
-      .eq("user_id", actor.id)
-      .eq("is_active", true)
-      .maybeSingle()
-
-    if (accountError || !account) {
-      return {
-        error: accountError?.message ?? "Active clinic account not found",
-        visits: [],
-      }
+  if (accountError || !account) {
+    return {
+      error: accountError?.message ?? "Active clinic account not found",
+      visits: [],
     }
-    clinicAccountId = account.id
   }
 
   let query = admin
@@ -74,6 +84,14 @@ export async function getClinicalVisitHistory(): Promise<{
       id,
       patient_complaint,
       status,
+      claimant:clinic_accounts!consultations_claimed_by_clinic_account_id_fkey(
+        display_name,
+        role
+      ),
+      completed_by:clinic_accounts!consultations_completed_by_clinic_account_id_fkey(
+        display_name,
+        role
+      ),
       clinic_visits!inner(
         id,
         patient_type,
@@ -89,9 +107,9 @@ export async function getClinicalVisitHistory(): Promise<{
     .order("completed_at", { ascending: false })
     .limit(100)
 
-  if (clinicAccountId) {
+  if (actor.role !== "admin") {
     query = query.or(
-      `doctor_id.eq.${clinicAccountId},nurse_id.eq.${clinicAccountId}`,
+      `doctor_id.eq.${account.id},nurse_id.eq.${account.id}`,
     )
   }
 
@@ -107,6 +125,8 @@ export async function getClinicalVisitHistory(): Promise<{
       firstRelation(visit.students) ??
       firstRelation(visit.faculty) ??
       firstRelation(visit.staff)
+    const claimant = firstRelation(row.claimant)
+    const completedBy = firstRelation(row.completed_by)
 
     return [
       {
@@ -121,6 +141,10 @@ export async function getClinicalVisitHistory(): Promise<{
         check_in_time: visit.check_in_time,
         check_out_time: visit.check_out_time,
         status: row.status,
+        claimed_by_name: claimant?.display_name ?? null,
+        claimed_by_role: claimant?.role ?? null,
+        completed_by_name: completedBy?.display_name ?? null,
+        completed_by_role: completedBy?.role ?? null,
       },
     ]
   })

@@ -6,41 +6,103 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Loader2, Download, FileSpreadsheet } from "lucide-react"
 import { toast } from "sonner"
-import { getDailyConsultations, getComplaintFrequency, getDispensingSummary } from "@/actions/reports/analytics"
+import {
+  getAnalyticsOverview,
+  getComplaintFrequency,
+  getDailyConsultations,
+  getDispensingSummary,
+} from "@/actions/reports/analytics"
+import { downloadClinicalReportWorkbook } from "@/lib/reports/excel-export"
+import { downloadAggregateReport } from "@/lib/reports/serverless-download"
 
 export default function AdminReportsExportPage() {
   const [exporting, setExporting] = useState<string | null>(null)
 
+  // Downloads all authorized aggregate reports with an embedded chart image.
+  const exportExcel = useCallback(async () => {
+    setExporting("excel")
+    try {
+      const [overview, daily, complaints, dispensing] = await Promise.all([
+        getAnalyticsOverview(),
+        getDailyConsultations(),
+        getComplaintFrequency(),
+        getDispensingSummary(),
+      ])
+      const error =
+        overview.error ??
+        daily.error ??
+        complaints.error ??
+        dispensing.error
+      if (error || !overview.overview) {
+        throw new Error(error ?? "Report summary is unavailable")
+      }
+      await downloadAggregateReport({
+        endDate: overview.overview.period_end,
+        legacyDownload: () => downloadClinicalReportWorkbook({
+          complaints: complaints.data,
+          daily: daily.data,
+          dispensing: dispensing.data,
+          overview: overview.overview,
+        }),
+        startDate: overview.overview.period_start,
+      })
+      toast.success("Excel workbook downloaded")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Excel export failed",
+      )
+    } finally {
+      setExporting(null)
+    }
+  }, [])
+
   const exportCSV = useCallback(async (type: "consultations" | "complaints" | "dispensing") => {
     setExporting(type)
     try {
-      let rows: Array<Record<string, any>> = []
+      let rows: Array<Array<string | number | null>> = []
       let headers: string[] = []
 
       if (type === "consultations") {
         const res = await getDailyConsultations()
         if (res.error) throw new Error(res.error)
-        rows = res.data
-        headers = ["Date", "Total", "Students", "Faculty", "Walk-ins", "Appointments", "RFID"]
+        rows = res.data.map((item) => [
+          item.consultation_date,
+          item.total_consultations,
+          item.student_consultations,
+          item.faculty_consultations,
+          item.appointment_visits,
+          item.rfid_visits,
+        ])
+        headers = [
+          "Date",
+          "Total",
+          "Students",
+          "Faculty",
+          "Appointments",
+          "RFID Walk-ins",
+        ]
       } else if (type === "complaints") {
         const res = await getComplaintFrequency()
         if (res.error) throw new Error(res.error)
-        rows = res.data
+        rows = res.data.map((item) => [item.complaint, item.frequency])
         headers = ["Complaint", "Frequency"]
       } else {
         const res = await getDispensingSummary()
         if (res.error) throw new Error(res.error)
-        rows = res.data
+        rows = res.data.map((item) => [
+          item.generic_name,
+          item.category,
+          item.total_dispensed,
+          item.total_quantity_dispensed,
+        ])
         headers = ["Medicine", "Category", "Total Dispensed", "Total Quantity"]
       }
 
       const csvRows = [headers.join(",")]
       for (const row of rows) {
-        const values = headers.map((h) => {
-          const key = h.toLowerCase().replace(/\s+/g, "_")
-          const value = row[key] ?? row[Object.keys(row).find((k) => k.replace(/_/g, " ").toLowerCase() === h.toLowerCase()) ?? ""] ?? ""
-          return `"${String(value).replace(/"/g, '""')}"`
-        })
+        const values = row.map(
+          (value) => `"${String(value ?? "").replace(/"/g, '""')}"`,
+        )
         csvRows.push(values.join(","))
       }
 
@@ -52,8 +114,8 @@ export default function AdminReportsExportPage() {
       link.click()
       URL.revokeObjectURL(url)
       toast.success("Report exported")
-    } catch (err: any) {
-      toast.error(err.message || "Export failed")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Export failed")
     } finally {
       setExporting(null)
     }
@@ -84,8 +146,39 @@ export default function AdminReportsExportPage() {
     <div className="space-y-6">
       <PageHeader
         title="Export Reports"
-        description="Download clinic data as CSV files."
+        description="Download clinic-wide aggregate reports as Excel or individual CSV files."
       />
+
+      <Card className="border-primary/25 bg-primary-soft/40 shadow-sm">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="size-5 text-primary" />
+            <CardTitle className="text-base font-semibold">
+              Complete Excel Analytics Workbook
+            </CardTitle>
+          </div>
+          <CardDescription>
+            Includes summary metrics, separate aggregate data sheets, and an
+            embedded image of the daily consultation report.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            disabled={exporting !== null}
+            onClick={() => void exportExcel()}
+            type="button"
+          >
+            {exporting === "excel" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
+            {exporting === "excel"
+              ? "Preparing workbook..."
+              : "Download Excel workbook"}
+          </Button>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {exportTypes.map((t) => (

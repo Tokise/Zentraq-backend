@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [isSuccess, setIsSuccess] = React.useState(false)
   const [showPassword, setShowPassword] = React.useState(false)
 
+  // Authenticates the user and replaces the login route with their role home.
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -39,9 +40,9 @@ export default function LoginPage() {
 
       if (result?.success) {
         setIsSuccess(true)
-        // Session token is securely stored in HttpOnly cookie by Server Action
         const redirectTo = result.redirectTo || "/"
-        router.push(redirectTo)
+        router.replace(redirectTo)
+        router.refresh()
         return
       }
 
@@ -117,8 +118,11 @@ export default function LoginPage() {
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     disabled={isLoading || isSuccess}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                    tabIndex={-1}
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                   >
                     {showPassword ? (
                       <EyeOff className="size-3.5" />

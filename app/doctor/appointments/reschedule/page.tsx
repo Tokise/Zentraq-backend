@@ -126,7 +126,7 @@ export default function DoctorAppointmentReschedulePage() {
                       </TableCell>
                       <TableCell>{statusBadge(a.status)}</TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => openReschedule(a)}>
+                        <Button size="sm" className="h-8 text-xs" onClick={() => openReschedule(a)}>
                           Reschedule
                         </Button>
                       </TableCell>

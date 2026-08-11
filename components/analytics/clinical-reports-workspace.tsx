@@ -1,7 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Activity, ClipboardList, FileCheck, Pill } from "lucide-react"
+import {
+  Activity,
+  ClipboardList,
+  Download,
+  FileCheck,
+  Loader2,
+  Pill,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -9,11 +16,11 @@ import {
   getComplaintFrequency,
   getDailyConsultations,
   getDispensingSummary,
+  type AnalyticsOverview,
   type ComplaintFrequency,
   type DailyConsultation,
   type DispensingSummary,
 } from "@/actions/reports/analytics"
-import { clinicalActivitySeries } from "@/components/analytics/clinical-activity-series"
 import { PageHeader } from "@/components/common/page-header"
 import { StatCard } from "@/components/common/stat-card"
 import { ChartAreaInteractive } from "@/components/ui/chart-area-interactive"
@@ -22,20 +29,40 @@ import { ChartLineStep } from "@/components/ui/chart-line-step"
 import { ChartPieDonutText } from "@/components/ui/chart-pie-donut-text"
 import { ChartRadarDots } from "@/components/ui/chart-radar-dots"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { downloadClinicalReportWorkbook } from "@/lib/reports/excel-export"
+import { downloadAggregateReport } from "@/lib/reports/serverless-download"
 
 type ClinicRole = "admin" | "doctor" | "nurse"
 
-interface AnalyticsOverview {
-  active_incidents: number
-  faculty_consultations: number
-  low_stock_medicines: number
-  pending_clearances: number
-  period_end: string
-  period_start: string
-  student_consultations: number
-  total_consultations: number
-}
+const reportActivitySeries = [
+  {
+    color: "var(--chart-neutral)",
+    key: "total_consultations",
+    label: "Total consultations",
+  },
+  {
+    color: "var(--chart-1)",
+    key: "student_consultations",
+    label: "Student consultations",
+  },
+  {
+    color: "var(--chart-2)",
+    key: "faculty_consultations",
+    label: "Faculty consultations",
+  },
+  {
+    color: "var(--chart-4)",
+    key: "appointment_visits",
+    label: "Appointment visits",
+  },
+  {
+    color: "var(--chart-5)",
+    key: "rfid_visits",
+    label: "RFID walk-ins",
+  },
+] as const
 
 // Renders aggregate clinic reports without exposing patient-level records.
 export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
@@ -43,6 +70,7 @@ export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
   const [daily, setDaily] = React.useState<DailyConsultation[]>([])
   const [complaints, setComplaints] = React.useState<ComplaintFrequency[]>([])
   const [dispensing, setDispensing] = React.useState<DispensingSummary[]>([])
+  const [exporting, setExporting] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
 
   // Loads authorized aggregate report DTOs from server actions.
@@ -80,6 +108,31 @@ export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
     [complaints, daily, dispensing],
   )
 
+  // Downloads the currently authorized aggregate report as a formatted workbook.
+  async function exportExcelReport() {
+    if (!overview || exporting) return
+    setExporting(true)
+    try {
+      await downloadAggregateReport({
+        endDate: overview.period_end,
+        legacyDownload: () => downloadClinicalReportWorkbook({
+          complaints,
+          daily,
+          dispensing,
+          overview,
+        }),
+        startDate: overview.period_start,
+      })
+      toast.success("Excel report downloaded")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to export report",
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (loading) return <ReportsSkeleton />
 
   return (
@@ -91,7 +144,22 @@ export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
             : "Read-only clinic trends from aggregate, non-patient report data."
         }
         title="Reports & Analytics"
-      />
+      >
+        {role === "admin" ? (
+          <Button
+            disabled={!overview || exporting}
+            onClick={() => void exportExcelReport()}
+            type="button"
+          >
+            {exporting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
+            {exporting ? "Preparing workbook..." : "Download Excel report"}
+          </Button>
+        ) : null}
+      </PageHeader>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -119,7 +187,7 @@ export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
       <ChartAreaInteractive
         data={reportData.activity}
         description="Daily consultation volume, patient groups, and visit channels."
-        series={clinicalActivitySeries}
+        series={reportActivitySeries}
         title="Clinical Activity"
       />
 
@@ -191,7 +259,6 @@ function buildReportChartData(
       total_consultations: item.total_consultations,
       student_consultations: item.student_consultations,
       faculty_consultations: item.faculty_consultations,
-      walk_in_visits: item.walk_in_visits,
       appointment_visits: item.appointment_visits,
       rfid_visits: item.rfid_visits,
     })),
@@ -209,15 +276,11 @@ function buildReportChartData(
     ].filter((item) => item.value > 0),
     channels: [
       {
-        label: "Walk-in",
-        value: daily.reduce((sum, item) => sum + item.walk_in_visits, 0),
-      },
-      {
         label: "Appointment",
         value: daily.reduce((sum, item) => sum + item.appointment_visits, 0),
       },
       {
-        label: "RFID",
+        label: "RFID walk-ins",
         value: daily.reduce((sum, item) => sum + item.rfid_visits, 0),
       },
     ],

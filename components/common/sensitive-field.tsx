@@ -14,6 +14,7 @@ type SensitiveFieldProps = {
     autoHide?: boolean
     autoHideDelay?: number
     className?: string
+    textClassName?: string
     ariaLabel?: string
     onReveal?: () => void
 }
@@ -28,6 +29,7 @@ export function SensitiveField({
     autoHide = true,
     autoHideDelay = DEFAULT_AUTO_HIDE_DELAY,
     className,
+    textClassName,
     ariaLabel,
     onReveal,
 }: SensitiveFieldProps) {
@@ -93,7 +95,8 @@ export function SensitiveField({
             <span
                 className={cn(
                     "font-mono",
-                    revealed ? "text-foreground" : "text-muted-foreground select-none"
+                    revealed ? "text-foreground" : "text-muted-foreground select-none",
+                    textClassName,
                 )}
                 aria-hidden={!revealed}
             >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
 import { checkInRfid, type RfidCheckInResult } from "@/actions/rfid/kiosk";
@@ -18,18 +18,18 @@ export default function PublicRfidScannerPage() {
   const [sessionExpired, setSessionExpired] = useState(false);
 
   // Returns focus to the input after each kiosk transition.
-  function focusScanner() {
+  const focusScanner = useCallback(() => {
     window.setTimeout(() => inputRef.current?.focus(), 50);
-  }
+  }, []);
 
   // Clears a completed scan before the next patient arrives.
-  function resetScanner() {
+  const resetScanner = useCallback(() => {
     setRfidUid("");
     setResult(null);
     setError(null);
     setSessionExpired(false);
     focusScanner();
-  }
+  }, [focusScanner]);
 
   // Checks in the scanned patient through the server-side transaction.
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -37,7 +37,7 @@ export default function PublicRfidScannerPage() {
     if (!rfidUid.trim() || isSubmitting || sessionExpired) return;
 
     setIsSubmitting(true);
-    const response = await checkInRfid(rfidUid);
+    const response = await checkInRfid(rfidUid, crypto.randomUUID());
     setIsSubmitting(false);
 
     if (response.error || !response.result) {
@@ -57,13 +57,13 @@ export default function PublicRfidScannerPage() {
 
   useEffect(() => {
     focusScanner();
-  }, []);
+  }, [focusScanner]);
 
   useEffect(() => {
     if (!result) return;
     const timeout = window.setTimeout(resetScanner, CONFIRMATION_DURATION_MS);
     return () => window.clearTimeout(timeout);
-  }, [result]);
+  }, [resetScanner, result]);
 
   const photoUrl = result?.clinicPhotoUrl || "/student.png";
   const photoAlt = result

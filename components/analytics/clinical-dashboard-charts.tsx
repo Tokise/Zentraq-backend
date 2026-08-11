@@ -3,11 +3,12 @@
 import * as React from "react"
 
 import type {
+  DashboardActivityScope,
   DashboardActivityDTO,
   DashboardAppointmentDTO,
   DashboardConsultationDTO,
 } from "@/actions/system/dashboard"
-import { clinicalActivitySeries } from "@/components/analytics/clinical-activity-series"
+import { getClinicalActivityPresentation } from "@/components/analytics/clinical-activity-series"
 import { ChartAreaInteractive } from "@/components/ui/chart-area-interactive"
 import { ChartBarDefault } from "@/components/ui/chart-bar-default"
 import { ChartPieDonutText } from "@/components/ui/chart-pie-donut-text"
@@ -16,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 interface ClinicalDashboardChartsProps {
   activity: DashboardActivityDTO[]
+  activityScope: DashboardActivityScope
   appointments: DashboardAppointmentDTO[]
   consultations: DashboardConsultationDTO[]
   loading: boolean
@@ -24,10 +26,12 @@ interface ClinicalDashboardChartsProps {
 // Renders the shared role-safe analytics section for clinic dashboards.
 export function ClinicalDashboardCharts({
   activity,
+  activityScope,
   appointments,
   consultations,
   loading,
 }: ClinicalDashboardChartsProps) {
+  const activityPresentation = getClinicalActivityPresentation(activityScope)
   const consultationStatuses = React.useMemo(
     () => buildStatusSeries(consultations.map((item) => item.status)),
     [consultations],
@@ -53,9 +57,9 @@ export function ClinicalDashboardCharts({
     <div className="space-y-4">
       <ChartAreaInteractive
         data={activity}
-        description="Authorized consultation volume, patient groups, and visit channels over time."
-        series={clinicalActivitySeries}
-        title="Clinical Activity"
+        description={activityPresentation.description}
+        series={activityPresentation.series}
+        title={activityPresentation.title}
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartBarDefault

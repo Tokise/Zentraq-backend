@@ -1,6 +1,7 @@
 "use server";
 
 import { getActionActor, hasAnyRole } from "@/lib/security/action-guard";
+import { ConsultationIdSchema } from "@/lib/validation/schemas";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 type StaffRole = "admin" | "doctor" | "nurse";
@@ -111,6 +112,9 @@ export interface ConsultationDetailRow {
   patient_name: string | null;
   patient_complaint: string | null;
   consultation_notes: string | null;
+  nurse_handoff_note: string | null;
+  nurse_handoff_at: string | null;
+  doctor_review_note: string | null;
   vitals_disposition: "not_assessed" | "required" | "not_required" | "recorded";
   vitals_skip_reason: string | null;
   status: string;
@@ -182,6 +186,9 @@ interface ConsultationDetailQueryRow {
   id: string;
   patient_complaint: string | null;
   consultation_notes: string | null;
+  nurse_handoff_note: string | null;
+  nurse_handoff_at: string | null;
+  doctor_review_note: string | null;
   vitals_disposition: ConsultationDetailRow["vitals_disposition"] | null;
   vitals_skip_reason: string | null;
   status: string;
@@ -196,7 +203,17 @@ interface ConsultationDetailQueryRow {
   prescriptions: PrescriptionQueryRow[] | null;
 }
 
-// Returns one consultation after enforcing clinician assignment server-side.
+interface ConsultationAccessRow {
+  status: string;
+  claimed_by_user_id: string | null;
+  claimed_by_clinic_account_id: string | null;
+  completed_by_user_id: string | null;
+  completed_by_clinic_account_id: string | null;
+  doctor_id: string | null;
+  nurse_id: string | null;
+}
+
+// Returns one active owned or completed authorized consultation.
 export async function getConsultationDetailAction(
   consultationId: string,
 ): Promise<{
@@ -206,20 +223,67 @@ export async function getConsultationDetailAction(
   const actor = await staff(["admin", "doctor", "nurse"]);
   if (!actor) return { error: "Access denied", consultation: null };
 
-  const admin = createAdminClient();
-  let assignedId: string | null = null;
-  if (actor.role !== "admin") {
-    const { data: account } = await admin
-      .from("clinic_accounts")
-      .select("id")
-      .eq("user_id", actor.id)
-      .eq("is_active", true)
-      .maybeSingle();
-    assignedId = account?.id ?? null;
-    if (!assignedId) return { error: "Active clinic account not found", consultation: null };
+  const parsed = ConsultationIdSchema.safeParse({
+    consultation_id: consultationId,
+  });
+  if (!parsed.success) {
+    return { error: "Consultation unavailable", consultation: null };
   }
 
-  let query = admin
+  const admin = createAdminClient();
+  const { data: account } = await admin
+    .from("clinic_accounts")
+    .select("id")
+    .eq("user_id", actor.id)
+    .eq("role", actor.role)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!account) {
+    return {
+      error: "Active clinic account not found",
+      consultation: null,
+    };
+  }
+
+  const { data: accessData, error: accessError } = await admin
+    .from("consultations")
+    .select(`
+      status,
+      claimed_by_user_id,
+      claimed_by_clinic_account_id,
+      completed_by_user_id,
+      completed_by_clinic_account_id,
+      doctor_id,
+      nurse_id
+    `)
+    .eq("id", parsed.data.consultation_id)
+    .maybeSingle();
+
+  if (accessError || !accessData) {
+    return { error: "Consultation unavailable", consultation: null };
+  }
+
+  const access = accessData as ConsultationAccessRow;
+  const ownsActiveConsultation =
+    access.status === "in-progress" &&
+    access.claimed_by_user_id === actor.id &&
+    access.claimed_by_clinic_account_id === account.id;
+  const participatedInCompletedConsultation =
+    access.status === "completed" &&
+    (actor.role === "admin" ||
+      access.claimed_by_user_id === actor.id ||
+      access.completed_by_user_id === actor.id ||
+      access.claimed_by_clinic_account_id === account.id ||
+      access.completed_by_clinic_account_id === account.id ||
+      access.doctor_id === account.id ||
+      access.nurse_id === account.id);
+
+  if (!ownsActiveConsultation && !participatedInCompletedConsultation) {
+    return { error: "Consultation unavailable", consultation: null };
+  }
+
+  const query = admin
     .from("consultations")
     .select(
       `
@@ -235,6 +299,9 @@ export async function getConsultationDetailAction(
       nurse:clinic_accounts!consultations_nurse_id_fkey(display_name),
       patient_complaint,
       consultation_notes,
+      nurse_handoff_note,
+      nurse_handoff_at,
+      doctor_review_note,
       vitals_disposition,
       vitals_skip_reason,
       status,
@@ -251,9 +318,8 @@ export async function getConsultationDetailAction(
       )
     `,
     )
-    .eq("id", consultationId);
+    .eq("id", parsed.data.consultation_id);
 
-  if (assignedId) query = query.or(`doctor_id.eq.${assignedId},nurse_id.eq.${assignedId}`);
   const { data, error } = await query.maybeSingle();
 
   if (error) return { error: error.message, consultation: null };
@@ -280,6 +346,9 @@ export async function getConsultationDetailAction(
         : null,
     patient_complaint: detail.patient_complaint,
     consultation_notes: detail.consultation_notes,
+    nurse_handoff_note: detail.nurse_handoff_note,
+    nurse_handoff_at: detail.nurse_handoff_at,
+    doctor_review_note: detail.doctor_review_note,
     vitals_disposition: detail.vitals_disposition ?? "not_assessed",
     vitals_skip_reason: detail.vitals_skip_reason ?? null,
     status: detail.status,

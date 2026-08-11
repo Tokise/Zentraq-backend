@@ -434,3 +434,28 @@ entrypoint = "./functions/student-lookup/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/student-lookup/*.html" ]
+
+[functions.service-jobs-worker]
+enabled = true
+# Internal callers authenticate with a named secret key in the apikey header.
+# Secret API keys are not JWTs, so handler-level secret validation is required.
+verify_jwt = false
+entrypoint = "./functions/service-jobs-worker/index.ts"
+
+[functions.notifications-worker]
+enabled = true
+# A named secret key authenticates the scheduled internal worker.
+verify_jwt = false
+entrypoint = "./functions/notifications-worker/index.ts"
+
+[functions.reports-worker]
+enabled = true
+# A named secret key authenticates the scheduled internal worker.
+verify_jwt = false
+entrypoint = "./functions/reports-worker/index.ts"
+
+[functions.rfid-check-in]
+enabled = true
+# User JWT validation and RLS remain active for synchronous check-in.
+verify_jwt = true
+entrypoint = "./functions/rfid-check-in/index.ts"

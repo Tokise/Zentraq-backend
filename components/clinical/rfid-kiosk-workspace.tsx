@@ -6,11 +6,17 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  ServerCog,
   Stethoscope,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  enqueueServerlessPilotJobAction,
+  getServerlessPilotJobStatusAction,
+  type ServerlessPilotJobStatus,
+} from "@/actions/admin/access/serverless-pilot";
 import {
   claimConsultation,
 } from "@/actions/clinical/visits";
@@ -18,7 +24,12 @@ import {
   getComplianceRecordAction,
   type ComplianceRecordDTO,
 } from "@/actions/clinical/compliance-records";
-import { getRfidQueue, type RfidQueueItem } from "@/actions/rfid/kiosk";
+import {
+  getRfidQueue,
+  getRfidServerlessDiagnosticAction,
+  type RfidQueueItem,
+  type RfidServerlessDiagnostic,
+} from "@/actions/rfid/kiosk";
 import {
   HealthRecordTabs,
   type HealthRecordTab,
@@ -60,6 +71,11 @@ export function ClinicalRfidKioskWorkspace({
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diagnostic, setDiagnostic] =
+    useState<RfidServerlessDiagnostic | null>(null);
+  const [pilotJobId, setPilotJobId] = useState<string | null>(null);
+  const [pilotJob, setPilotJob] = useState<ServerlessPilotJobStatus | null>(null);
+  const [pilotLoading, setPilotLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [startingConsultationId, setStartingConsultationId] = useState<
     string | null
@@ -104,9 +120,53 @@ export function ClinicalRfidKioskWorkspace({
     };
   }, [loadQueue, supabase]);
 
+  // Loads sanitized serverless rollout state for Admin operators only.
+  useEffect(() => {
+    if (role !== "admin") return;
+    async function loadDiagnostic() {
+      const result = await getRfidServerlessDiagnosticAction();
+      if (!result.error) setDiagnostic(result.diagnostic);
+    }
+    void loadDiagnostic();
+  }, [role, queue]);
+
   // Opens the dedicated touch-friendly scanner without replacing the queue page.
   function openScanner() {
     window.open("/rfid-kiosk/scanner", "_blank", "noopener,noreferrer");
+  }
+
+  // Queues a metadata-only worker smoke job without invoking it from RFID.
+  async function queuePilotJob() {
+    setPilotLoading(true);
+    const result = await enqueueServerlessPilotJobAction({
+      idempotencyKey: crypto.randomUUID(),
+    });
+    setPilotLoading(false);
+    if (!result.success || !result.jobId) {
+      toast.error(result.error ?? "Unable to queue worker smoke test");
+      return;
+    }
+    setPilotJobId(result.jobId);
+    setPilotJob({
+      status: "queued",
+      attempts: 0,
+      errorCode: null,
+      updatedAt: new Date().toISOString(),
+    });
+    toast.success("Smoke job queued. Invoke service-jobs-worker to process it.");
+  }
+
+  // Refreshes the current smoke job's sanitized transition state.
+  async function refreshPilotJob() {
+    if (!pilotJobId) return;
+    setPilotLoading(true);
+    const result = await getServerlessPilotJobStatusAction(pilotJobId);
+    setPilotLoading(false);
+    if (result.error || !result.job) {
+      toast.error(result.error ?? "Unable to refresh smoke job");
+      return;
+    }
+    setPilotJob(result.job);
   }
 
   // Opens the selected patient's active consultation in the unified Visit workspace.
@@ -206,11 +266,7 @@ export function ClinicalRfidKioskWorkspace({
     <div className="space-y-6">
       <PageHeader
         title="RFID Check-in Queue"
-        description={
-          role === "admin"
-            ? "Monitor every checked-in patient and open the clinic scanner."
-            : "Claim waiting patients, continue assigned work, and open the clinic scanner."
-        }
+        description="Claim unassigned patients, continue your assigned work, and open the clinic scanner."
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -220,6 +276,75 @@ export function ClinicalRfidKioskWorkspace({
         </Button>
       </div>
 
+      {role === "admin" && diagnostic && (
+        <Card className="border-primary/20 bg-primary/5 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <ServerCog className="mt-0.5 size-5 text-primary" />
+              <div>
+                <p className="font-medium">RFID execution diagnostics</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Current operator: {diagnostic.enabledForCurrentOperator
+                    ? "Edge Function enabled"
+                    : "Legacy RPC fallback"}
+                  {diagnostic.canaryRestricted ? " · canary restricted" : ""}
+                </p>
+              </div>
+            </div>
+            <div className="text-sm sm:text-right">
+              <p className="font-medium capitalize">
+                Last path: {diagnostic.lastExecutionPath ?? "No recorded scan"}
+              </p>
+              {diagnostic.lastExecutedAt && (
+                <p className="text-muted-foreground">
+                  {new Date(diagnostic.lastExecutedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {role === "admin" && (
+        <Card className="p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium">Platform worker smoke test</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This queues a PHI-free platform job. It does not run during an
+                RFID check-in.
+              </p>
+              {pilotJob && (
+                <p className="mt-2 text-sm">
+                  Status: <span className="font-medium capitalize">{pilotJob.status.replaceAll("_", " ")}</span>
+                  {` · ${pilotJob.attempts} attempt(s)`}
+                  {pilotJob.errorCode ? ` · ${pilotJob.errorCode}` : ""}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={pilotLoading}
+                onClick={() => void queuePilotJob()}
+                type="button"
+              >
+                Queue smoke job
+              </Button>
+              {pilotJobId && (
+                <Button
+                  disabled={pilotLoading}
+                  onClick={() => void refreshPilotJob()}
+                  type="button"
+                  variant="outline"
+                >
+                  Refresh status
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card className="overflow-hidden shadow-sm">
         <div className="flex items-center justify-between gap-4 border-b border-border px-6 py-4">
           <div className="flex items-center gap-3">
@@ -227,7 +352,7 @@ export function ClinicalRfidKioskWorkspace({
             <div>
               <h2 className="font-semibold">Waiting patients</h2>
               <p className="text-sm text-muted-foreground">
-                Select a patient to preview their record or start their visit.
+                Unclaimed check-ins remain visible until an operator claims them.
               </p>
             </div>
           </div>

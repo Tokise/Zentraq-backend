@@ -1,7 +1,6 @@
 "use server";
 
 import {
-  assertSameOrigin,
   getActionActor,
   hasAnyRole,
 } from "@/lib/security/action-guard";
@@ -24,6 +23,8 @@ export interface Medicine {
   min_stock_level: number;
   is_controlled: boolean;
   is_active: boolean;
+  approval_status: "pending" | "approved" | "rejected";
+  available_stock: number;
 }
 
 export interface MedicineStock {
@@ -78,8 +79,11 @@ export async function getMedicineCatalog(filters?: {
 
   let query = createAdminClient()
     .from("medicines")
-    .select("*")
+    .select(
+      "id,generic_name,brand_name,category,unit,min_stock_level,is_controlled,is_active,approval_status",
+    )
     .eq("is_active", true)
+    .eq("approval_status", "approved")
     .order("generic_name");
 
   if (filters?.category) {
@@ -100,7 +104,28 @@ export async function getMedicineCatalog(filters?: {
 
   if (error) return { error: error.message, medicines: [] as Medicine[] };
 
-  return { error: null, medicines: data as Medicine[] };
+  const medicineIds = (data ?? []).map((medicine) => medicine.id);
+  const stockByMedicine = new Map<string, number>();
+  if (medicineIds.length > 0) {
+    const { data: stock } = await createAdminClient()
+      .from("medicine_stock")
+      .select("medicine_id,quantity")
+      .in("medicine_id", medicineIds);
+    for (const row of stock ?? []) {
+      stockByMedicine.set(
+        row.medicine_id,
+        (stockByMedicine.get(row.medicine_id) ?? 0) + row.quantity,
+      );
+    }
+  }
+
+  return {
+    error: null,
+    medicines: (data ?? []).map((medicine) => ({
+      ...medicine,
+      available_stock: stockByMedicine.get(medicine.id) ?? 0,
+    })) as Medicine[],
+  };
 }
 
 export async function getMedicineStock(medicineId?: string) {
@@ -135,55 +160,12 @@ export async function createPrescription(
     instructions?: string;
   },
 ) {
-  const actor = await staff(["admin", "doctor"]);
-  if (!actor || !(await assertSameOrigin())) {
-    return {
-      error: "Access denied - only doctors can prescribe",
-      prescription: null,
-    };
-  }
-
-  // Verify consultation exists
-  const { data: consultation, error: consultError } = await createAdminClient()
-    .from("consultations")
-    .select("id")
-    .eq("id", consultationId)
-    .single();
-
-  if (consultError || !consultation) {
-    return { error: "Consultation not found", prescription: null };
-  }
-
-  const { data: prescription, error } = await createAdminClient()
-    .from("prescriptions")
-    .insert({
-      consultation_id: consultationId,
-      medicine_id: data.medicine_id,
-      dosage: data.dosage || null,
-      frequency: data.frequency || null,
-      duration_days: data.duration_days || null,
-      quantity: data.quantity || null,
-      instructions: data.instructions || null,
-      prescribed_by: actor.id,
-      status: "pending",
-    })
-    .select()
-    .single();
-
-  if (error) return { error: error.message, prescription: null };
-
-  await logAuditEvent({
-    userId: actor.id,
-    action: "MEDICAL_RECORD_MODIFY",
-    resource: consultationId,
-    details: {
-      prescription_id: prescription.id,
-      medicine_id: data.medicine_id,
-      action: "create_prescription",
-    },
-  });
-
-  return { error: null, prescription };
+  void consultationId;
+  void data;
+  return {
+    error: "Prescriptions are saved from the consultation final review.",
+    prescription: null,
+  };
 }
 
 export async function getPendingPrescriptions() {
