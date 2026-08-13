@@ -29,7 +29,7 @@ workflows already documented in the
 ### Deliverables
 
 - [x] Replace the README with a concise system overview, safe setup, and links.
-- [x] Rewrite the architecture document around the current modular monolith,
+- [x] Rewrite the architecture document around the current service boundaries,
       database catalog, roles, privacy, and security.
 - [x] Remove stale routes, schemas, framework versions, and encoding corruption
       from the primary documentation.
