@@ -95,6 +95,7 @@ flowchart TB
     end
 
     OpenRouter["Optional OpenRouter<br/>server-only appointment evaluation"]
+    Candidates["Proposed core serverless candidates<br/>reminder producer · inventory monitor<br/>document security processor · audit monitor"]
     Registrar["Future Registrar API<br/>approved local-first synchronization"]
     OSAS["Future OSAS API<br/>contract not yet approved"]
 
@@ -107,6 +108,8 @@ flowchart TB
     Domains --> ReportQueue
     Boundary --> RfidWorker --> Database
     Domains -.-> OpenRouter
+    Domains -.-> Candidates
+    Candidates -.-> Database
     Registrar -.-> Domains
     OSAS -.-> Domains
 ```
@@ -119,6 +122,60 @@ flowchart TB
 | Source-implemented serverless boundaries | `notifications-worker`, `reports-worker`, `rfid-check-in`, protected RPCs, PGMQ queues, worker Cron migration, and the private generated-report workflow | Functions, SQL, and configuration are version-controlled; this does not prove that they are deployed or correctly configured. |
 | Deployment-unverified infrastructure | Remote migration state, Edge Function deployment, worker secrets, Cron execution, queue grants and retries, Storage policies, RLS behavior, signed URLs, and six-role isolation | These items must remain open until verified against an authorized non-production or target Supabase project. |
 | Future capabilities | Registrar and OSAS synchronization, external email or SMS delivery, centralized observability, and possible extraction of additional independently deployed services | These require approved contracts, privacy and security reviews, operational ownership, and implementation evidence. |
+
+#### Core services suitable for serverless execution
+
+The following entries are **proposed serverless candidates** unless explicitly
+marked as source-implemented. A core workflow is a good candidate when it is
+bounded, stateless or idempotent, scheduled or event-driven, safe to retry, and
+does not require an interactive clinical decision across several database
+records.
+
+| Core service | Serverless boundary | Trigger and security model | Recommendation |
+| --- | --- | --- | --- |
+| Identity and Access | Supabase Auth is already the managed serverless identity service. A future `institutional-account-provisioning` function could validate an approved Registrar identity and request local account creation. | Invoke provisioning only through an authenticated and authorized Server Action or trusted integration request. Use a protected idempotent RPC for the local write. | Keep login on Supabase Auth. Do not create a custom login function or transmit Registrar passwords. Add provisioning only after the external identity contract is approved. |
+| Patient Registry | A future `institutional-registry-sync` function could perform Registrar or OSAS lookup when an authorized workflow finds no local patient. | Pass an opaque request identifier, minimize the external response, and insert through a conflict-safe RPC with an immutable external-source identifier. | Later priority. Use local-first, insert-only behavior; never overwrite an existing patient automatically. Route mismatches to a reviewed reconciliation workflow. |
+| Scheduling | An `appointment-reminders-worker` could claim due rows from `appointment_reminders`, enqueue generic notifications, and mark each reminder once. A separate governed function could isolate optional OpenRouter appointment evaluation. | Use Cron plus a named worker secret for reminders. Require a user JWT and server-side authorization for on-demand AI evaluation. Both paths require idempotency, timeouts, and sanitized logs. | High-value next candidate because reminder rows already exist. Keep booking, conflict checks, approval, rescheduling, cancellation, and check-in transitions in transactional RPCs or Server Actions. |
+| Clinical Records | A `clinical-document-processor` could react to a private upload job, verify file signatures, invoke malware scanning, quarantine failures, and produce safe previews or metadata. A reminder producer could enqueue due follow-up notifications. | Use a private queue or Storage event carrying only opaque object and record identifiers. Restrict the worker to private buckets and minimum database grants. | High security value after Storage policies are verified. Do not use automatic OCR or AI output to create diagnoses, treatments, prescriptions, or final clinical records. |
+| Pharmacy and Inventory | An `inventory-attention-worker` could periodically detect low stock, zero stock, near-expiry batches, and expired batches, then enqueue the existing generic `inventory.attention` notification template. | Use Cron, an idempotent scan window, a named worker secret, and a protected aggregate or claim RPC. Queue identifiers and generic status codes instead of patient or prescription data. | High-value next candidate. Keep dispensing, stock receipt, batch adjustment, and restocking transactions synchronous and atomic; the worker must not order, dispense, or modify stock automatically. |
+| Notifications | `notifications-worker` is source-implemented for metadata-only queued notification delivery. A future provider worker could deliver approved email or SMS templates. | Existing internal worker uses a named secret and service-role-only RPCs. External delivery also requires consent, opt-out, delivery status, provider authentication, and PHI-safe templates. | Deploy and verify the internal worker first. External email or SMS remains deferred until a provider and privacy controls are approved. |
+| Reporting and Audit | `reports-worker` is source-implemented for aggregate workbooks. A future `audit-monitor` could process an audit outbox, detect missing or failed mandatory events, generate sanitized security metrics, and enforce reviewed retention jobs. | Use Cron or an outbox queue, a named worker secret, append-only audit inputs, and protected monitoring outputs. Metrics and alerts must exclude clinical content. | Deploy and verify reports first. Add audit reliability and monitoring before using audit events for security assurance or compliance evidence. |
+| Integrations | `rfid-check-in` is source-implemented. Future focused functions may handle Registrar, OSAS, and approved external notification providers. | User-facing operations require a user JWT and RLS-scoped client. Scheduled internal workers require named secrets and least-privilege RPCs. | Keep one function per approved integration contract. Do not create a general-purpose integration worker or expose service-role credentials to browsers. |
+
+#### Core operations that should remain transactional
+
+Serverless Edge Functions may orchestrate these operations, but the state change
+itself should remain in an authorized Server Action or atomic PostgreSQL RPC:
+
+- patient correction, merge, and external-record reconciliation;
+- appointment booking, conflict checking, approval, rescheduling, cancellation,
+  and check-in transitions;
+- triage handoff, diagnosis, treatment, prescription, follow-up creation, and
+  consultation finalization;
+- medicine dispensing, stock receipt, batch adjustment, and restocking; and
+- ownership checks for protected records, reports, documents, and signed URLs.
+
+These workflows require immediate user feedback, consistent authorization, and
+all-or-nothing database updates. Moving their multi-record mutation logic into
+independent background workers would create avoidable race conditions and
+partial clinical state.
+
+#### Recommended order for new core serverless services
+
+After the three existing Edge Functions and their migrations are deployed and
+verified, add candidates in this order:
+
+1. `appointment-reminders-worker`, because due reminder records already exist.
+2. `inventory-attention-worker`, using the existing low-stock, expiry, and
+   `inventory.attention` notification contracts.
+3. `clinical-document-processor`, together with quarantine, malware scanning,
+   Storage policy verification, and download auditing.
+4. `audit-monitor`, after mandatory events, outbox behavior, retention, alert
+   ownership, and immutable access are defined.
+5. A focused appointment-evaluation function only after AI governance,
+   minimization, human override, and provider monitoring are approved.
+6. Registrar or OSAS provisioning and synchronization only after external API,
+   authentication, mapping, reconciliation, and privacy contracts are approved.
 
 ### 3.2.1 Why Microservices? Justify the Choice over Monolithic Architecture
 

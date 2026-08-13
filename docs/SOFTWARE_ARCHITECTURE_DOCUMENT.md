@@ -712,6 +712,7 @@ flowchart TB
     end
 
     OpenRouter["Optional OpenRouter<br/>server-only appointment evaluation"]
+    Candidates["Proposed core serverless candidates<br/>reminder producer / inventory monitor<br/>document security processor / audit monitor"]
     Registrar["Future Registrar API<br/>local-first synchronization"]
     OSAS["Future OSAS API<br/>contract not approved"]
 
@@ -724,6 +725,8 @@ flowchart TB
     Domains --> ReportQueue
     Boundary --> RfidWorker --> Database
     Domains -.->|optional server-only request| OpenRouter
+    Domains -.-> Candidates
+    Candidates -.-> Database
     Registrar -.-> Domains
     OSAS -.-> Domains
 ```
@@ -738,6 +741,30 @@ flowchart TB
 | Notifications | Owns announcements, reminders, private user notifications, and their delivery or read state |
 | Reporting and Audit | Produces role-scoped aggregates and records implemented audit events without becoming an unrestricted secondary PHI store |
 | Integrations | Coordinates RFID input and optional OpenRouter evaluation; OSAS and Registrar synchronization remain future work |
+
+#### Core serverless opportunities
+
+| Core service | Suitable serverless responsibility | Keep transactional |
+| --- | --- | --- |
+| Identity and Access | Managed Supabase Auth is already serverless; future approved institutional account provisioning may use a focused function. | Login, active-role authorization, and local account writes remain in Auth plus protected Server Actions or RPCs. |
+| Patient Registry | Local-first Registrar or OSAS lookup and insert-only provisioning after an approved integration contract. | Patient correction, merge, and reconciliation must require authorized review and atomic writes. |
+| Scheduling | Due appointment and follow-up reminder production; optional governed OpenRouter evaluation isolation. | Booking, conflict checks, approval, rescheduling, cancellation, and check-in transitions. |
+| Clinical Records | Private-document signature validation, malware scanning, quarantine, preview generation, and due follow-up notification production. | Triage, diagnosis, treatment, prescriptions, and consultation finalization. |
+| Pharmacy and Inventory | Scheduled low-stock, zero-stock, and expiry detection that enqueues generic `inventory.attention` notifications. | Dispensing, stock receipt, batch adjustment, and restocking. |
+| Notifications | Source-implemented queued notification worker; future consent-aware external email or SMS delivery. | Notification ownership and authenticated inbox access. |
+| Reporting and Audit | Source-implemented aggregate report worker; future audit outbox processing, sanitized monitoring, and reviewed retention jobs. | Report authorization, artifact ownership, signed-URL issuance, and immutable audit writes. |
+| Integrations | Source-implemented RFID function; future one-function-per-contract Registrar, OSAS, or delivery-provider adapters. | Integration authorization, local invariants, and conflict-safe database transactions. |
+
+The recommended next candidates are appointment reminders, inventory attention,
+private-document security processing, and audit monitoring, in that order after
+the existing three Edge Functions are deployed and verified. AI evaluation
+isolation follows only after governance approval; Registrar and OSAS remain
+blocked on approved external contracts. Queue and event payloads must contain
+opaque identifiers and sanitized codes rather than diagnoses, treatment notes,
+medication details tied to a patient, or document contents. The detailed
+candidate triggers, authentication models, exclusions, and implementation order
+are maintained in
+[`SERVERLESS_MICROSERVICES_MIGRATION.md`](./SERVERLESS_MICROSERVICES_MIGRATION.md).
 
 #### Implementation status
 
