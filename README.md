@@ -6,12 +6,14 @@ inventory, incidents, health programs, clearances, reporting, and patient
 self-service. The current portals serve administrators, doctors, nurses,
 students, faculty members, and staff.
 
-The application is a Next.js modular monolith. Pages and interactive workspaces
-call server-side actions, which enforce authentication, role checks, input
-validation, data scoping, and DTO shaping before accessing Supabase. Supabase
-provides Auth, PostgreSQL, Storage, Realtime, and database RPCs. An optional
-OpenRouter integration can provide appointment-priority decision support; it is
-not a diagnostic or prescribing system.
+The application follows a serverless service-oriented architecture. Pages and
+interactive workspaces call server-side actions, which enforce authentication,
+role checks, input validation, data scoping, and DTO shaping before accessing
+Supabase. Focused Supabase Edge Functions handle notification delivery, report
+generation, and RFID check-in boundaries. Supabase also provides Auth,
+PostgreSQL, Storage, Realtime, and database RPCs. An optional OpenRouter
+integration can provide appointment-priority decision support; it is not a
+diagnostic or prescribing system.
 
 ## Core capabilities
 
@@ -133,6 +135,7 @@ next.config.ts Response security headers and Next.js configuration
 ## Documentation
 
 - [Software Architecture Document](docs/SOFTWARE_ARCHITECTURE_DOCUMENT.md)
+- [Serverless MicroServices](docs/SOFTWARE_ARCHITECTURE_DOCUMENT.md)
 - [Server action boundaries](actions/README.md)
 - [Current sprint](SPRINT.md)
 - [Completed sprints](COMPLETED_SPRINTS.md)

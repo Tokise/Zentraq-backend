@@ -35,7 +35,7 @@ Status terms used throughout this document:
    - [Folder structure and integrations](#16-folder-structure-and-integrations)
 2. [Infrastructure and Architecture](#2-infrastructure-and-architecture)
    - [Architecture style and topology](#21-architecture-style-and-topology)
-   - [Microservices foundation: service-oriented modular monolith](#22-microservices-foundation-service-oriented-modular-monolith)
+   - [Microservices foundation: staged serverless boundaries](#22-microservices-foundation-staged-serverless-boundaries)
    - [Layers and trust boundaries](#23-layers-and-trust-boundaries)
    - [Supabase data infrastructure](#24-supabase-data-infrastructure)
    - [Database architecture and schema authority](#25-database-architecture-and-schema-authority)
@@ -83,8 +83,9 @@ provide.
 #### Current boundaries
 
 - Zentraq is one Next.js application and one Supabase-backed data platform.
-- It is a modular monolith, not a collection of independently deployed internal
-  microservices.
+- Its logical domain services share the Next.js release and Supabase data
+  platform, while notification, report, and RFID workloads have focused
+  source-defined Edge Function boundaries.
 - The browser uses Supabase Auth and private Realtime broadcast channels. Current
   clinical table reads and writes are performed through server-side actions or
   database RPCs rather than direct browser table queries.
@@ -593,10 +594,12 @@ utils/supabase/ Browser, server-session, middleware, and service-role clients
 
 ### 2.1 Architecture style and topology
 
-Zentraq uses a **modular monolith**. Domain folders separate responsibilities,
-but the modules share one Next.js deployment, one TypeScript codebase, and one
-primary Supabase project. PostgreSQL functions provide atomic database
-operations; they are not independent microservices.
+Zentraq uses a **serverless service-oriented architecture**. Domain folders
+separate responsibilities, while focused Supabase Edge Functions provide
+notification, report, and RFID service boundaries. The logical domains still
+share one Next.js deployment, one TypeScript codebase, and one primary Supabase
+project. PostgreSQL functions provide atomic database operations rather than
+acting as separately deployed services.
 
 This design favors simple deployment and transactional consistency. Its main
 trade-off is shared failure and release scope: an application deployment or
@@ -653,49 +656,76 @@ met.
 
 ### 2.2 Microservices foundation: staged serverless boundaries
 
-Zentraq remains a **service-oriented modular monolith** for identity, sessions,
-scheduling, inventory, and clinical records. Notifications, aggregate report
-generation, and RFID check-in have focused source-defined serverless
-boundaries. Deployment remains unverified until migration history is reconciled,
-the functions are deployed, and role tests succeed. All services share the same
-Supabase PostgreSQL source of truth.
+Zentraq uses a **serverless service-oriented microservices architecture**. It
+applies API-boundary, event-driven, domain-specific, and data-intensive
+microservice patterns. Notification delivery, report generation, and RFID
+check-in have focused source-defined Edge Function boundaries. Other logical
+services currently share the Next.js release and Supabase data platform, so the
+documentation does not claim that every domain can already be deployed, scaled,
+released, or recovered independently.
+
+#### Microservice pattern classification
+
+| Pattern | Current implementation | Architectural boundary |
+| --- | --- | --- |
+| API gateway or proxy | Next.js `proxy.ts` and Server Actions provide the browser-facing backend-for-frontend for authentication, authorization, validation, routing, and response minimization. | It is not a separately deployed gateway or project-owned load balancer and shares the Next.js failure and release boundary. |
+| Event-driven service | Metadata-only PGMQ queues, source-defined Cron jobs, `notifications-worker`, and `reports-worker` support asynchronous delivery and report processing. | Source is version-controlled; deployment, worker secrets, schedules, retries, and dead-letter behavior remain unverified. |
+| Domain-specific service | Eight logical domains separate business ownership and server workflows. | Most domains communicate through internal TypeScript functions, Server Actions, protected RPCs, and shared database transactions rather than service APIs. |
+| Data-intensive service | Role-scoped aggregate RPCs and `reports-worker` generate administrative workbooks in private Storage. | Deployed execution, artifact access, expiry, and workbook output still require end-to-end verification. |
 
 ```mermaid
 ---
 config:
   theme: base
   themeVariables:
-    fontSize: "24px"
+    fontSize: "20px"
   flowchart:
-    nodeSpacing: 50
-    rankSpacing: 70
-  er:
-    fontSize: 24
-    layoutDirection: TB
+    nodeSpacing: 45
+    rankSpacing: 60
 ---
 flowchart TB
-    Users["User roles<br/>Student, faculty, staff,<br/>nurse, doctor, administrator"]
-    RFID["RFID workstation<br/>Identifier input"]
+    Users["Users<br/>Student / Faculty / Staff<br/>Nurse / Doctor / Administrator"]
+    Scanner["RFID workstation"]
 
-    subgraph Deployment["Single Next.js deployment — service-oriented modular monolith"]
+    subgraph Application["Implemented source - shared Next.js deployment"]
         direction TB
-        Web["Presentation layer<br/>Role-specific Next.js portals"]
-        Security["Server-side boundary<br/>Authentication, authorization,<br/>validation, scoping, minimized DTOs"]
-        Domains["Logical domain services<br/>Identity and Access · Patient Registry<br/>Scheduling · Clinical Records<br/>Pharmacy and Inventory · Notifications<br/>Reporting and Audit · Integrations"]
-
-        Web --> Security --> Domains
+        Portals["Role-specific Next.js portals"]
+        Boundary["Backend-for-frontend<br/>proxy.ts / Server Actions<br/>authentication / authorization / validation"]
+        Domains["Logical domain services<br/>Identity and Access / Patient Registry / Scheduling<br/>Clinical Records / Pharmacy and Inventory<br/>Notifications / Reporting and Audit / Integrations"]
+        Portals --> Boundary --> Domains
     end
 
-    Supabase["Shared Supabase platform<br/>Auth · PostgreSQL · RLS · RPC<br/>Storage · private Realtime"]
-    OpenRouter["Optional OpenRouter<br/>Appointment decision support"]
-    Future["Future integrations<br/>OSAS and Registrar secure APIs<br/>Not currently implemented"]
+    Auth["Supabase Auth<br/>managed serverless identity"]
+    Database["Shared Supabase PostgreSQL<br/>RLS / protected RPCs / audit data"]
 
-    Users --> Web
-    RFID --> Web
-    Domains --> Supabase
-    Supabase -.->|private invalidation events| Web
+    subgraph Focused["Source-defined serverless boundaries - deployment unverified"]
+        direction TB
+        NotificationQueue["Metadata-only notification queue"]
+        NotificationWorker["notifications-worker"]
+        ReportQueue["Metadata-only report queue"]
+        ReportWorker["reports-worker"]
+        ReportStorage["Private generated-reports Storage"]
+        RfidWorker["rfid-check-in<br/>user JWT required"]
+
+        NotificationQueue --> NotificationWorker
+        ReportQueue --> ReportWorker --> ReportStorage
+    end
+
+    OpenRouter["Optional OpenRouter<br/>server-only appointment evaluation"]
+    Registrar["Future Registrar API<br/>local-first synchronization"]
+    OSAS["Future OSAS API<br/>contract not approved"]
+
+    Users --> Portals
+    Scanner --> Boundary
+    Boundary --> Auth
+    Domains --> Database
+    Database --> NotificationQueue
+    NotificationWorker --> Database
+    Domains --> ReportQueue
+    Boundary --> RfidWorker --> Database
     Domains -.->|optional server-only request| OpenRouter
-    Future -.->|future integration boundary| Domains
+    Registrar -.-> Domains
+    OSAS -.-> Domains
 ```
 
 | Logical service | Current responsibility and ownership boundary |
@@ -709,21 +739,48 @@ flowchart TB
 | Reporting and Audit | Produces role-scoped aggregates and records implemented audit events without becoming an unrestricted secondary PHI store |
 | Integrations | Coordinates RFID input and optional OpenRouter evaluation; OSAS and Registrar synchronization remain future work |
 
-These boundaries improve maintainability and make later extraction possible, but
-they do not provide independent scaling, release, or failure isolation today.
-A future move to independently deployed microservices would require authenticated
-service APIs, separate release pipelines and credentials, enforceable data
-ownership, service-to-service authorization, monitoring, idempotent retries, and
-failure handling. That additional operational complexity is not required by the
-current source-verified deployment.
+#### Implementation status
 
-The repository contains production source for queued notification delivery,
-queued aggregate workbooks, synchronous authenticated RFID check-in, and private
-profile-photo Storage. The generic smoke-test worker is retired. Report, RFID,
-and notification/report Cron SQL now use CLI-created imperative migrations. The
-linked project reported only migration `001` on 2026-08-13, so no migration push
-or function deployment was performed. The service boundaries, security
-invariants, Registrar boundary, and verification gates are in
+| Status | Included capabilities | Interpretation |
+| --- | --- | --- |
+| Implemented modular services | Six role portals, domain-first Server Actions, Supabase Auth integration, patient registry, scheduling, clinical records, inventory, notifications, reporting, audit events, and RFID workflows | Production-oriented source is present; deployment-dependent controls are not automatically verified. |
+| Source-implemented serverless boundaries | `notifications-worker`, `reports-worker`, `rfid-check-in`, protected RPCs, PGMQ queues, worker Cron migration, and private generated-report workflow | Functions, SQL, and configuration are version-controlled but are not confirmed deployed. |
+| Deployment-unverified infrastructure | Remote migrations, Edge Function deployment, secrets, Cron, queue grants and retries, Storage policies, RLS behavior, signed URLs, and six-role isolation | These remain open until tested against an authorized non-production or target Supabase project. |
+| Future capabilities | Registrar and OSAS synchronization, external email or SMS delivery, centralized observability, and possible independent service extraction | These require approved contracts, security and privacy review, operational ownership, and implementation evidence. |
+
+#### Architectural justification and next implementation line
+
+The current design provides domain separation, maintainability, server-first
+security review, shared transactional consistency, and focused asynchronous
+processing without introducing distributed transactions and additional network
+trust boundaries. Independent scaling, release, technology selection, and
+failure isolation remain future capabilities. They would require authenticated
+service APIs, enforceable data ownership, separate credentials and pipelines,
+monitoring, idempotent communication, and recovery procedures.
+
+Work proceeds in this order:
+
+1. Reconcile local and remote migration histories in a disposable or staging
+   project.
+2. Deploy and configure the three Edge Functions, queues, Cron jobs, worker
+   secrets, migrations, and private generated-report Storage.
+3. Verify authentication, authorization, RLS, grants, idempotency, retries,
+   concurrency, signed-URL behavior, and positive and negative tests for all six
+   roles.
+4. Add protected observability, alerts, dead-letter review, recovery, cleanup,
+   and rollback procedures.
+5. Implement Registrar or OSAS only after their contracts, authentication,
+   privacy rules, data mappings, and reconciliation behavior are approved.
+6. Extract additional independently deployed services only when measured load,
+   release cadence, ownership, or reliability requirements justify the cost.
+
+The repository contains production-oriented source for queued notification
+delivery, queued aggregate workbooks, and synchronous authenticated RFID
+check-in. The linked project previously reported only migration `001`, so no
+migration push or function deployment was claimed. The capstone-ready
+**2.4.1 Microservices Architecture** and **3.2.1 Why Microservices? Justify the
+Choice over Monolithic Architecture** sections, security invariants, and detailed
+verification gates are maintained in
 [`SERVERLESS_MICROSERVICES_MIGRATION.md`](./SERVERLESS_MICROSERVICES_MIGRATION.md).
 
 ### 2.3 Layers and trust boundaries
@@ -1133,7 +1190,7 @@ first inspect live dependencies and migration history.
 
 | Failure | Current behavior | Required response |
 | --- | --- | --- |
-| Supabase unavailable | Actions return errors or pages cannot load; the monolith loses its primary data platform | Monitor availability, use clear user errors, define recovery objectives |
+| Supabase unavailable | Actions return errors or pages cannot load; the application loses its primary data platform | Monitor availability, use clear user errors, define recovery objectives |
 | Missing migration/view/RPC | Runtime query or function call fails | Verify migration list and smoke-test each workflow before release |
 | Realtime unavailable | Automatic refresh does not arrive | Preserve manual refresh/reload and do not rely on Realtime for authorization |
 | AI timeout/provider error | Priority 3 fallback with human review | Monitor fallback rate and keep scheduling usable without AI |
@@ -1620,7 +1677,7 @@ after the relevant source, deployed configuration, and role behavior are tested.
 - [ ] Tables match the context schema and are not mislabeled as confirmed live.
 - [ ] Views and RPCs match current code references and migration evidence.
 - [ ] `patient_complaint` is canonical outside historical compatibility discussion.
-- [ ] No documentation claims independently deployed internal microservices, universal audit coverage,
+- [ ] No documentation claims every logical service is independently deployed, universal audit coverage,
       browser-free Supabase use, deployed migration state, or legal compliance.
 - [ ] Markdown contains no broken encoding and `git diff --check` passes.
 
