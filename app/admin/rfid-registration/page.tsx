@@ -21,13 +21,13 @@ import {
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import {
-  createStudentAccount,
-  generateStudentId as generateStudentIdAction,
-  lookupStudentByRfid,
-  registerStudentProfile,
-  updateStudentProfile,
-} from "@/actions/admin/rfid/registration"
-import { resetPortalPasswordAction } from "@/actions/admin/accounts/patient-portal"
+  createStudentAccountAction,
+  generateStudentIdAction,
+  lookupStudentByRfidAction,
+  registerStudentProfileAction,
+  updateStudentProfileAction,
+} from "@/actions/rfid/registration"
+import { resetPortalPasswordAction } from "@/actions/accounts/patient-portal"
 import { PasswordStrengthInput } from "@/components/common/password-strength-input"
 import { checkPassword } from "@/lib/validation/password"
 import {
@@ -258,7 +258,7 @@ export default function RfidRegistrationPage() {
       mode === "WIZARD" && step === 2 && role === "student" && !studentIdSuffix
 
     if (shouldSuggest) {
-      generateStudentId()
+      handleGenerateStudentId()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, step, role])
@@ -305,7 +305,7 @@ export default function RfidRegistrationPage() {
   }
 
   // Generate the NEXT sequential, guaranteed-unique 4-digit student ID suffix.
-  async function generateStudentId() {
+  async function handleGenerateStudentId() {
     setGeneratingId(true)
     try {
       const result = await generateStudentIdAction()
@@ -330,7 +330,7 @@ export default function RfidRegistrationPage() {
     try {
       const formData = new FormData()
       formData.set("rfidUid", uid)
-      const result = await lookupStudentByRfid(formData)
+      const result = await lookupStudentByRfidAction(formData)
 
       if ("error" in result && result.error) {
         toast.error(result.error)
@@ -516,7 +516,7 @@ export default function RfidRegistrationPage() {
       formData.set("clinicPhotoUrl", photo || "")
       formData.set("role", role)
 
-      const result = await registerStudentProfile(formData)
+      const result = await registerStudentProfileAction(formData)
 
       if ("error" in result && result.error) {
         toast.error(result.error)
@@ -562,7 +562,7 @@ export default function RfidRegistrationPage() {
       formData.set("password", accountPassword)
       formData.set("studentAccountId", createdProfileId)
 
-      const result = await createStudentAccount(formData)
+      const result = await createStudentAccountAction(formData)
 
       if ("error" in result && result.error) {
         toast.error(result.error)
@@ -622,7 +622,7 @@ export default function RfidRegistrationPage() {
       formData.set("clinicPhotoUrl", photo || "")
       formData.set("role", role)
 
-      const result = await updateStudentProfile(formData)
+      const result = await updateStudentProfileAction(formData)
 
       if ("error" in result && result.error) {
         toast.error(result.error)
@@ -664,7 +664,7 @@ export default function RfidRegistrationPage() {
       formData.set("password", accountPassword)
       formData.set("studentAccountId", searchedProfile.id)
 
-      const result = await createStudentAccount(formData)
+      const result = await createStudentAccountAction(formData)
 
       if ("error" in result && result.error) {
         toast.error(result.error)
@@ -891,7 +891,7 @@ export default function RfidRegistrationPage() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={generateStudentId}
+                        onClick={handleGenerateStudentId}
                         disabled={generatingId}
                         className="h-9 shrink-0 px-2"
                         title="Generate a new ID"

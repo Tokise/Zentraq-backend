@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/table"
 import { Search, FileText } from "lucide-react"
 import { toast } from "sonner"
-import { getClearanceQueue } from "@/actions/inventory/workflow-queries"
-import { getClearanceHistoryAction } from "@/actions/admin/clearances/overview"
+import { getClearanceQueueAction } from "@/actions/clinical/queues"
+import { getClearanceHistoryAction } from "@/actions/clinical/clearances/queries"
 
 export default function AdminClearanceRequestsPage() {
   const [clearances, setClearances] = useState<any[]>([])
@@ -26,7 +26,7 @@ export default function AdminClearanceRequestsPage() {
     setLoading(true)
     try {
       if (viewMode === "pending") {
-        const res = await getClearanceQueue()
+        const res = await getClearanceQueueAction()
         if (res.error) {
           toast.error(res.error)
           setClearances([])

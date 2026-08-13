@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
-import { getIncidentQueue } from "@/actions/inventory/workflow-queries"
-import { getIncidentDetailAction, logIncidentResponse, closeIncident } from "@/actions/admin/incidents/overview"
+import { getIncidentQueueAction } from "@/actions/clinical/queues"
+import { getIncidentDetailAction, logIncidentResponseAction, closeIncidentAction } from "@/actions/clinical/incidents/queries"
 
 export default function AdminIncidentLogPage() {
   const [incidents, setIncidents] = useState<Array<{ id: string; description: string; severity: string | null; status: string; created_at: string }>>([])
@@ -23,7 +23,7 @@ export default function AdminIncidentLogPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getIncidentQueue(true)
+      const res = await getIncidentQueueAction(true)
       if (res.error) {
         toast.error(res.error)
         setIncidents([])
@@ -58,7 +58,7 @@ export default function AdminIncidentLogPage() {
     }
     setProcessing(true)
     try {
-      const res = await logIncidentResponse(selected.id, { action_taken: responseText })
+      const res = await logIncidentResponseAction(selected.id, { action_taken: responseText })
       if (res.error) {
         toast.error(res.error)
       } else {
@@ -76,7 +76,7 @@ export default function AdminIncidentLogPage() {
     if (!selected) return
     setProcessing(true)
     try {
-      const res = await closeIncident(selected.id)
+      const res = await closeIncidentAction(selected.id)
       if (res.error) {
         toast.error(res.error)
       } else {

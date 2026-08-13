@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2, HeartPulse, Plus } from "lucide-react"
 import { toast } from "sonner"
-import { getSettingsAction, updateSettingAction } from "@/actions/admin/settings"
+import { getSettingsAction, updateSettingAction } from "@/actions/settings/clinic"
 
 interface HealthProgram {
   id: string

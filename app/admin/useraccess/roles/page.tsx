@@ -7,7 +7,7 @@ import {
   createRoleAction,
   getRolesAction,
   type RoleWithPermissionsDTO,
-} from "@/actions/admin/access/roles";
+} from "@/actions/access/roles";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

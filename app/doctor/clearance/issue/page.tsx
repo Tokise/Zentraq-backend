@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, FileCheck } from "lucide-react"
 import { toast } from "sonner"
-import { getClearanceQueue } from "@/actions/inventory/workflow-queries"
-import { getClearanceDetail, approveClearance, rejectClearance } from "@/actions/clinical/clearances"
+import { getClearanceQueueAction } from "@/actions/clinical/queues"
+import { getClearanceDetailAction, approveClearanceAction, rejectClearanceAction } from "@/actions/clinical/clearances/management"
 
 export default function DoctorClearanceIssuePage() {
   const [clearances, setClearances] = useState<any[]>([])
@@ -26,7 +26,7 @@ export default function DoctorClearanceIssuePage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getClearanceQueue()
+      const res = await getClearanceQueueAction()
       if (res.error) {
         toast.error(res.error)
         setClearances([])
@@ -45,7 +45,7 @@ export default function DoctorClearanceIssuePage() {
   }, [fetchData])
 
   const openDetail = async (id: string) => {
-    const res = await getClearanceDetail(id)
+    const res = await getClearanceDetailAction(id)
     if (res.error) {
       toast.error(res.error)
       return
@@ -59,7 +59,7 @@ export default function DoctorClearanceIssuePage() {
     if (!selected) return
     setProcessing(true)
     try {
-      const res = await approveClearance(selected.id, { expires_at: expiresAt || undefined })
+      const res = await approveClearanceAction(selected.id, { expires_at: expiresAt || undefined })
       if (res.error) toast.error(res.error)
       else {
         toast.success("Clearance approved")
@@ -78,7 +78,7 @@ export default function DoctorClearanceIssuePage() {
     }
     setProcessing(true)
     try {
-      const res = await rejectClearance(selected.id, rejectReason)
+      const res = await rejectClearanceAction(selected.id, rejectReason)
       if (res.error) toast.error(res.error)
       else {
         toast.success("Clearance rejected")

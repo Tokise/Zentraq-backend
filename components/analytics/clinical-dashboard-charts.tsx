@@ -7,7 +7,7 @@ import type {
   DashboardActivityDTO,
   DashboardAppointmentDTO,
   DashboardConsultationDTO,
-} from "@/actions/system/dashboard"
+} from "@/actions/dashboard/queries"
 import { getClinicalActivityPresentation } from "@/components/analytics/clinical-activity-series"
 import { ChartAreaInteractive } from "@/components/ui/chart-area-interactive"
 import { ChartBarDefault } from "@/components/ui/chart-bar-default"

@@ -9,12 +9,12 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import {
     getAnnouncementsAction,
-    createAnnouncement,
-    updateAnnouncement,
-    deleteAnnouncement,
+    createAnnouncementAction,
+    updateAnnouncementAction,
+    deleteAnnouncementAction,
     uploadAnnouncementImageAction,
     type AnnouncementDTO,
-} from "@/actions/admin/announcements"
+} from "@/actions/communications/announcements"
 import { Loader2, Plus, Pencil, Trash2, X, Check, ImagePlus, ImageOff } from "lucide-react"
 
 import { useSearchParams } from "next/navigation"
@@ -143,14 +143,14 @@ export default function AdminClinicAnnouncementsPage() {
             }
 
             if (editingId) {
-                const result = await updateAnnouncement(editingId, form.title.trim(), form.content.trim(), imageUrlToSave)
+                const result = await updateAnnouncementAction(editingId, form.title.trim(), form.content.trim(), imageUrlToSave)
                 if (result.error) {
                     toast.error(result.error)
                     return
                 }
                 toast.success("Announcement updated!")
             } else {
-                const result = await createAnnouncement(form.title.trim(), form.content.trim(), imageUrlToSave)
+                const result = await createAnnouncementAction(form.title.trim(), form.content.trim(), imageUrlToSave)
                 if (result.error) {
                     toast.error(result.error)
                     return
@@ -170,7 +170,7 @@ export default function AdminClinicAnnouncementsPage() {
     async function handleDelete(id: string) {
         if (!confirm("Delete this announcement?")) return
 
-        const result = await deleteAnnouncement(id)
+        const result = await deleteAnnouncementAction(id)
         if (result.error) {
             toast.error(result.error)
             return

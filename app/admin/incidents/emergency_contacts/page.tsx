@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Phone, Mail, MapPin, Siren } from "lucide-react"
 import { toast } from "sonner"
-import { getEmergencyContactsAction } from "@/actions/admin/records/resources"
+import { getEmergencyContactsAction } from "@/actions/clinical/records/resources"
 
 export default function AdminEmergencyContactsPage() {
   const [contacts, setContacts] = useState<Array<{

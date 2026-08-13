@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto"
 import { logAuditEvent } from "@/lib/audit-logger"
 import { checkRateLimit } from "@/lib/rate-limit"
-import { isServerlessFeatureEnabled } from "@/lib/serverless/feature-flags"
 import {
   reportRequestSchema,
   reportRequestIdSchema,
@@ -26,12 +25,11 @@ type ReportStatusRow = {
 
 export interface RequestAggregateReportResult {
   error?: string
-  mode?: "legacy" | "queued"
   requestId?: string
   success?: boolean
 }
 
-// Enqueues one Admin-owned aggregate report or selects the legacy fallback.
+// Enqueues one Admin-owned aggregate report for the dedicated report worker.
 export async function requestAggregateReportAction(
   input: unknown,
 ): Promise<RequestAggregateReportResult> {
@@ -45,10 +43,6 @@ export async function requestAggregateReportAction(
 
   const parsed = reportRequestSchema.safeParse(input)
   if (!parsed.success) return { error: "The report request is invalid." }
-  if (!isServerlessFeatureEnabled("reports", actor.id)) {
-    return { mode: "legacy", success: true }
-  }
-
   const rate = checkRateLimit(`report-request:${actor.id}`, 5, 60 * 1000)
   if (!rate.success) {
     return { error: "Too many report requests. Try again shortly." }
@@ -85,7 +79,7 @@ export async function requestAggregateReportAction(
       start_date: parsed.data.startDate,
     },
   })
-  return { mode: "queued", requestId: data, success: true }
+  return { requestId: data, success: true }
 }
 
 // Returns one Admin-owned report status without exposing its Storage path.

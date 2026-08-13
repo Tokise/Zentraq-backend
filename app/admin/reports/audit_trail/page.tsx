@@ -8,7 +8,7 @@ import { toast } from "sonner"
 import {
   getAuditTrailAction,
   type AuditLogDTO,
-} from "@/actions/admin/access/audit-trail"
+} from "@/actions/access/audit-trail"
 import { DataTablePagination } from "@/components/ui/pagination"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PageHeader } from "@/components/common/page-header"

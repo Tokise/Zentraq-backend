@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, Plus, Trash2, CheckSquare, Square } from "lucide-react"
 import { toast } from "sonner"
-import { getSettingsAction, updateSettingAction } from "@/actions/admin/settings"
+import { getSettingsAction, updateSettingAction } from "@/actions/settings/clinic"
 
 interface Requirement {
   id: string

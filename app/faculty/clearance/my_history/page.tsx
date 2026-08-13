@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, FileText } from "lucide-react"
 import { toast } from "sonner"
-import { getMyClearancesAction } from "@/actions/patient/portal"
+import { getMyClearancesAction } from "@/actions/profiles/patient-portal"
 
 export default function FacultyClearanceHistoryPage() {
   const [clearances, setClearances] = useState<any[]>([])

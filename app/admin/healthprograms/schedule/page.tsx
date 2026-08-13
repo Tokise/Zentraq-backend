@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { CalendarDays, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getHealthPrograms,
+  getHealthProgramsAction,
   type HealthProgram,
-} from "@/actions/inventory/health-programs";
+} from "@/actions/health-programs/management";
 import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,7 @@ export default function SchedulePage() {
   const [programs, setPrograms] = useState<HealthProgram[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    getHealthPrograms()
+    getHealthProgramsAction()
       .then((result) => {
         if (result.error) toast.error(result.error);
         else setPrograms(result.programs);

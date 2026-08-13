@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Activity } from "lucide-react"
 import { toast } from "sonner"
-import { getIncidentQueue } from "@/actions/inventory/workflow-queries"
+import { getIncidentQueueAction } from "@/actions/clinical/queues"
 
 export default function NurseIncidentStatusPage() {
   const [incidents, setIncidents] = useState<any[]>([])
@@ -15,7 +15,7 @@ export default function NurseIncidentStatusPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getIncidentQueue(false)
+      const res = await getIncidentQueueAction(false)
       if (res.error) {
         toast.error(res.error)
         setIncidents([])

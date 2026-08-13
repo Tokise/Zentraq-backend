@@ -7,7 +7,7 @@ import {
   getComplianceRecordAction,
   getOwnPatientProfileAction,
   type ComplianceRecordDTO,
-} from "@/actions/clinical/compliance-records"
+} from "@/actions/clinical/records/compliance"
 import { PageHeader } from "@/components/common/page-header"
 import { HealthRecordTabs } from "@/components/medical/health-record-tabs"
 import { Card, CardContent } from "@/components/ui/card"

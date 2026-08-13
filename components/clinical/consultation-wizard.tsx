@@ -7,24 +7,24 @@ import { toast } from "sonner";
 import {
   getConsultationDetailAction,
   type ConsultationDetailRow,
-} from "@/actions/admin/visits/overview";
+} from "@/actions/clinical/visits/queries";
 import {
-  finalizeConsultationWorkflow,
-  getAvailableReviewDoctors,
-  getClinicalWorkflowRole,
-  getVisitReasonCatalog,
+  finalizeConsultationWorkflowAction,
+  getAvailableReviewDoctorsAction,
+  getClinicalWorkflowRoleAction,
+  getVisitReasonCatalogAction,
   type AvailableReviewDoctor,
-} from "@/actions/clinical/visits";
+} from "@/actions/clinical/visits/workflow";
 import {
-  getMedicineCatalog,
+  getMedicineCatalogAction,
   type Medicine,
-} from "@/actions/clinical/prescriptions";
+} from "@/actions/clinical/prescriptions/management";
 import {
   deletePrescriptionFavoriteAction,
   getPrescriptionFavoritesAction,
   savePrescriptionFavoriteAction,
   type PrescriptionFavorite,
-} from "@/actions/clinical/prescription-favorites";
+} from "@/actions/clinical/prescriptions/favorites";
 import {
   ConsultationWizardShell,
   type ClinicalWorkflowRole,
@@ -116,7 +116,7 @@ export function ConsultationWizard({
   const [visitReasonOptions, setVisitReasonOptions] = useState<string[]>([]);
   const [patientComplaint, setPatientComplaint] = useState("");
   const [customPatientComplaint, setCustomPatientComplaint] = useState("");
-  const [vitalsDisposition, setVitalsDisposition] = useState<
+  const [vitalsDisposition, setVitalsDispositionAction] = useState<
     "required" | "not_required" | "existing" | ""
   >("");
   const [skipReasonChoice, setSkipReasonChoice] = useState("");
@@ -149,8 +149,8 @@ export function ConsultationWizard({
     async function loadWorkflow() {
       const [detail, workflowRole, visitReasonCatalog] = await Promise.all([
         getConsultationDetailAction(consultationId),
-        getClinicalWorkflowRole(),
-        getVisitReasonCatalog(),
+        getClinicalWorkflowRoleAction(),
+        getVisitReasonCatalogAction(),
       ]);
       if (detail.error || !detail.consultation || !workflowRole) {
         toast.error(detail.error ?? "Consultation unavailable");
@@ -168,7 +168,7 @@ export function ConsultationWizard({
       setCustomPatientComplaint("");
       setNotes(isHandoffReview ? "" : detail.consultation.consultation_notes ?? "");
       setStep(isHandoffReview ? "handoff" : "details");
-      setVitalsDisposition(isHandoffReview ? "existing" : "");
+      setVitalsDispositionAction(isHandoffReview ? "existing" : "");
       setSkipReasonChoice("");
       setCustomSkipReason("");
       setVitals({
@@ -191,7 +191,7 @@ export function ConsultationWizard({
       setFollowUpReason("");
       setSelectedReviewDoctorId("__pending__");
       if (workflowRole === "nurse") {
-        const doctorResult = await getAvailableReviewDoctors();
+        const doctorResult = await getAvailableReviewDoctorsAction();
         if (doctorResult.error) toast.error(doctorResult.error);
         setAvailableDoctors(doctorResult.doctors);
       } else {
@@ -206,7 +206,7 @@ export function ConsultationWizard({
     if (!open || !role || role === "nurse") return;
     async function loadMedicines() {
       const [result, favoriteResult] = await Promise.all([
-        getMedicineCatalog(),
+        getMedicineCatalogAction(),
         role === "doctor"
           ? getPrescriptionFavoritesAction()
           : Promise.resolve({ error: null, favorites: [] }),
@@ -342,7 +342,7 @@ export function ConsultationWizard({
     }
 
     setSubmitting(true);
-    const result = await finalizeConsultationWorkflow({
+    const result = await finalizeConsultationWorkflowAction({
       consultation_id: consultation.id,
       patient_complaint: resolvedPatientComplaint,
       review_doctor_id:
@@ -478,7 +478,7 @@ export function ConsultationWizard({
           setCustomSkipReason={setCustomSkipReason}
           setSkipReasonChoice={setSkipReasonChoice}
           setVitals={setVitals}
-          setVitalsDisposition={setVitalsDisposition}
+          setVitalsDispositionAction={setVitalsDispositionAction}
           skipReasonChoice={skipReasonChoice}
           patientComplaint={patientComplaint}
           step={step}
@@ -535,7 +535,7 @@ interface WorkflowStepProps {
   customPatientComplaint: string;
   setCustomPatientComplaint: (value: string) => void;
   vitalsDisposition: "required" | "not_required" | "existing" | "";
-  setVitalsDisposition: (
+  setVitalsDispositionAction: (
     value: "required" | "not_required" | "existing",
   ) => void;
   skipReasonChoice: string;
@@ -658,7 +658,7 @@ function WorkflowStep(props: WorkflowStepProps) {
         <RadioGroup
           name="vitals-disposition"
           onValueChange={(value) =>
-            props.setVitalsDisposition(value as "required" | "not_required")
+            props.setVitalsDispositionAction(value as "required" | "not_required")
           }
           value={props.vitalsDisposition}
         >

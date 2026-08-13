@@ -5,7 +5,7 @@ import Link from "next/link"
 import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getStudentProfileDTO, getStudentAnnouncementsAction, type StudentProfileDTO, type StudentAnnouncementDTO } from "@/actions/student/profile"
+import { getStudentProfileDTOAction, getStudentAnnouncementsAction, type StudentProfileDTO, type StudentAnnouncementDTO } from "@/actions/profiles/student"
 import { Bell, ArrowRight, ImageOff } from "lucide-react"
 
 export default function StudentDashboard() {
@@ -17,7 +17,7 @@ export default function StudentDashboard() {
         async function loadData() {
             try {
                 const [profRes, annRes] = await Promise.all([
-                    getStudentProfileDTO(),
+                    getStudentProfileDTOAction(),
                     getStudentAnnouncementsAction(5),
                 ])
 

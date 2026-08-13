@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { getFacultyProfileDTO, type FacultyProfileDTO } from "@/actions/faculty/profile"
+import { getFacultyProfileDTOAction, type FacultyProfileDTO } from "@/actions/profiles/faculty"
 import { CalendarDays, HeartPulse, FileCheck, Megaphone } from "lucide-react"
 import Link from "next/link"
 
@@ -15,7 +15,7 @@ export default function FacultyDashboard() {
     useEffect(() => {
         async function loadData() {
             try {
-                const res = await getFacultyProfileDTO()
+                const res = await getFacultyProfileDTOAction()
                 if (res.profile) {
                     setProfile(res.profile)
                 }

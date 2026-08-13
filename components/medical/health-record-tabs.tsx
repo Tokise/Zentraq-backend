@@ -27,7 +27,7 @@ import {
   type MedicalExamDTO,
   type PatientProfileRole,
   type SickLeaveDTO,
-} from "@/actions/clinical/compliance-records"
+} from "@/actions/clinical/records/compliance"
 import { AttachmentCarousel } from "@/components/medical/attachment-carousel"
 import { StaffRecordExtras } from "@/components/medical/staff-record-extras"
 import { SensitiveField } from "@/components/common/sensitive-field"

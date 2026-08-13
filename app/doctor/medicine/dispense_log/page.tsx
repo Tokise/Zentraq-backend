@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader2, History } from "lucide-react"
 import { toast } from "sonner"
-import { getDispensingLogsAction } from "@/actions/admin/medicine/operations"
+import { getDispensingLogsAction } from "@/actions/inventory/dispensing"
 
 export default function DoctorDispenseLogPage() {
   const [logs, setLogs] = useState<any[]>([])

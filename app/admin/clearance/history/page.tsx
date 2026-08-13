@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table"
 import { Search, History } from "lucide-react"
 import { toast } from "sonner"
-import { getClearanceHistoryAction } from "@/actions/admin/clearances/overview"
+import { getClearanceHistoryAction } from "@/actions/clinical/clearances/queries"
 
 export default function AdminClearanceHistoryPage() {
   const [clearances, setClearances] = useState<any[]>([])

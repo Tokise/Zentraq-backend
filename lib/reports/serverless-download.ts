@@ -11,11 +11,10 @@ const REPORT_TIMEOUT_MS = 2 * 60 * 1000
 
 interface DownloadReportInput {
   endDate: string
-  legacyDownload: () => Promise<void>
   startDate: string
 }
 
-// Downloads through the queued service or the disabled-feature fallback.
+// Downloads an aggregate workbook produced by the dedicated report worker.
 export async function downloadAggregateReport(
   input: DownloadReportInput,
 ): Promise<void> {
@@ -25,10 +24,6 @@ export async function downloadAggregateReport(
     startDate: input.startDate,
   })
   if (request.error) throw new Error(request.error)
-  if (request.mode === "legacy") {
-    await input.legacyDownload()
-    return
-  }
   if (!request.requestId) throw new Error("The report request was not created.")
 
   const startedAt = Date.now()

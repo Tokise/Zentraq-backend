@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Loader2, CalendarClock } from "lucide-react"
 import { toast } from "sonner"
-import { getMyAppointments, cancelAppointment } from "@/actions/scheduling/appointments"
-import { rescheduleAppointment } from "@/actions/scheduling/review"
+import { getMyAppointmentsAction, cancelAppointmentAction } from "@/actions/appointments/requests"
+import { rescheduleAppointmentAction } from "@/actions/appointments/review"
 
 export default function StaffAppointmentsReschedulePage() {
   const [appointments, setAppointments] = useState<any[]>([])
@@ -18,7 +18,7 @@ export default function StaffAppointmentsReschedulePage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getMyAppointments()
+      const res = await getMyAppointmentsAction()
       if (res.error) {
         toast.error(res.error)
         setAppointments([])
@@ -39,7 +39,7 @@ export default function StaffAppointmentsReschedulePage() {
   const handleCancel = async (id: string) => {
     setProcessing(id)
     try {
-      const res = await cancelAppointment(id)
+      const res = await cancelAppointmentAction(id)
       if (res.error) {
         toast.error(res.error || "Failed to cancel appointment")
       } else {
@@ -109,7 +109,7 @@ export default function StaffAppointmentsReschedulePage() {
                       <td className="px-4 py-3">{statusBadge(a.status)}</td>
                       <td className="px-4 py-3 text-right">
                         {a.status === "recommended" && (
-                          <Button size="sm" variant="outline" className="h-8 text-xs mr-1" onClick={() => rescheduleAppointment(a.id, { scheduled_date: new Date().toISOString().split("T")[0], scheduled_time: "09:00:00" })}>
+                          <Button size="sm" variant="outline" className="h-8 text-xs mr-1" onClick={() => rescheduleAppointmentAction(a.id, { scheduled_date: new Date().toISOString().split("T")[0], scheduled_time: "09:00:00" })}>
                             Book Slot
                           </Button>
                         )}

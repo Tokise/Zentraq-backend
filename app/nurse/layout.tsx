@@ -4,7 +4,7 @@ import { getUserRole } from "@/lib/auth/get-user-role"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { isNurse } from "@/lib/auth/roles"
-import { getOwnPatientProfileAction } from "@/actions/clinical/compliance-records"
+import { getOwnPatientProfileAction } from "@/actions/clinical/records/compliance"
 
 export default async function NurseLayout({
     children,

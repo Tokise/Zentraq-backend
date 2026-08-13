@@ -1,4 +1,4 @@
-import type { DashboardActivityScope } from "@/actions/system/dashboard"
+import type { DashboardActivityScope } from "@/actions/dashboard/queries"
 import type { AreaChartSeries } from "@/components/ui/chart-area-interactive"
 
 interface ClinicalActivityPresentation {

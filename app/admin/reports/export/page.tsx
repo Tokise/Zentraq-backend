@@ -7,12 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Loader2, Download, FileSpreadsheet } from "lucide-react"
 import { toast } from "sonner"
 import {
-  getAnalyticsOverview,
-  getComplaintFrequency,
-  getDailyConsultations,
-  getDispensingSummary,
+  getAnalyticsOverviewAction,
+  getComplaintFrequencyAction,
+  getDailyConsultationsAction,
+  getDispensingSummaryAction,
 } from "@/actions/reports/analytics"
-import { downloadClinicalReportWorkbook } from "@/lib/reports/excel-export"
 import { downloadAggregateReport } from "@/lib/reports/serverless-download"
 
 export default function AdminReportsExportPage() {
@@ -22,28 +21,12 @@ export default function AdminReportsExportPage() {
   const exportExcel = useCallback(async () => {
     setExporting("excel")
     try {
-      const [overview, daily, complaints, dispensing] = await Promise.all([
-        getAnalyticsOverview(),
-        getDailyConsultations(),
-        getComplaintFrequency(),
-        getDispensingSummary(),
-      ])
-      const error =
-        overview.error ??
-        daily.error ??
-        complaints.error ??
-        dispensing.error
-      if (error || !overview.overview) {
-        throw new Error(error ?? "Report summary is unavailable")
+      const overview = await getAnalyticsOverviewAction()
+      if (overview.error || !overview.overview) {
+        throw new Error(overview.error ?? "Report summary is unavailable")
       }
       await downloadAggregateReport({
         endDate: overview.overview.period_end,
-        legacyDownload: () => downloadClinicalReportWorkbook({
-          complaints: complaints.data,
-          daily: daily.data,
-          dispensing: dispensing.data,
-          overview: overview.overview,
-        }),
         startDate: overview.overview.period_start,
       })
       toast.success("Excel workbook downloaded")
@@ -63,7 +46,7 @@ export default function AdminReportsExportPage() {
       let headers: string[] = []
 
       if (type === "consultations") {
-        const res = await getDailyConsultations()
+        const res = await getDailyConsultationsAction()
         if (res.error) throw new Error(res.error)
         rows = res.data.map((item) => [
           item.consultation_date,
@@ -82,12 +65,12 @@ export default function AdminReportsExportPage() {
           "RFID Walk-ins",
         ]
       } else if (type === "complaints") {
-        const res = await getComplaintFrequency()
+        const res = await getComplaintFrequencyAction()
         if (res.error) throw new Error(res.error)
         rows = res.data.map((item) => [item.complaint, item.frequency])
         headers = ["Complaint", "Frequency"]
       } else {
-        const res = await getDispensingSummary()
+        const res = await getDispensingSummaryAction()
         if (res.error) throw new Error(res.error)
         rows = res.data.map((item) => [
           item.generic_name,

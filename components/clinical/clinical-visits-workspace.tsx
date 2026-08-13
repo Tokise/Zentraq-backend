@@ -5,9 +5,9 @@ import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
 import {
-  getConsultationQueue,
+  getConsultationQueueAction,
   type QueueConsultation,
-} from "@/actions/inventory/workflow-queries"
+} from "@/actions/clinical/queues"
 import { ConsultationWizard } from "@/components/clinical/consultation-wizard"
 import { PageHeader } from "@/components/common/page-header"
 import { Button } from "@/components/ui/button"
@@ -38,7 +38,7 @@ export function ClinicalVisitsWorkspace() {
   // Loads the protected worklist for the signed-in clinic account.
   const loadConsultations = useCallback(async () => {
     setLoading(true)
-    const result = await getConsultationQueue(["in-progress"])
+    const result = await getConsultationQueueAction(["in-progress"])
     if (result.error) toast.error(result.error)
     setConsultations(result.consultations)
     setLoading(false)

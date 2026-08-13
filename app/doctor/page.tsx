@@ -11,7 +11,7 @@ import {
   type DashboardActivityDTO,
   type DashboardAppointmentDTO,
   type DashboardConsultationDTO,
-} from "@/actions/system/dashboard"
+} from "@/actions/dashboard/queries"
 import {
   Users,
   CalendarDays,

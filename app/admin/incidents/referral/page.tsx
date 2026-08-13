@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, ArrowRightLeft } from "lucide-react"
 import { toast } from "sonner"
-import { getIncidentQueue } from "@/actions/inventory/workflow-queries"
-import { getIncidentDetailAction, scheduleIncidentFollowUp } from "@/actions/admin/incidents/overview"
+import { getIncidentQueueAction } from "@/actions/clinical/queues"
+import { getIncidentDetailAction, scheduleIncidentFollowUpAction } from "@/actions/clinical/incidents/queries"
 
 export default function AdminIncidentReferralPage() {
   const [incidents, setIncidents] = useState<Array<{ id: string; description: string; severity: string | null; status: string; created_at: string }>>([])
@@ -24,7 +24,7 @@ export default function AdminIncidentReferralPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getIncidentQueue(false)
+      const res = await getIncidentQueueAction(false)
       if (res.error) {
         toast.error(res.error)
         setIncidents([])
@@ -60,7 +60,7 @@ export default function AdminIncidentReferralPage() {
     }
     setProcessing(true)
     try {
-      const res = await scheduleIncidentFollowUp(selected.id, {
+      const res = await scheduleIncidentFollowUpAction(selected.id, {
         follow_up_date: followUpDate,
         notes: followUpNotes || "Referred for follow-up care",
       })

@@ -5,11 +5,11 @@ import { Loader2, Plus } from "lucide-react"
 import { toast } from "sonner"
 
 import {
-  approveAndPublishHealthProgram,
-  getHealthPrograms,
-  proposeHealthProgram,
+  approveAndPublishHealthProgramAction,
+  getHealthProgramsAction,
+  proposeHealthProgramAction,
   type HealthProgram,
-} from "@/actions/inventory/health-programs"
+} from "@/actions/health-programs/management"
 import { PageHeader } from "@/components/common/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -58,7 +58,7 @@ export function HealthProgramsWorkspace({ role }: { role: ClinicRole }) {
   // Loads the clinic-visible program list in deterministic newest-first order.
   const loadPrograms = useCallback(async () => {
     setLoading(true)
-    const result = await getHealthPrograms()
+    const result = await getHealthProgramsAction()
     setLoading(false)
     if (result.error) {
       toast.error(result.error)
@@ -84,7 +84,7 @@ export function HealthProgramsWorkspace({ role }: { role: ClinicRole }) {
   // Approves and publishes a pending proposal as one atomic operation.
   async function approve(programId: string) {
     setApprovingId(programId)
-    const result = await approveAndPublishHealthProgram(programId)
+    const result = await approveAndPublishHealthProgramAction(programId)
     setApprovingId(null)
     if (result.error) {
       toast.error(result.error)
@@ -241,7 +241,7 @@ function ProposalDialog({
     setSubmitting(true)
     const form = event.currentTarget
     const formData = new FormData(form)
-    const result = await proposeHealthProgram({
+    const result = await proposeHealthProgramAction({
       name: formData.get("name"),
       description: String(formData.get("description") ?? "") || undefined,
       program_type: programType,

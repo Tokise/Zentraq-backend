@@ -5,9 +5,9 @@ import { Package } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  getInventoryQueue,
+  getInventoryQueueAction,
   type InventoryMedicine,
-} from "@/actions/inventory/workflow-queries";
+} from "@/actions/inventory/queries";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -29,7 +29,7 @@ export default function DoctorMedicineStockPage() {
   // Reloads approved medicine stock without exposing stock mutation controls.
   const loadInventory = useCallback(async () => {
     setLoading(true);
-    const result = await getInventoryQueue();
+    const result = await getInventoryQueueAction();
     if (result.error) toast.error(result.error);
     setMedicines(result.medicines);
     setLoading(false);

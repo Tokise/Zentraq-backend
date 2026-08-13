@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table"
 import { CalendarX } from "lucide-react"
 import { toast } from "sonner"
-import { getExpiringMedicinesAction } from "@/actions/admin/medicine/operations"
+import { getExpiringMedicinesAction } from "@/actions/inventory/dispensing"
 
 export default function AdminMedicineExpiryPage() {
   const [items, setItems] = useState<Array<{

@@ -10,7 +10,7 @@ import {
   removePermissionAction,
   type PermissionDTO,
   type RoleWithPermissionsDTO,
-} from "@/actions/admin/access/roles";
+} from "@/actions/access/roles";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";

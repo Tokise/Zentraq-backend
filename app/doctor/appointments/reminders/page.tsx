@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Bell } from "lucide-react"
 import { toast } from "sonner"
-import { getAppointmentRemindersAction } from "@/actions/admin/appointments/overview"
+import { getAppointmentRemindersAction } from "@/actions/appointments/queries"
 
 export default function DoctorAppointmentRemindersPage() {
   const [reminders, setReminders] = useState<any[]>([])

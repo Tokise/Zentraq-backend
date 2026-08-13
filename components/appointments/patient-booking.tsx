@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import {
   getAppointmentCliniciansAction,
   getAppointmentAvailabilityAction,
-} from "@/actions/patient/portal";
-import { submitAppointmentRequest } from "@/actions/scheduling/appointments";
+} from "@/actions/profiles/patient-portal";
+import { submitAppointmentRequestAction } from "@/actions/appointments/requests";
 import { PageHeader } from "@/components/common/page-header";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
@@ -124,7 +124,7 @@ export function PatientBookingPage() {
       return;
     }
     setSubmitting(true);
-    const result = await submitAppointmentRequest({
+    const result = await submitAppointmentRequestAction({
       doctor_id: selectedSlot.clinician_id,
       reason: reason.trim(),
       symptoms: symptoms.trim() || undefined,

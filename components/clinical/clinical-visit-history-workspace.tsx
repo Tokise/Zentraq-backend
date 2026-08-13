@@ -5,9 +5,9 @@ import { EyeIcon, StethoscopeIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import {
-  getClinicalVisitHistory,
+  getClinicalVisitHistoryAction,
   type ClinicalVisitHistoryRow,
-} from "@/actions/clinical/visit-history"
+} from "@/actions/clinical/visits/history"
 import { ConsultationDetailDialog } from "@/components/clinical/consultation-detail-dialog"
 import { EmptyState } from "@/components/common/empty-state"
 import { PageHeader } from "@/components/common/page-header"
@@ -39,7 +39,7 @@ export function ClinicalVisitHistoryWorkspace() {
   // Loads completed visits through the assignment-aware server action.
   const loadHistory = useCallback(async () => {
     setLoading(true)
-    const result = await getClinicalVisitHistory()
+    const result = await getClinicalVisitHistoryAction()
     if (result.error) toast.error(result.error)
     setVisits(result.visits)
     setLoading(false)

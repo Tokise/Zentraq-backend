@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useRef, useEffect } from "react"
 import { Loader2, LogOut, Menu, Moon, Sun } from "lucide-react"
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { UserRole } from "@/lib/auth/roles"
 import { NotificationDropdown } from "@/components/layout/notification-dropdown"
-import { signOutAction } from "@/actions/system/auth"
+import { signOutAction } from "@/actions/auth/session"
 
 type DashboardShellProps = {
   children: React.ReactNode

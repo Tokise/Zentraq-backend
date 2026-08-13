@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
-import { getInventoryQueue } from "@/actions/inventory/workflow-queries"
+import { getInventoryQueueAction } from "@/actions/inventory/queries"
 
 export default function NurseMedicineExpiryPage() {
   const [medicines, setMedicines] = useState<Array<{ id: string; name: string; stock: number; minimum: number; expiry: string | null }>>([])
@@ -15,7 +15,7 @@ export default function NurseMedicineExpiryPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getInventoryQueue()
+      const res = await getInventoryQueueAction()
       if (res.error) {
         toast.error(res.error)
         setMedicines([])

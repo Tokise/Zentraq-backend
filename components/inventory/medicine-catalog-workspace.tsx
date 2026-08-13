@@ -9,7 +9,7 @@ import {
   reviewMedicineCatalogItemAction,
   saveMedicineCatalogItemAction,
   type MedicineCatalogItem,
-} from "@/actions/inventory/medicine-catalog";
+} from "@/actions/inventory/catalog";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";

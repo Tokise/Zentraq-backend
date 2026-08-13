@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Megaphone } from "lucide-react"
 import { toast } from "sonner"
-import { getAnnouncementsAction } from "@/actions/admin/announcements"
+import { getAnnouncementsAction } from "@/actions/communications/announcements"
 
 export default function FacultyAnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<any[]>([])

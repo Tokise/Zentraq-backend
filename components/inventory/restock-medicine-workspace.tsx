@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PackagePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { receiveMedicineStockAction } from "@/actions/inventory/medicine-stock";
+import { receiveMedicineStockAction } from "@/actions/inventory/stock";
 import {
-  getInventoryQueue,
+  getInventoryQueueAction,
   type InventoryMedicine,
-} from "@/actions/inventory/workflow-queries";
+} from "@/actions/inventory/queries";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,7 @@ export function RestockMedicineWorkspace({
   // Reloads catalog-backed inventory so zero-stock products remain visible.
   const loadInventory = useCallback(async () => {
     setLoading(true);
-    const result = await getInventoryQueue();
+    const result = await getInventoryQueueAction();
     if (result.error) toast.error(result.error);
     setMedicines(result.medicines);
     setMedicineId((current) =>

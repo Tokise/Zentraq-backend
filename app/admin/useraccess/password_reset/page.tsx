@@ -14,7 +14,7 @@ import {
   searchRecoveryAccountsAction,
   type RecoveryAccountRole,
   type RecoveryAccountSearchResult,
-} from "@/actions/admin/accounts/patient-portal";
+} from "@/actions/accounts/patient-portal";
 import { PageHeader } from "@/components/common/page-header";
 import { PasswordStrengthInput } from "@/components/common/password-strength-input";
 import { Badge } from "@/components/ui/badge";

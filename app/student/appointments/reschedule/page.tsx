@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Loader2, CalendarClock } from "lucide-react"
 import { toast } from "sonner"
-import { getMyAppointments, cancelAppointment } from "@/actions/scheduling/appointments"
+import { getMyAppointmentsAction, cancelAppointmentAction } from "@/actions/appointments/requests"
 
 export default function StudentAppointmentsReschedulePage() {
   const [appointments, setAppointments] = useState<any[]>([])
@@ -17,7 +17,7 @@ export default function StudentAppointmentsReschedulePage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getMyAppointments()
+      const res = await getMyAppointmentsAction()
       if (res.error) {
         toast.error(res.error)
         setAppointments([])
@@ -38,7 +38,7 @@ export default function StudentAppointmentsReschedulePage() {
   const handleCancel = async (id: string) => {
     setProcessing(id)
     try {
-      const res = await cancelAppointment(id)
+      const res = await cancelAppointmentAction(id)
       if (res.error) {
         toast.error(res.error || "Failed to cancel appointment")
       } else {

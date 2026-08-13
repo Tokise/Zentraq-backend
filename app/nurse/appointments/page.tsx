@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Calendar } from "lucide-react"
 import { toast } from "sonner"
-import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments/overview"
+import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/appointments/queries"
 
 export default function NurseAppointmentsPage() {
   const [appointments, setAppointments] = useState<AppointmentOverviewRow[]>([])
