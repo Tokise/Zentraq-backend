@@ -12,7 +12,7 @@ import {
   type ComplianceRecordDTO,
   type PatientProfileRole,
   type PatientSearchDTO,
-} from "@/actions/clinical/compliance-records"
+} from "@/actions/clinical/records/compliance"
 import { PageHeader } from "@/components/common/page-header"
 import { HealthRecordTabs } from "@/components/medical/health-record-tabs"
 import { Badge } from "@/components/ui/badge"

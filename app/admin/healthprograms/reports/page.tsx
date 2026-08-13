@@ -5,9 +5,9 @@ import { useEffect, useState } from "react";
 import { BarChart3, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getHealthPrograms,
+  getHealthProgramsAction,
   type HealthProgram,
-} from "@/actions/inventory/health-programs";
+} from "@/actions/health-programs/management";
 import { PageHeader } from "@/components/common/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
@@ -18,7 +18,7 @@ export default function ReportsPage() {
   const [programs, setPrograms] = useState<HealthProgram[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
-    getHealthPrograms()
+    getHealthProgramsAction()
       .then((result) => {
         if (result.error) toast.error(result.error);
         else setPrograms(result.programs);

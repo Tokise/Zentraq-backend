@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Loader2, Users, Plus } from "lucide-react"
 import { toast } from "sonner"
-import { getSettingsAction, updateSettingAction } from "@/actions/admin/settings"
-import { searchRecordsAction } from "@/actions/admin/records/search"
+import { getSettingsAction, updateSettingAction } from "@/actions/settings/clinic"
+import { searchRecordsAction } from "@/actions/clinical/records/search"
 
 interface Enrollment {
   id: string

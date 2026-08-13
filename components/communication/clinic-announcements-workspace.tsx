@@ -7,7 +7,7 @@ import { toast } from "sonner"
 import {
   getAnnouncementsAction,
   type AnnouncementDTO,
-} from "@/actions/admin/announcements"
+} from "@/actions/communications/announcements"
 import { PageHeader } from "@/components/common/page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"

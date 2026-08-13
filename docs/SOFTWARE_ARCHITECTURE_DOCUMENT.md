@@ -540,14 +540,24 @@ Patient fragments inherit the role prefix. For example, the student
 
 ```text
 actions/
-  admin/        Administrator and shared clinic-operation actions
-  clinical/     Records, visits, clearances, incidents, and prescriptions
-  inventory/    Medicine workflow queries and health programs
-  patient/      Patient portal and consultation-history actions
-  reports/      Role-scoped analytics queries
-  rfid/         Kiosk and queue actions
-  scheduling/   Appointment and clinician-schedule actions
-  system/       Authentication, dashboard, and notification actions
+  access/       Roles, permissions, and audit trail
+  accounts/     Account administration and portal recovery
+  appointments/ Scheduling, requests, review, availability, and queries
+  auth/         Login and authenticated-session commands
+  clinical/
+    clearances/ Clearance queries and management
+    incidents/  Incident queries and management
+    prescriptions/ Prescription favorites and management
+    records/    Patient records, compliance, search, and documents
+    visits/     Visit workflow, queries, and history
+  communications/ Announcements and the authenticated notification inbox
+  dashboard/    Role-scoped dashboard summaries
+  health-programs/ Program workflows and reporting
+  inventory/    Medicine catalog, stock, dispensing, and queries
+  profiles/     Student, Faculty, Staff, and patient self-service data
+  reports/      Aggregate analytics and queued workbook exports
+  rfid/         Check-in, queue, patient lookup, and registration
+  settings/     Clinic configuration
 app/            Role route trees and shared application routes
 components/
   analytics/    Shared dashboard and report charts
@@ -561,6 +571,7 @@ lib/
   validation/   Zod schemas
 services/       AI, audit, and notification services
 supabase/
+  functions/    Focused notification, report, and RFID Edge Functions
   migrations/   Historical and current imperative migrations plus schema reference
   config.toml   Local Supabase services and PostgreSQL version
   seed.sql      Local seed data
@@ -644,10 +655,10 @@ met.
 
 Zentraq remains a **service-oriented modular monolith** for identity, sessions,
 scheduling, inventory, and clinical records. Notifications, aggregate report
-generation, and RFID check-in now have source-defined serverless boundaries,
-but each remains disabled and deployment-unverified until its staged migration,
-function deployment, and role tests succeed. All services initially share the
-same Supabase PostgreSQL source of truth.
+generation, and RFID check-in have focused source-defined serverless
+boundaries. Deployment remains unverified until migration history is reconciled,
+the functions are deployed, and role tests succeed. All services share the same
+Supabase PostgreSQL source of truth.
 
 ```mermaid
 ---
@@ -706,12 +717,13 @@ ownership, service-to-service authorization, monitoring, idempotent retries, and
 failure handling. That additional operational complexity is not required by the
 current source-verified deployment.
 
-The repository contains a deployment-unverified platform pilot plus production
-source for queued notification delivery, queued aggregate workbooks, synchronous
-authenticated RFID check-in, and private profile-photo Storage. Only the
-notification migration is currently staged; later migration templates are held
-outside `supabase/migrations` to enforce one-domain releases. The extraction
-sequence, security invariants, manual commands, and verification gates are in
+The repository contains production source for queued notification delivery,
+queued aggregate workbooks, synchronous authenticated RFID check-in, and private
+profile-photo Storage. The generic smoke-test worker is retired. Report, RFID,
+and notification/report Cron SQL now use CLI-created imperative migrations. The
+linked project reported only migration `001` on 2026-08-13, so no migration push
+or function deployment was performed. The service boundaries, security
+invariants, Registrar boundary, and verification gates are in
 [`SERVERLESS_MICROSERVICES_MIGRATION.md`](./SERVERLESS_MICROSERVICES_MIGRATION.md).
 
 ### 2.3 Layers and trust boundaries
@@ -774,7 +786,7 @@ expiry limits exposure but does not replace access control.
 | Realtime | Private broadcast policies and trigger functions exist | Publication, topic policy, and target-project settings need live verification |
 | Edge Functions | Named-secret notification/report workers and a user-authenticated RFID check-in function are source-defined | Function deployment, keys, JWT enforcement, and role behavior are deployment-unverified |
 | Queues | Dedicated metadata-only notification/report PGMQ queues and service-role-only worker RPCs are source-defined | Migration state, queue grants, retries, dead-letter behavior, and Cron need live verification |
-| Migrations | Imperative, versioned SQL files; `schema_paths` is empty | Migration order and applied history need CLI/MCP verification |
+| Migrations | Imperative, versioned SQL files; `schema_paths` is empty | The 2026-08-13 linked check found remote history at `001` only; reconcile before any push |
 | Seed | `supabase/seed.sql` enabled locally | Never treat development seed identities as production data |
 | Network | Local network restrictions are disabled | Production network restrictions are operational/deployment controls |
 

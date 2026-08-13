@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table"
 import { History } from "lucide-react"
 import { toast } from "sonner"
-import { getDispensingLogsAction, type DispensingLogRow } from "@/actions/admin/medicine/operations"
+import { getDispensingLogsAction, type DispensingLogRow } from "@/actions/inventory/dispensing"
 
 export default function AdminDispenseLogPage() {
   const [logs, setLogs] = useState<DispensingLogRow[]>([])

@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import {
-  getPatientConsultationHistory,
+  getPatientConsultationHistoryAction,
   type KioskConsultationSummary,
-} from "@/actions/rfid/kiosk";
+} from "@/actions/rfid/patient-lookup";
 import { ConsultationDetailDialog } from "@/components/clinical/consultation-detail-dialog";
 
 type ClinicalPatientType = "student" | "faculty" | "staff";
@@ -36,7 +36,7 @@ export function StaffRecordExtras({
     async function loadExtras() {
       setLoading(true);
       setError(null);
-      const consultationResult = await getPatientConsultationHistory(
+      const consultationResult = await getPatientConsultationHistoryAction(
         patientId,
         patientType,
       );

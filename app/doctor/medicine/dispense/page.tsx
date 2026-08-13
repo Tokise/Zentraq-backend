@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, Pill } from "lucide-react"
 import { toast } from "sonner"
-import { getPendingPrescriptions, dispenseMedicine, type Prescription } from "@/actions/clinical/prescriptions"
-import { getMedicineStock } from "@/actions/clinical/prescriptions"
+import { getPendingPrescriptionsAction, dispenseMedicineAction, type Prescription } from "@/actions/clinical/prescriptions/management"
+import { getMedicineStockAction } from "@/actions/clinical/prescriptions/management"
 
 export default function DoctorMedicineDispensePage() {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([])
@@ -24,7 +24,7 @@ export default function DoctorMedicineDispensePage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getPendingPrescriptions()
+      const res = await getPendingPrescriptionsAction()
       if (res.error) {
         toast.error(res.error)
         setPrescriptions([])
@@ -45,7 +45,7 @@ export default function DoctorMedicineDispensePage() {
   const openDispense = async (p: Prescription) => {
     setSelected(p)
     setQuantities({})
-    const stockRes = await getMedicineStock(p.medicine_id)
+    const stockRes = await getMedicineStockAction(p.medicine_id)
     if (stockRes.error) {
       toast.error(stockRes.error)
       setStocks([])
@@ -63,7 +63,7 @@ export default function DoctorMedicineDispensePage() {
     }
     setProcessing(true)
     try {
-      const res = await dispenseMedicine(selected.id, stockId, qty)
+      const res = await dispenseMedicineAction(selected.id, stockId, qty)
       if (res.error) {
         toast.error(res.error)
       } else {

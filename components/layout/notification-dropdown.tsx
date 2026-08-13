@@ -30,13 +30,13 @@ import { cn } from "@/lib/utils"
 import { createClient } from "@/utils/supabase/client"
 import type { UserRole } from "@/lib/auth/roles"
 import {
-    getNotifications,
-    getUnreadNotificationCount,
-    markNotificationAsRead,
-    markAllNotificationsAsRead,
-    deleteNotification,
+    getNotificationsAction,
+    getUnreadNotificationCountAction,
+    markNotificationAsReadAction,
+    markAllNotificationsAsReadAction,
+    deleteNotificationAction,
     type NotificationDTO,
-} from "@/actions/system/notifications"
+} from "@/actions/communications/notifications"
 
 const NOTIFICATION_ICONS: Record<string, LucideIcon> = {
     appointment: CalendarDays,
@@ -127,9 +127,9 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
     const [open, setOpen] = useState(false)
     const hasFetchedRef = useRef(false)
 
-    // Load unread count on mount (lightweight â€” always keep in sync)
+    // Loads the unread count on mount so the badge stays synchronized.
     const refreshUnreadCount = useCallback(async () => {
-        const res = await getUnreadNotificationCount()
+        const res = await getUnreadNotificationCountAction()
         if (!res.error) {
             setUnreadCount(res.count)
         }
@@ -138,7 +138,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
     // Load notification list when dropdown opens (lazy load)
     const loadNotifications = useCallback(async () => {
         setLoading(true)
-        const res = await getNotifications({ limit: 20 })
+        const res = await getNotificationsAction({ limit: 20 })
         if (!res.error) {
             setNotifications(res.notifications)
         }
@@ -203,7 +203,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
         )
         setUnreadCount((prev) => Math.max(0, prev + (isRead ? -1 : 1)))
 
-        const res = await markNotificationAsRead(id, isRead)
+        const res = await markNotificationAsReadAction(id, isRead)
         if (res.error) {
             // Revert on failure
             setNotifications((prev) =>
@@ -217,7 +217,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
         setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
         setUnreadCount(0)
 
-        const res = await markAllNotificationsAsRead()
+        const res = await markAllNotificationsAsReadAction()
         if (res.error) {
             await loadNotifications()
         }
@@ -231,7 +231,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
             setUnreadCount((prev) => Math.max(0, prev - 1))
         }
 
-        const res = await deleteNotification(id)
+        const res = await deleteNotificationAction(id)
         if (res.error) {
             // Revert on failure
             await loadNotifications()
@@ -372,7 +372,7 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
                         <DropdownMenuSeparator />
                         <div className="px-4 py-2 bg-muted/10">
                             <p className="text-[11px] text-muted-foreground text-center font-medium">
-                                {notifications.length} notification{notifications.length !== 1 ? "s" : ""} Â· latest
+                                {notifications.length} notification{notifications.length !== 1 ? "s" : ""} · latest
                             </p>
                         </div>
                     </>

@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/dialog"
 import { CalendarClock } from "lucide-react"
 import { toast } from "sonner"
-import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments/overview"
-import { rescheduleAppointment } from "@/actions/scheduling/review"
+import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/appointments/queries"
+import { rescheduleAppointmentAction } from "@/actions/appointments/review"
 
 export default function DoctorAppointmentReschedulePage() {
   const [appointments, setAppointments] = useState<AppointmentOverviewRow[]>([])
@@ -64,7 +64,7 @@ export default function DoctorAppointmentReschedulePage() {
     }
     setProcessing(true)
     try {
-      const res = await rescheduleAppointment(selected.id, { scheduled_date: newDate, scheduled_time: newTime })
+      const res = await rescheduleAppointmentAction(selected.id, { scheduled_date: newDate, scheduled_time: newTime })
       if (res.error) {
         toast.error(res.error)
       } else {

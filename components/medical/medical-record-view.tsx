@@ -13,7 +13,7 @@ import {
   IdCard,
 } from "lucide-react";
 import { PatientClinicalSectionGrid } from "./patient-clinical-section-grid";
-import type { PatientMedicalRecord } from "@/actions/clinical/records";
+import type { PatientMedicalRecord } from "@/actions/clinical/records/patient-records";
 
 interface MedicalRecordViewProps {
   record: PatientMedicalRecord;

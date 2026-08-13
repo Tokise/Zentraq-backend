@@ -13,23 +13,18 @@ import {
 import { toast } from "sonner";
 
 import {
-  enqueueServerlessPilotJobAction,
-  getServerlessPilotJobStatusAction,
-  type ServerlessPilotJobStatus,
-} from "@/actions/admin/access/serverless-pilot";
-import {
-  claimConsultation,
-} from "@/actions/clinical/visits";
+  claimConsultationAction,
+} from "@/actions/clinical/visits/workflow";
 import {
   getComplianceRecordAction,
   type ComplianceRecordDTO,
-} from "@/actions/clinical/compliance-records";
+} from "@/actions/clinical/records/compliance";
 import {
-  getRfidQueue,
+  getRfidQueueAction,
   getRfidServerlessDiagnosticAction,
   type RfidQueueItem,
   type RfidServerlessDiagnostic,
-} from "@/actions/rfid/kiosk";
+} from "@/actions/rfid/queue";
 import {
   HealthRecordTabs,
   type HealthRecordTab,
@@ -73,9 +68,6 @@ export function ClinicalRfidKioskWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [diagnostic, setDiagnostic] =
     useState<RfidServerlessDiagnostic | null>(null);
-  const [pilotJobId, setPilotJobId] = useState<string | null>(null);
-  const [pilotJob, setPilotJob] = useState<ServerlessPilotJobStatus | null>(null);
-  const [pilotLoading, setPilotLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [startingConsultationId, setStartingConsultationId] = useState<
     string | null
@@ -85,7 +77,7 @@ export function ClinicalRfidKioskWorkspace({
   // Refreshes only queue entries the active clinician is allowed to open.
   const loadQueue = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
-    const result = await getRfidQueue();
+    const result = await getRfidQueueAction();
     setQueue(result.queue);
     setError(result.error);
     setLoading(false);
@@ -135,45 +127,11 @@ export function ClinicalRfidKioskWorkspace({
     window.open("/rfid-kiosk/scanner", "_blank", "noopener,noreferrer");
   }
 
-  // Queues a metadata-only worker smoke job without invoking it from RFID.
-  async function queuePilotJob() {
-    setPilotLoading(true);
-    const result = await enqueueServerlessPilotJobAction({
-      idempotencyKey: crypto.randomUUID(),
-    });
-    setPilotLoading(false);
-    if (!result.success || !result.jobId) {
-      toast.error(result.error ?? "Unable to queue worker smoke test");
-      return;
-    }
-    setPilotJobId(result.jobId);
-    setPilotJob({
-      status: "queued",
-      attempts: 0,
-      errorCode: null,
-      updatedAt: new Date().toISOString(),
-    });
-    toast.success("Smoke job queued. Invoke service-jobs-worker to process it.");
-  }
-
-  // Refreshes the current smoke job's sanitized transition state.
-  async function refreshPilotJob() {
-    if (!pilotJobId) return;
-    setPilotLoading(true);
-    const result = await getServerlessPilotJobStatusAction(pilotJobId);
-    setPilotLoading(false);
-    if (result.error || !result.job) {
-      toast.error(result.error ?? "Unable to refresh smoke job");
-      return;
-    }
-    setPilotJob(result.job);
-  }
-
   // Opens the selected patient's active consultation in the unified Visit workspace.
   async function startConsultation(item: RfidQueueItem) {
     if (!item.canStartConsultation) return;
     setStartingConsultationId(item.consultationId);
-    const result = await claimConsultation({
+    const result = await claimConsultationAction({
       consultation_id: item.consultationId,
     });
     setStartingConsultationId(null);
@@ -299,46 +257,6 @@ export function ClinicalRfidKioskWorkspace({
                 <p className="text-muted-foreground">
                   {new Date(diagnostic.lastExecutedAt).toLocaleString()}
                 </p>
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {role === "admin" && (
-        <Card className="p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-medium">Platform worker smoke test</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                This queues a PHI-free platform job. It does not run during an
-                RFID check-in.
-              </p>
-              {pilotJob && (
-                <p className="mt-2 text-sm">
-                  Status: <span className="font-medium capitalize">{pilotJob.status.replaceAll("_", " ")}</span>
-                  {` · ${pilotJob.attempts} attempt(s)`}
-                  {pilotJob.errorCode ? ` · ${pilotJob.errorCode}` : ""}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                disabled={pilotLoading}
-                onClick={() => void queuePilotJob()}
-                type="button"
-              >
-                Queue smoke job
-              </Button>
-              {pilotJobId && (
-                <Button
-                  disabled={pilotLoading}
-                  onClick={() => void refreshPilotJob()}
-                  type="button"
-                  variant="outline"
-                >
-                  Refresh status
-                </Button>
               )}
             </div>
           </div>

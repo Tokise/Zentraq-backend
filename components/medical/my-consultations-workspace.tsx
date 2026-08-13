@@ -9,7 +9,7 @@ import {
   type MyConsultationOverview,
   type MyConsultationRow,
   type MyConsultationTab,
-} from "@/actions/patient/consultations"
+} from "@/actions/clinical/records/my-consultations"
 import { PageHeader } from "@/components/common/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

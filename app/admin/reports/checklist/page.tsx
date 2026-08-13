@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/common/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader2, ClipboardCheck } from "lucide-react"
 import { toast } from "sonner"
-import { getClearanceCompletion } from "@/actions/reports/analytics"
+import { getClearanceCompletionAction } from "@/actions/reports/analytics"
 import { ComplianceDashboard } from "@/components/analytics/compliance-dashboard"
 
 export default function AdminChecklistReportPage() {
@@ -15,7 +15,7 @@ export default function AdminChecklistReportPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getClearanceCompletion()
+      const res = await getClearanceCompletionAction()
       if (res.error) {
         toast.error(res.error)
         setData([])

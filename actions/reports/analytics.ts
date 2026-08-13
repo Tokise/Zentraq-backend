@@ -79,7 +79,7 @@ export interface AnalyticsOverview {
 }
 
 // Returns bounded daily aggregate consultation counts for clinic reports.
-export async function getDailyConsultations(params?: {
+export async function getDailyConsultationsAction(params?: {
   start_date?: string
   end_date?: string
 }) {
@@ -114,7 +114,7 @@ export async function getDailyConsultations(params?: {
 }
 
 // Returns bounded aggregate complaint frequencies without patient identifiers.
-export async function getComplaintFrequency(params?: {
+export async function getComplaintFrequencyAction(params?: {
   start_date?: string
   end_date?: string
 }) {
@@ -134,7 +134,7 @@ export async function getComplaintFrequency(params?: {
 }
 
 // Returns bounded aggregate medicine dispensing totals for clinic reports.
-export async function getDispensingSummary(params?: {
+export async function getDispensingSummaryAction(params?: {
   start_date?: string
   end_date?: string
 }) {
@@ -163,7 +163,7 @@ export async function getDispensingSummary(params?: {
 }
 
 // Returns aggregate clearance outcomes for Admin reporting.
-export async function getClearanceCompletion() {
+export async function getClearanceCompletionAction() {
   const actor = await staff(["admin"])
   if (!actor) return { error: "Access denied", data: [] as ClearanceCompletion[] }
 
@@ -185,7 +185,7 @@ export async function getClearanceCompletion() {
 }
 
 // Returns minimized clinic-wide report summary totals.
-export async function getAnalyticsOverview(params?: {
+export async function getAnalyticsOverviewAction(params?: {
   start_date?: string
   end_date?: string
 }) {
@@ -254,7 +254,7 @@ export async function getAnalyticsOverview(params?: {
 }
 
 // Returns one authorized Doctor's aggregate performance totals.
-export async function getDoctorStats(doctorId: string, params?: {
+export async function getDoctorStatsAction(doctorId: string, params?: {
   start_date?: string
   end_date?: string
 }) {

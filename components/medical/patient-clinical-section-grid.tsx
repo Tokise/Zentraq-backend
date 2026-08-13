@@ -12,12 +12,12 @@ import {
 import { toast } from "sonner"
 
 import {
-  addMedicalHistory,
-  addPatientAllergy,
-  addPatientImmunization,
-  addPatientMedication,
+  addMedicalHistoryAction,
+  addPatientAllergyAction,
+  addPatientImmunizationAction,
+  addPatientMedicationAction,
   type PatientMedicalRecord,
-} from "@/actions/clinical/records"
+} from "@/actions/clinical/records/patient-records"
 import { SensitiveField } from "@/components/common/sensitive-field"
 import { Button } from "@/components/ui/button"
 import {
@@ -115,7 +115,7 @@ export function PatientClinicalSectionGrid({
           toast.error("Condition name is required")
           return
         }
-        result = await addMedicalHistory(
+        result = await addMedicalHistoryAction(
           record.patient_id,
           record.patient_type,
           historyForm,
@@ -125,7 +125,7 @@ export function PatientClinicalSectionGrid({
           toast.error("Allergen is required")
           return
         }
-        result = await addPatientAllergy(
+        result = await addPatientAllergyAction(
           record.patient_id,
           record.patient_type,
           allergyForm,
@@ -135,7 +135,7 @@ export function PatientClinicalSectionGrid({
           toast.error("Medicine name is required")
           return
         }
-        result = await addPatientMedication(
+        result = await addPatientMedicationAction(
           record.patient_id,
           record.patient_type,
           medicationForm,
@@ -145,7 +145,7 @@ export function PatientClinicalSectionGrid({
           toast.error("Vaccine name is required")
           return
         }
-        result = await addPatientImmunization(
+        result = await addPatientImmunizationAction(
           record.patient_id,
           record.patient_type,
           {

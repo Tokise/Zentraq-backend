@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, Activity } from "lucide-react"
 import { toast } from "sonner"
-import { getIncidentQueue } from "@/actions/inventory/workflow-queries"
-import { getIncidentDetailAction, logIncidentResponse, closeIncident, scheduleIncidentFollowUp } from "@/actions/admin/incidents/overview"
+import { getIncidentQueueAction } from "@/actions/clinical/queues"
+import { getIncidentDetailAction, logIncidentResponseAction, closeIncidentAction, scheduleIncidentFollowUpAction } from "@/actions/clinical/incidents/queries"
 
 export default function AdminIncidentStatusPage() {
   const [incidents, setIncidents] = useState<Array<{ id: string; description: string; severity: string | null; status: string; created_at: string }>>([])
@@ -25,7 +25,7 @@ export default function AdminIncidentStatusPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getIncidentQueue(false)
+      const res = await getIncidentQueueAction(false)
       if (res.error) {
         toast.error(res.error)
         setIncidents([])
@@ -59,7 +59,7 @@ export default function AdminIncidentStatusPage() {
     if (!selected || !responseText.trim()) return
     setProcessing(true)
     try {
-      const res = await logIncidentResponse(selected.id, { action_taken: responseText })
+      const res = await logIncidentResponseAction(selected.id, { action_taken: responseText })
       if (res.error) toast.error(res.error)
       else {
         toast.success("Response logged")
@@ -79,7 +79,7 @@ export default function AdminIncidentStatusPage() {
     }
     setProcessing(true)
     try {
-      const res = await scheduleIncidentFollowUp(selected.id, { follow_up_date: followUpDate, notes: followUpNotes || undefined })
+      const res = await scheduleIncidentFollowUpAction(selected.id, { follow_up_date: followUpDate, notes: followUpNotes || undefined })
       if (res.error) toast.error(res.error)
       else {
         toast.success("Follow-up scheduled")
@@ -96,7 +96,7 @@ export default function AdminIncidentStatusPage() {
     if (!selected) return
     setProcessing(true)
     try {
-      const res = await closeIncident(selected.id)
+      const res = await closeIncidentAction(selected.id)
       if (res.error) toast.error(res.error)
       else {
         toast.success("Incident closed")

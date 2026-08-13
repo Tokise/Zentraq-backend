@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Loader2, Scan } from "lucide-react"
 import { toast } from "sonner"
-import { searchRecordsAction, type RecordSearchResult } from "@/actions/admin/records/search"
+import { searchRecordsAction, type RecordSearchResult } from "@/actions/clinical/records/search"
 
 type RfidSearchButtonProps = {
   onResults: (results: RecordSearchResult[]) => void

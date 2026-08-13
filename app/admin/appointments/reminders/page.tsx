@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table"
 import { Bell } from "lucide-react"
 import { toast } from "sonner"
-import { getAppointmentRemindersAction } from "@/actions/admin/appointments/overview"
+import { getAppointmentRemindersAction } from "@/actions/appointments/queries"
 
 export default function AdminAppointmentRemindersPage() {
   const [reminders, setReminders] = useState<Array<{

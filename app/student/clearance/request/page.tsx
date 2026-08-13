@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { FileText, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { submitMyClearanceRequestAction } from "@/actions/patient/portal"
+import { submitMyClearanceRequestAction } from "@/actions/profiles/patient-portal"
 
 export default function StudentClearanceRequestPage() {
   const [purpose, setPurpose] = useState("")

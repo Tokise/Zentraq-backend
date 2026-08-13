@@ -22,13 +22,13 @@ import {
 import { Loader2, CalendarClock } from "lucide-react"
 import { toast } from "sonner"
 import {
-  getConsultationQueue,
+  getConsultationQueueAction,
   type QueueConsultation,
-} from "@/actions/inventory/workflow-queries"
+} from "@/actions/clinical/queues"
 import {
   getConsultationDetailAction,
   type ConsultationDetailRow,
-} from "@/actions/admin/visits/overview"
+} from "@/actions/clinical/visits/queries"
 
 // Renders the doctor's follow-up scheduling workspace.
 export default function DoctorVisitFollowupPage() {
@@ -44,7 +44,7 @@ export default function DoctorVisitFollowupPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getConsultationQueue()
+      const res = await getConsultationQueueAction()
       if (res.error) {
         toast.error(res.error)
         setConsultations([])

@@ -4,7 +4,7 @@ import { createClient } from "@/utils/supabase/server"
 import { getUserRole } from "@/lib/auth/get-user-role"
 import { isAdmin } from "@/lib/auth/roles"
 import { cookies } from "next/headers"
-import { getOwnPatientProfileAction } from "@/actions/clinical/compliance-records"
+import { getOwnPatientProfileAction } from "@/actions/clinical/records/compliance"
 
 export default async function AdminLayout({
   children,

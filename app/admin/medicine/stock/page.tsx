@@ -14,9 +14,9 @@ import {
 import { Search, Package } from "lucide-react"
 import { toast } from "sonner"
 import {
-  getInventoryQueue,
+  getInventoryQueueAction,
   type InventoryMedicine,
-} from "@/actions/inventory/workflow-queries"
+} from "@/actions/inventory/queries"
 
 type MedicineStatus = "success" | "warning" | "danger" | "default"
 const INVENTORY_RENDER_DATE = Date.now()
@@ -44,7 +44,7 @@ export default function AdminMedicineStockPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getInventoryQueue()
+      const res = await getInventoryQueueAction()
       if (res.error) {
         toast.error(res.error)
         setMedicines([])

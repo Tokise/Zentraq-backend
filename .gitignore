@@ -14,7 +14,8 @@
 # testing
 /coverage
 /agent.md
-/supabase/**
+# Supabase source is versioned; only local state and secrets stay private.
+/supabase
 
 
 

@@ -7,7 +7,7 @@ import {
   addScheduleBlockAction,
   getMyScheduleAction,
   saveAvailabilityAction,
-} from "@/actions/scheduling/my-schedule";
+} from "@/actions/appointments/availability";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";

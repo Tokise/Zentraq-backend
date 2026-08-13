@@ -10,8 +10,8 @@ import { Calendar } from "@/components/ui/calendar"
 import { Badge } from "@/components/ui/badge"
 import { Search, CalendarPlus, Loader2, User } from "lucide-react"
 import { toast } from "sonner"
-import { searchRecordsAction } from "@/actions/admin/records/search"
-import { createAdminAppointmentAction } from "@/actions/admin/appointments/create"
+import { searchRecordsAction } from "@/actions/clinical/records/search"
+import { createAdminAppointmentAction } from "@/actions/appointments/scheduling"
 
 // Creates an appointment on behalf of an authorized patient.
 export default function AdminBookAppointmentPage() {

@@ -12,10 +12,10 @@ import {
 import { toast } from "sonner"
 
 import {
-  getAnalyticsOverview,
-  getComplaintFrequency,
-  getDailyConsultations,
-  getDispensingSummary,
+  getAnalyticsOverviewAction,
+  getComplaintFrequencyAction,
+  getDailyConsultationsAction,
+  getDispensingSummaryAction,
   type AnalyticsOverview,
   type ComplaintFrequency,
   type DailyConsultation,
@@ -31,7 +31,6 @@ import { ChartRadarDots } from "@/components/ui/chart-radar-dots"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { downloadClinicalReportWorkbook } from "@/lib/reports/excel-export"
 import { downloadAggregateReport } from "@/lib/reports/serverless-download"
 
 type ClinicRole = "admin" | "doctor" | "nurse"
@@ -78,10 +77,10 @@ export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
     setLoading(true)
     const [overviewResult, dailyResult, complaintResult, dispensingResult] =
       await Promise.all([
-        getAnalyticsOverview(),
-        getDailyConsultations(),
-        getComplaintFrequency(),
-        getDispensingSummary(),
+        getAnalyticsOverviewAction(),
+        getDailyConsultationsAction(),
+        getComplaintFrequencyAction(),
+        getDispensingSummaryAction(),
       ])
 
     const error =
@@ -115,12 +114,6 @@ export function ClinicalReportsWorkspace({ role }: { role: ClinicRole }) {
     try {
       await downloadAggregateReport({
         endDate: overview.period_end,
-        legacyDownload: () => downloadClinicalReportWorkbook({
-          complaints,
-          daily,
-          dispensing,
-          overview,
-        }),
         startDate: overview.period_start,
       })
       toast.success("Excel report downloaded")

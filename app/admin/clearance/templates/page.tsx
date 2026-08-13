@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Loader2, Plus, FileText, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
-import { getSettingsAction, updateSettingAction } from "@/actions/admin/settings"
+import { getSettingsAction, updateSettingAction } from "@/actions/settings/clinic"
 
 interface Template {
   id: string

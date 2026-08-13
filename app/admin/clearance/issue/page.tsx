@@ -17,9 +17,9 @@ import {
 } from "@/components/ui/dialog"
 import { Award, FileCheck, X } from "lucide-react"
 import { toast } from "sonner"
-import { getClearanceQueue } from "@/actions/inventory/workflow-queries"
-import { getClearanceDetail, approveClearance, rejectClearance } from "@/actions/clinical/clearances"
-import { getClearanceCertificatesAction } from "@/actions/admin/clearances/overview"
+import { getClearanceQueueAction } from "@/actions/clinical/queues"
+import { getClearanceDetailAction, approveClearanceAction, rejectClearanceAction } from "@/actions/clinical/clearances/management"
+import { getClearanceCertificatesAction } from "@/actions/clinical/clearances/queries"
 
 export default function AdminClearanceIssuePage() {
   const [clearances, setClearances] = useState<any[]>([])
@@ -39,7 +39,7 @@ export default function AdminClearanceIssuePage() {
     setLoading(true)
     try {
       if (viewMode === "issue") {
-        const res = await getClearanceQueue()
+        const res = await getClearanceQueueAction()
         if (res.error) toast.error(res.error)
         else setClearances(res.clearances)
       } else {
@@ -59,7 +59,7 @@ export default function AdminClearanceIssuePage() {
   }, [fetchData])
 
   const openDetail = async (id: string) => {
-    const res = await getClearanceDetail(id)
+    const res = await getClearanceDetailAction(id)
     if (res.error) {
       toast.error(res.error)
       return
@@ -73,7 +73,7 @@ export default function AdminClearanceIssuePage() {
     if (!selected) return
     setProcessing(true)
     try {
-      const res = await approveClearance(selected.id, { expires_at: expiresAt || undefined })
+      const res = await approveClearanceAction(selected.id, { expires_at: expiresAt || undefined })
       if (res.error) {
         toast.error(res.error)
       } else {
@@ -93,7 +93,7 @@ export default function AdminClearanceIssuePage() {
     }
     setProcessing(true)
     try {
-      const res = await rejectClearance(selected.id, rejectReason)
+      const res = await rejectClearanceAction(selected.id, rejectReason)
       if (res.error) {
         toast.error(res.error)
       } else {

@@ -5,10 +5,10 @@ import { Clock3, Power } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  getMyClinicianDutyStatus,
-  setMyClinicianDutyStatus,
+  getMyClinicianDutyStatusAction,
+  setMyClinicianDutyStatusAction,
   type ClinicianDutyStatus,
-} from "@/actions/clinical/visits";
+} from "@/actions/clinical/visits/workflow";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -20,7 +20,7 @@ export function DoctorDutyToggle() {
 
   // Loads the current server-derived duty state.
   const loadStatus = useCallback(async () => {
-    const result = await getMyClinicianDutyStatus();
+    const result = await getMyClinicianDutyStatusAction();
     if (result.error) toast.error(result.error);
     setStatus(result.status);
     setLoading(false);
@@ -35,7 +35,7 @@ export function DoctorDutyToggle() {
   async function changeStatus() {
     const nextOnDuty = !status?.isOnDuty;
     setSaving(true);
-    const result = await setMyClinicianDutyStatus(nextOnDuty);
+    const result = await setMyClinicianDutyStatusAction(nextOnDuty);
     setSaving(false);
     if (!result.success || !result.data) {
       toast.error(result.error ?? "Unable to change duty status");

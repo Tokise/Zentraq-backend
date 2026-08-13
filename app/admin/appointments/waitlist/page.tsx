@@ -15,9 +15,9 @@ import {
 } from "@/components/ui/dialog"
 import { ListOrdered } from "lucide-react"
 import { toast } from "sonner"
-import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/admin/appointments/overview"
-import { getAppointmentDetail, approveAppointment, rejectAppointment } from "@/actions/scheduling/review"
-import { evaluateAppointmentRequest } from "@/actions/scheduling/appointments"
+import { getAppointmentsOverviewAction, type AppointmentOverviewRow } from "@/actions/appointments/queries"
+import { getAppointmentDetailAction, approveAppointmentAction, rejectAppointmentAction } from "@/actions/appointments/review"
+import { evaluateAppointmentRequestAction } from "@/actions/appointments/requests"
 
 const WAITLIST_STATUSES = ["pending", "ai_evaluated", "recommended", "approved"]
 
@@ -50,7 +50,7 @@ export default function AdminAppointmentWaitlistPage() {
   }, [fetchData])
 
   const openDetail = async (id: string) => {
-    const res = await getAppointmentDetail(id)
+    const res = await getAppointmentDetailAction(id)
     if (res.error) {
       toast.error(res.error)
       return
@@ -62,7 +62,7 @@ export default function AdminAppointmentWaitlistPage() {
     if (!selected) return
     setProcessing(true)
     try {
-      const res = await evaluateAppointmentRequest(selected.id)
+      const res = await evaluateAppointmentRequestAction(selected.id)
       if (res.error && res.code !== "INVALID_STATE") {
         toast.error(res.error)
       } else {
@@ -79,7 +79,7 @@ export default function AdminAppointmentWaitlistPage() {
     if (!selected) return
     setProcessing(true)
     try {
-      const res = await approveAppointment(selected.id)
+      const res = await approveAppointmentAction(selected.id)
       if (res.error) {
         toast.error(res.error)
       } else {
@@ -96,7 +96,7 @@ export default function AdminAppointmentWaitlistPage() {
     if (!selected) return
     setProcessing(true)
     try {
-      const res = await rejectAppointment(selected.id, reason)
+      const res = await rejectAppointmentAction(selected.id, reason)
       if (res.error) {
         toast.error(res.error)
       } else {

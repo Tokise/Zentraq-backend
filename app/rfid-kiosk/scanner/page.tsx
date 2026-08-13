@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
-import { checkInRfid, type RfidCheckInResult } from "@/actions/rfid/kiosk";
+import {
+  checkInRfidAction,
+  type RfidCheckInResult,
+} from "@/actions/rfid/check-in";
 import { Input } from "@/components/ui/input";
 
 const CONFIRMATION_DURATION_MS = 4000;
@@ -37,7 +40,7 @@ export default function PublicRfidScannerPage() {
     if (!rfidUid.trim() || isSubmitting || sessionExpired) return;
 
     setIsSubmitting(true);
-    const response = await checkInRfid(rfidUid, crypto.randomUUID());
+    const response = await checkInRfidAction(rfidUid, crypto.randomUUID());
     setIsSubmitting(false);
 
     if (response.error || !response.result) {

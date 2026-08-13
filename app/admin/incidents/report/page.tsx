@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search, Loader2, User, AlertTriangle, Activity, HeartPulse, MapPin } from "lucide-react"
 import { toast } from "sonner"
-import { searchRecordsAction } from "@/actions/admin/records/search"
-import { reportIncident } from "@/actions/clinical/incidents"
+import { searchRecordsAction } from "@/actions/clinical/records/search"
+import { reportIncidentAction } from "@/actions/clinical/incidents/management"
 
 export default function AdminIncidentReportPage() {
   const [query, setQuery] = useState("")
@@ -60,7 +60,7 @@ export default function AdminIncidentReportPage() {
 
     setSubmitting(true)
     try {
-      const res = await reportIncident({
+      const res = await reportIncidentAction({
         patient_type: patientType(selected),
         patient_id: selected.id,
         incident_type: incidentType,
