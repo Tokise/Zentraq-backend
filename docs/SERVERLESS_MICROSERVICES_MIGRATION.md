@@ -3,26 +3,27 @@
 **Status:** Source implemented; linked deployment verification is blocked by
 unreconciled migration history
 
-**Last reviewed:** 2026-08-13
+**Last reviewed:** 2026-08-14
 
-Zentraq uses a serverless service-oriented microservices architecture. Focused
-Supabase Edge Functions provide notification, report, and RFID service
-boundaries without replacing the Next.js backend-for-frontend, Supabase Auth,
-PostgreSQL transactions, RLS, or role-aware Server Actions.
+Zentraq uses a serverless service-oriented modular architecture with focused
+microservice boundaries. Its ten original clinic submodules define product
+ownership, while Supabase Edge Functions provide notification, report, and
+RFID technical service boundaries without replacing the Next.js
+backend-for-frontend, Supabase Auth, PostgreSQL transactions, RLS, or
+role-aware Server Actions.
 
 ## Capstone-ready manuscript sections
 
 ### 2.4.1 Microservices Architecture
 
 The BCP Clinic Management System, implemented in this repository as Zentraq,
-uses a **serverless service-oriented microservices architecture**. The
-architecture applies microservice principles by separating major
-responsibilities into domain-owned services and by moving selected asynchronous
-or security-sensitive workloads into Supabase Edge Functions. Notification,
-report, and RFID functions have focused serverless execution boundaries. Other
-logical services currently share one Next.js release and one Supabase data
-platform, so the document does not claim that every service is independently
-deployed or scaled.
+uses a **serverless service-oriented modular architecture with focused
+microservice boundaries**. The ten original clinic submodules separate product
+responsibilities, while selected asynchronous or security-sensitive workloads
+run in Supabase Edge Functions. Notification, report, and RFID functions have
+focused serverless execution boundaries. The submodules otherwise share one
+Next.js release and one Supabase data platform, so this document does not claim
+that each submodule is an independently deployed or scaled service.
 
 The supported users are Student, Faculty, Staff, Nurse, Doctor, and
 Administrator. Role-specific Next.js portals form the presentation layer.
@@ -38,21 +39,30 @@ execute privileged clinical database operations.
 | --- | --- | --- |
 | API gateway or proxy | Next.js `proxy.ts` and Server Actions form the browser-facing backend-for-frontend. They route requests to authorized domain actions, Supabase Auth, protected RPCs, Storage, and Edge Functions. | This is not a separately deployed API gateway or project-owned load balancer. It shares the Next.js release and failure boundary. |
 | Event-driven service | Metadata-only PGMQ notification and report queues are consumed by `notifications-worker` and `reports-worker`; source-defined Cron jobs invoke the workers. | The source exists, but deployment, secrets, schedules, retries, and dead-letter behavior remain unverified in the linked project. |
-| Domain-specific service | Identity and Access, Patient Registry, Scheduling, Clinical Records, Pharmacy and Inventory, Notifications, Reporting and Audit, and Integrations have explicit responsibility boundaries. | Most domains communicate through internal TypeScript functions, Server Actions, and shared PostgreSQL transactions rather than independent network APIs. |
+| Submodule-oriented boundary | The ten original clinic submodules have explicit product responsibility boundaries. | Most submodules communicate through internal TypeScript functions, Server Actions, and shared PostgreSQL transactions rather than independent network APIs. |
 | Data-intensive service | Aggregate report RPCs prepare role-scoped data, and `reports-worker` produces administrative workbooks in private Storage. | Report generation is source-implemented, but deployed execution, artifact access, expiry, and workbook output require end-to-end verification. |
 
-#### Logical service responsibilities
+#### Original submodule responsibilities
 
-| Logical service | Implemented responsibility and ownership boundary |
-| --- | --- |
-| Identity and Access | Uses Supabase Auth for identities and sessions, then resolves active application roles for all six user types. It does not own clinical information. |
-| Patient Registry | Owns demographics, institutional identifiers, contact information, emergency contacts, patient type, and RFID association. |
-| Scheduling | Manages appointments, clinician availability, schedule blocks, conflict checks, booking, rescheduling, cancellation, and check-in state. |
-| Clinical Records | Manages consultations, visit reasons, triage, vital signs, diagnoses, treatments, prescriptions, follow-ups, and protected medical documents. |
-| Pharmacy and Inventory | Manages medicine definitions, stock levels, batches, dispensing, expiry monitoring, and restocking workflows. |
-| Notifications | Manages announcements, reminders, private notifications, read state, and the source-defined asynchronous notification queue. |
-| Reporting and Audit | Produces role-scoped aggregates, administrative workbooks, and implemented audit events without becoming an unrestricted secondary store of protected health information. |
-| Integrations | Handles RFID check-in and optional server-side OpenRouter appointment evaluation. Registrar and OSAS synchronization remain future integrations. |
+| Module | Original submodule | Implemented responsibility and ownership boundary |
+| --- | --- | --- |
+| 1 | Student Medical Records Management | Student identity, demographic and health records, protected documents, own-record access, and RFID association |
+| 2 | Clinic Visit & Consultation Logging | Check-in, queue, consultation state, triage, handoff, clinical outcomes, follow-up, and history |
+| 3 | Medicine Inventory & Dispensing | Medicine definitions, zero-stock visibility, batches, stock receipt, dispensing, expiry, and movement logs |
+| 4 | Appointment Scheduling System | Availability, schedule blocks, conflicts, booking, review, reminders, transitions, history, and optional advisory evaluation |
+| 5 | Incident & Emergency Case Management | Incident intake, classification, response, emergency contacts, referrals, follow-up, closure, and history |
+| 6 | Faculty & Staff Health Services | Employee identity and health records, protected documents, My Health, histories, examinations, sick leave, and compliance |
+| 7 | School Health Program Monitoring | Program proposals, approvals, participants, schedules, screenings, immunizations, monitoring, and reports |
+| 8 | Health Clearance and Certification | Requests, requirements, supporting evidence, evaluation, certificates, history, and patient access |
+| 9 | Reporting and Compliance | Role-scoped aggregates, private administrative workbooks, audit evidence, monitoring, and compliance documentation |
+| 10 | User Access & Confidentiality Control | Authentication, sessions, roles, authorization, RLS, grants, Storage, Realtime, secrets, privacy, and security assurance |
+
+The previous technical-domain labels map into this product structure: Patient
+Registry maps to Modules 1 and 6; Clinical Records to Modules 1, 2, 6, and 8;
+Scheduling to Module 4; Pharmacy and Inventory to Module 3; Identity and Access
+to Module 10; and Reporting and Audit to Modules 9 and 10. RFID supports
+Modules 1, 2, and 6. Notifications provide cross-cutting support to Modules 4,
+5, 7, 8, and 9 rather than forming an additional product module.
 
 #### Current architecture and staged boundaries
 
@@ -74,8 +84,8 @@ flowchart TB
         direction TB
         Portals["Role-specific Next.js portals"]
         Boundary["Backend-for-frontend<br/>proxy.ts · Server Actions<br/>authentication · authorization · validation"]
-        Domains["Logical domain services<br/>Identity and Access · Patient Registry · Scheduling<br/>Clinical Records · Pharmacy and Inventory<br/>Notifications · Reporting and Audit · Integrations"]
-        Portals --> Boundary --> Domains
+        Modules["Ten clinic submodules<br/>Records · Visits · Medicine · Appointments · Incidents<br/>Employee Health · Programs · Clearances · Reporting · Access"]
+        Portals --> Boundary --> Modules
     end
 
     Auth["Supabase Auth<br/>managed serverless identity"]
@@ -102,45 +112,52 @@ flowchart TB
     Users --> Portals
     Scanner --> Boundary
     Boundary --> Auth
-    Domains --> Database
+    Modules --> Database
     Database --> NotificationQueue
     NotificationWorker --> Database
-    Domains --> ReportQueue
+    Modules --> ReportQueue
     Boundary --> RfidWorker --> Database
-    Domains -.-> OpenRouter
-    Domains -.-> Candidates
+    Modules -.-> OpenRouter
+    Modules -.-> Candidates
     Candidates -.-> Database
-    Registrar -.-> Domains
-    OSAS -.-> Domains
+    Registrar -.-> Modules
+    OSAS -.-> Modules
 ```
 
 #### Implementation status
 
 | Status | Included capabilities | Meaning |
 | --- | --- | --- |
-| Implemented modular services | Role portals, domain-first Server Actions, Supabase Auth integration, patient registry, scheduling, clinical records, inventory, notifications, reporting, audit events, and RFID workflows | Production-oriented source is present, but each deployment-dependent control still requires target-environment verification. |
+| Implemented clinic submodules | The ten original submodules, six role portals, domain-first Server Actions, Supabase Auth integration, notifications, audit events, and RFID workflows | Production-oriented source is present, but each deployment-dependent control still requires target-environment verification. |
 | Source-implemented serverless boundaries | `notifications-worker`, `reports-worker`, `rfid-check-in`, protected RPCs, PGMQ queues, worker Cron migration, and the private generated-report workflow | Functions, SQL, and configuration are version-controlled; this does not prove that they are deployed or correctly configured. |
 | Deployment-unverified infrastructure | Remote migration state, Edge Function deployment, worker secrets, Cron execution, queue grants and retries, Storage policies, RLS behavior, signed URLs, and six-role isolation | These items must remain open until verified against an authorized non-production or target Supabase project. |
 | Future capabilities | Registrar and OSAS synchronization, external email or SMS delivery, centralized observability, and possible extraction of additional independently deployed services | These require approved contracts, privacy and security reviews, operational ownership, and implementation evidence. |
 
-#### Core services suitable for serverless execution
+#### Submodule-aligned serverless opportunities
 
 The following entries are **proposed serverless candidates** unless explicitly
-marked as source-implemented. A core workflow is a good candidate when it is
+marked as source-implemented. A submodule workflow is a good candidate when it is
 bounded, stateless or idempotent, scheduled or event-driven, safe to retry, and
 does not require an interactive clinical decision across several database
 records.
 
-| Core service | Serverless boundary | Trigger and security model | Recommendation |
-| --- | --- | --- | --- |
-| Identity and Access | Supabase Auth is already the managed serverless identity service. A future `institutional-account-provisioning` function could validate an approved Registrar identity and request local account creation. | Invoke provisioning only through an authenticated and authorized Server Action or trusted integration request. Use a protected idempotent RPC for the local write. | Keep login on Supabase Auth. Do not create a custom login function or transmit Registrar passwords. Add provisioning only after the external identity contract is approved. |
-| Patient Registry | A future `institutional-registry-sync` function could perform Registrar or OSAS lookup when an authorized workflow finds no local patient. | Pass an opaque request identifier, minimize the external response, and insert through a conflict-safe RPC with an immutable external-source identifier. | Later priority. Use local-first, insert-only behavior; never overwrite an existing patient automatically. Route mismatches to a reviewed reconciliation workflow. |
-| Scheduling | An `appointment-reminders-worker` could claim due rows from `appointment_reminders`, enqueue generic notifications, and mark each reminder once. A separate governed function could isolate optional OpenRouter appointment evaluation. | Use Cron plus a named worker secret for reminders. Require a user JWT and server-side authorization for on-demand AI evaluation. Both paths require idempotency, timeouts, and sanitized logs. | High-value next candidate because reminder rows already exist. Keep booking, conflict checks, approval, rescheduling, cancellation, and check-in transitions in transactional RPCs or Server Actions. |
-| Clinical Records | A `clinical-document-processor` could react to a private upload job, verify file signatures, invoke malware scanning, quarantine failures, and produce safe previews or metadata. A reminder producer could enqueue due follow-up notifications. | Use a private queue or Storage event carrying only opaque object and record identifiers. Restrict the worker to private buckets and minimum database grants. | High security value after Storage policies are verified. Do not use automatic OCR or AI output to create diagnoses, treatments, prescriptions, or final clinical records. |
-| Pharmacy and Inventory | An `inventory-attention-worker` could periodically detect low stock, zero stock, near-expiry batches, and expired batches, then enqueue the existing generic `inventory.attention` notification template. | Use Cron, an idempotent scan window, a named worker secret, and a protected aggregate or claim RPC. Queue identifiers and generic status codes instead of patient or prescription data. | High-value next candidate. Keep dispensing, stock receipt, batch adjustment, and restocking transactions synchronous and atomic; the worker must not order, dispense, or modify stock automatically. |
-| Notifications | `notifications-worker` is source-implemented for metadata-only queued notification delivery. A future provider worker could deliver approved email or SMS templates. | Existing internal worker uses a named secret and service-role-only RPCs. External delivery also requires consent, opt-out, delivery status, provider authentication, and PHI-safe templates. | Deploy and verify the internal worker first. External email or SMS remains deferred until a provider and privacy controls are approved. |
-| Reporting and Audit | `reports-worker` is source-implemented for aggregate workbooks. A future `audit-monitor` could process an audit outbox, detect missing or failed mandatory events, generate sanitized security metrics, and enforce reviewed retention jobs. | Use Cron or an outbox queue, a named worker secret, append-only audit inputs, and protected monitoring outputs. Metrics and alerts must exclude clinical content. | Deploy and verify reports first. Add audit reliability and monitoring before using audit events for security assurance or compliance evidence. |
-| Integrations | `rfid-check-in` is source-implemented. Future focused functions may handle Registrar, OSAS, and approved external notification providers. | User-facing operations require a user JWT and RLS-scoped client. Scheduled internal workers require named secrets and least-privilege RPCs. | Keep one function per approved integration contract. Do not create a general-purpose integration worker or expose service-role credentials to browsers. |
+| Module | Original submodule | Serverless boundary | Trigger and security model | Recommendation |
+| --- | --- | --- | --- | --- |
+| 1 | Student Medical Records Management | A future `clinical-document-processor` could validate private uploads; a future institutional adapter could perform an approved local-first lookup. | Use opaque record/object IDs, a private queue or Storage event, minimum grants, and conflict-safe insert-only RPCs. | Verify Storage first. Never overwrite an existing student automatically or create clinical facts from OCR or AI output. |
+| 2 | Clinic Visit & Consultation Logging | `rfid-check-in` is source-implemented; a future producer could enqueue generic follow-up reminders. | The RFID path requires a user JWT and RLS-scoped client. Scheduled reminders require a named secret and metadata-only payloads. | Deploy and verify RFID first. Keep queue claim, triage, handoff, diagnosis, treatment, prescriptions, and finalization transactional. |
+| 3 | Medicine Inventory & Dispensing | An `inventory-attention-worker` could detect low, zero, near-expiry, and expired stock and enqueue generic attention notifications. | Use Cron, an idempotent scan window, a named secret, and protected aggregate or claim RPCs without patient or prescription content. | High-value next candidate. The worker must not order, receive, adjust, dispense, or otherwise change stock. |
+| 4 | Appointment Scheduling System | An `appointment-reminders-worker` could claim due reminders; a separate governed function could isolate optional OpenRouter evaluation. | Use Cron and a named secret for reminders. Require a user JWT, server authorization, timeouts, validated output, and sanitized logs for on-demand AI. | Keep booking, conflicts, approval, rescheduling, cancellation, and check-in transactional. External AI remains policy-dependent. |
+| 5 | Incident & Emergency Case Management | A reminder producer could enqueue generic overdue follow-up notices. | Queue only opaque incident and recipient identifiers; use a named worker secret and least-privilege completion RPC. | Do not move classification, response, referral, follow-up notes, or closure to an autonomous worker. |
+| 6 | Faculty & Staff Health Services | Private-document processing and a future Registrar or HR adapter can support approved employee-record workflows. | Minimize external responses, use immutable source IDs, and insert through conflict-safe RPCs after local lookup fails. | Keep local-first and insert-only behavior. Mismatches require reviewed reconciliation rather than automatic update. |
+| 7 | School Health Program Monitoring | Scheduled program reminders or aggregate refresh jobs can be queued without clinical narrative. | Use opaque program/session IDs, named secrets, bounded batches, and idempotent completion. | Keep proposals, approval, participant changes, screenings, and immunization records in authorized transactions. |
+| 8 | Health Clearance and Certification | A document processor and expiry-reminder producer could handle private artifacts and generic due notices. | Use private Storage events or queues, object ownership checks, minimum grants, quarantine, and sanitized logs. | Keep clinical evaluation, approval, certificate issuance, and signed-URL authorization synchronous. |
+| 9 | Reporting and Compliance | `reports-worker` and `notifications-worker` are source-implemented. A future `audit-monitor` could process an outbox and sanitized security metrics. | Use named secrets, append-only audit inputs, private generated-report Storage, bounded batches, and outputs without clinical content. | Deploy and verify reports and notifications first; protect artifact ownership, expiry, immutable audit writes, and monitoring access. |
+| 10 | User Access & Confidentiality Control | Supabase Auth is the managed identity service; future sanitized security monitoring may run asynchronously. | User-facing operations require normal Auth sessions and server-side authorization. Internal monitoring requires named secrets and minimum database grants. | Keep login, active-role checks, revocation, recovery, and account writes in Auth plus protected Server Actions or RPCs; never proxy Registrar passwords. |
+
+`notifications-worker` is cross-cutting infrastructure rather than an eleventh
+submodule. `reports-worker` belongs primarily to Module 9. `rfid-check-in`
+supports Modules 1, 2, and 6. OpenRouter appointment evaluation belongs to
+Module 4, while future Registrar or OSAS integration supports Modules 1 and 6.
 
 #### Core operations that should remain transactional
 
@@ -180,7 +197,7 @@ verified, add candidates in this order:
 ### 3.2.1 Why Microservices? Justify the Choice over Monolithic Architecture
 
 Zentraq uses microservice principles instead of an undifferentiated application
-architecture because explicit domain ownership makes the system easier to
+architecture because explicit submodule ownership makes the system easier to
 understand, test, secure, and maintain. Focused serverless boundaries also keep
 scheduled notification delivery, report generation, and authenticated RFID
 check-in outside general-purpose browser code. The shared PostgreSQL platform
@@ -190,7 +207,8 @@ related records together.
 The current architecture provides the following benefits:
 
 - **Maintainability:** changes can be organized and reviewed within a clear
-  domain instead of being mixed into role-specific or catch-all modules.
+  submodule and its implementation domain instead of being mixed into
+  role-specific or catch-all modules.
 - **Security:** every browser request crosses a server-controlled boundary, and
   worker credentials, protected RPCs, RLS policies, and private Storage remain
   outside client bundles.

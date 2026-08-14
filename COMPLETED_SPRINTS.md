@@ -2,7 +2,7 @@
 
 **Project start:** 2026-07-13
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-08-14
 
 This is a source-based delivery history. **Completed** means the implementation
 is present in the current repository and has received the local checks recorded
@@ -22,6 +22,59 @@ tracked in [BACKLOG.md](BACKLOG.md).
 | App-referenced views | 9; local definitions still require capture/verification |
 | App-facing RPCs | 4: RFID check-in, consultation claim/finalization, program approval |
 | Shared activity series | 6: total, student, faculty, walk-in, appointment, RFID |
+
+## Ten-submodule delivery coverage
+
+The original Clinic Management System submodules are the canonical product
+structure. A submodule can span several delivery sprints because foundations,
+role portals, shared workflows, and hardening were implemented incrementally.
+
+| Module | Original submodule | Primary source-completed sprints | Remaining boundary |
+| --- | --- | --- | --- |
+| 1 | Student Medical Records Management | Sprints 2, 3, and 4 | RFID, ownership, Storage, and target authorization verification |
+| 2 | Clinic Visit & Consultation Logging | Sprints 2, 4, and 5 | RPC deployment, concurrency, grants, and role tests |
+| 3 | Medicine Inventory & Dispensing | Sprints 3 and 5 | Live zero-stock receipt, concurrency, audit, and worker verification |
+| 4 | Appointment Scheduling System | Sprint 3 | Staff ownership repair, runtime tests, reminder deployment, and AI governance |
+| 5 | Incident & Emergency Case Management | Sprint 3 | Role, ownership, workflow-state, and deployment verification |
+| 6 | Faculty & Staff Health Services | Sprints 2, 3, and 4 | Patient-type isolation, signed files, and external-source contract |
+| 7 | School Health Program Monitoring | Sprint 3 | Approval RPC, participant scope, grants, and deployment verification |
+| 8 | Health Clearance and Certification | Sprints 3 and 4 | Storage hardening, signed-URL ownership, and role verification |
+| 9 | Reporting and Compliance | Sprints 3 and 5 | Report-worker deployment, export security, observability, backup, and recovery |
+| 10 | User Access & Confidentiality Control | Sprints 1 through 5 | RLS/grants, MFA, rate limiting, CSP, secrets, privacy, and six-role tests |
+
+## Historical planning-ID crosswalk
+
+The former `ZQ-*` identifiers below are retained only to audit the planning-ID
+migration completed on 2026-08-14. They are not active backlog or sprint IDs;
+current work uses the `F1`–`F100` catalog in [BACKLOG.md](BACKLOG.md).
+
+| Former ID | Canonical story | Migration note |
+| --- | --- | --- |
+| ZQ-200 | F90 | Documentation baseline |
+| ZQ-201 | F89 | Database reproducibility |
+| ZQ-202 | F95 | Supabase authorization verification |
+| ZQ-203 | F40 | Staff appointment ownership repair |
+| ZQ-204 | F100 | Critical workflow and browser verification |
+| ZQ-205 | F98 | Fail-closed PHI secret handling |
+| ZQ-206 | F97 | Distributed rate limiting |
+| ZQ-207 | F98 | Production Content Security Policy |
+| ZQ-208–ZQ-209 | F88 | Audit reliability, observability, and incident response |
+| ZQ-210 | F80 and F95 | Storage and authorization hardening |
+| ZQ-211 | F96 | Privileged authentication controls |
+| ZQ-212–ZQ-213 | F36 and F99 | Privacy operations and external AI governance |
+| ZQ-214–ZQ-215 | F93 | Permission model and profile settings |
+| ZQ-216 | F86 and F87 | Report and export completion and security |
+| ZQ-217 | F89 | Historical schema and migration cleanup |
+| ZQ-218–ZQ-219 | F100 | Accessibility and performance verification |
+| ZQ-220–ZQ-221 | F90 | CI/CD, backup, restore, and disaster recovery |
+| ZQ-301 | F37 | External email or SMS reminders |
+| ZQ-302 | F9 and F59 | Bulk patient and account import |
+| ZQ-303 | F59 | Enrollment or HR identity synchronization |
+| ZQ-304 | F11 | Offline or PWA kiosk enhancement |
+| ZQ-305 | F100 | Internationalization after workflow stabilization |
+| ZQ-306 | F8 and F57 | Longitudinal clinical timeline |
+| ZQ-307 | F5 and F54 | Dedicated laboratory-result workflow |
+| ZQ-308 | F20 and F36 | Clinically governed decision support |
 
 ## Sprint 1 — Foundation, Design System, and Authentication
 
