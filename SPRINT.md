@@ -1,5 +1,7 @@
 # Zentraq Current Sprint
 
+**Last reviewed:** 2026-08-14
+
 ## Sprint 6 — Release Hardening and Verification
 
 **Dates:** 2026-08-11 to 2026-08-17
@@ -8,29 +10,45 @@
 security-reviewed release candidate by closing known database, authorization,
 patient-workflow, testing, and secret-management blockers.
 
-This sprint does not add new clinical modules. It verifies and hardens the
-workflows already documented in the
+This sprint does not add new clinic submodules. It verifies and hardens the
+workflows across the ten original submodules documented in the
 [Software Architecture Document](docs/SOFTWARE_ARCHITECTURE_DOCUMENT.md).
+
+### Canonical product structure
+
+| Module | Original submodule | Sprint 6 relationship |
+| --- | --- | --- |
+| 1 | Student Medical Records Management | Existing workflow covered by cross-role verification |
+| 2 | Clinic Visit & Consultation Logging | Existing workflow covered by database, authorization, and browser verification |
+| 3 | Medicine Inventory & Dispensing | Existing workflow covered by authorization and browser verification |
+| 4 | Appointment Scheduling System | Direct commitment through F40 and cross-role tests |
+| 5 | Incident & Emergency Case Management | Existing workflow covered by cross-role verification |
+| 6 | Faculty & Staff Health Services | Existing workflow covered by staff repair and ownership tests |
+| 7 | School Health Program Monitoring | Existing workflow covered by RPC and role verification |
+| 8 | Health Clearance and Certification | Existing workflow covered by Storage and role verification |
+| 9 | Reporting and Compliance | Direct commitments through F89 and completed F90 |
+| 10 | User Access & Confidentiality Control | Direct commitments through F95, F98, and F100 |
 
 ## Sprint status
 
-| ID | Commitment | Points | Status |
-| --- | --- | ---: | --- |
-| ZQ-200 | Rewrite README, architecture, backlog, sprint, and completed-history documentation from current source | 3 | Completed |
-| ZQ-201 | Reproduce and verify the Supabase schema, views, migrations, and RPC signatures | 8 | Ready |
-| ZQ-202 | Verify role isolation, RLS, grants, privileged functions, Storage, and Realtime policies | 8 | Ready |
-| ZQ-203 | Fix staff appointment history and cancellation ownership mapping | 3 | Ready |
-| ZQ-204 | Add and run critical automated and browser workflow tests for all six roles | 8 | Ready |
-| ZQ-205 | Remove the PHI encryption fallback and enforce managed secret configuration | 5 | Ready |
-| **Total** |  | **35** |  |
+| User Story No. | Features/Task | Module | Priority | Points | Status |
+| --- | --- | --- | --- | ---: | --- |
+| F90 | Documentation baseline | Reporting and Compliance | High | 3 | Completed |
+| F89 | Database reproducibility | Reporting and Compliance | High | 8 | Ready |
+| F95 | Supabase authorization verification | User Access & Confidentiality Control | High | 8 | Ready |
+| F40 | Staff appointment ownership repair | Appointment Scheduling System | High | 3 | Ready |
+| F100 | Critical workflow test coverage | User Access & Confidentiality Control | High | 8 | Ready |
+| F98 | Fail-closed PHI secret handling | User Access & Confidentiality Control | High | 5 | Ready |
+| **Total** |  |  |  | **35** |  |
 
-## ZQ-200 — Current-system documentation baseline
+## F90 — Current-system documentation baseline
 
 ### Deliverables
 
 - [x] Replace the README with a concise system overview, safe setup, and links.
-- [x] Rewrite the architecture document around the current service boundaries,
-      database catalog, roles, privacy, and security.
+- [x] Rewrite the architecture document around the ten original submodules,
+      technical service boundaries, database catalog, roles, privacy, and
+      security.
 - [x] Remove stale routes, schemas, framework versions, and encoding corruption
       from the primary documentation.
 - [x] Reclassify implemented work, active work, and deferred work across the
@@ -45,7 +63,7 @@ workflows already documented in the
 - `patient_complaint` is canonical; historical names appear only when explaining
   compatibility history.
 
-## ZQ-201 — Database reproducibility
+## F89 — Database reproducibility
 
 ### Problem
 
@@ -90,7 +108,7 @@ different migration, function, or grant state. A prior environment reported
 - Migration list and advisor output are recorded; timeouts or unavailable tools
   remain explicitly unverified.
 
-## ZQ-202 — Authorization and Supabase security verification
+## F95 — Authorization and Supabase security verification
 
 ### Tasks
 
@@ -117,7 +135,7 @@ different migration, function, or grant state. A prior environment reported
 - Privileged RPCs reject unauthorized roles and invalid workflow states.
 - Storage and Realtime behavior matches the architecture document.
 
-## ZQ-203 — Staff appointment ownership repair
+## F40 — Staff appointment ownership repair
 
 ### Problem
 
@@ -139,7 +157,7 @@ non-student through `faculty` and `faculty_id`.
 - Student and faculty behavior remains unchanged.
 - Supplying another profile or appointment ID does not bypass ownership.
 
-## ZQ-204 — Critical-flow test coverage
+## F100 — Critical-flow test coverage
 
 ### Automated coverage
 
@@ -175,7 +193,7 @@ error states, responsive layout, and absence of console/runtime errors.
 - Role-by-role browser results identify the tested environment and account scope.
 - No failed or timed-out check is described as passing.
 
-## ZQ-205 — Fail-closed PHI secret handling
+## F98 — Fail-closed PHI secret handling
 
 ### Tasks
 

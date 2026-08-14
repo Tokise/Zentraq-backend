@@ -4,7 +4,7 @@
 
 **Status:** Current-system baseline
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-08-14
 
 **Audience:** Developers, evaluators, clinic administrators, privacy officers,
 and security reviewers
@@ -30,7 +30,7 @@ Status terms used throughout this document:
    - [Purpose, scope, and boundaries](#11-purpose-scope-and-boundaries)
    - [Technology stack](#12-technology-stack)
    - [System and data flows](#13-system-and-data-flows)
-   - [Modules and workflows](#14-modules-and-workflows)
+   - [Original clinic submodules and workflows](#14-original-clinic-submodules-and-workflows)
    - [Route inventory](#15-route-inventory)
    - [Folder structure and integrations](#16-folder-structure-and-integrations)
 2. [Infrastructure and Architecture](#2-infrastructure-and-architecture)
@@ -83,7 +83,7 @@ provide.
 #### Current boundaries
 
 - Zentraq is one Next.js application and one Supabase-backed data platform.
-- Its logical domain services share the Next.js release and Supabase data
+- Its ten original clinic submodules share the Next.js release and Supabase data
   platform, while notification, report, and RFID workloads have focused
   source-defined Edge Function boundaries.
 - The browser uses Supabase Auth and private Realtime broadcast channels. Current
@@ -273,22 +273,40 @@ flowchart TB
 Realtime events are invalidations, not clinical record payloads. Topic policies
 cover the clinic RFID queue, a user's notifications, and patient-record topics.
 
-### 1.4 Modules and workflows
+### 1.4 Original clinic submodules and workflows
 
-| Module | Current behavior | Main roles |
-| --- | --- | --- |
-| Identity and access | Supabase login, app role mapping, active sessions, one-device invalidation, role administration | All; admin manages access |
-| Medical records | Student and employee record search, masked fields, documents, histories, allergies, medication, immunization, compliance | Admin, doctor, nurse; patients see own data |
-| Consultations | Queue, claim, visit reason, vitals, notes, diagnosis, treatment, prescriptions, follow-up, review, history | Admin, doctor, nurse |
-| Appointments | Patient request, AI-assisted evaluation, review, scheduling, reminders, rescheduling, availability | All roles according to scope |
-| RFID | Registration, patient lookup, queue check-in, claim, private queue invalidation | Admin, doctor, nurse |
-| Pharmacy | Catalog, stock, batches, prescriptions, dispensing, restock, alerts, expiry | Admin, doctor, nurse with action-specific limits |
-| Incidents | Report, list, status, response, referral, emergency contacts, follow-up | Clinic roles; student/faculty reporting routes |
-| Health programs | Proposal, approval, participants, screenings, immunizations, reporting | Admin, doctor, nurse |
-| Clearances | Patient requests, clinical evaluation, certificates, history, compliance data | All roles according to scope |
-| Analytics | Role-scoped daily activity, visit channels, statuses, complaints, medicine, and clearance summaries | Admin, doctor, nurse |
-| Communications | Announcements, user notifications, private Realtime invalidation | All roles |
-| Audit | Selected sensitive actions and notification events recorded with actor/request metadata | Admin review; server services write |
+The following ten names are the canonical product and capstone submodules.
+RFID, notifications, audit, analytics, and external integrations are enabling
+capabilities within these submodules rather than additional product modules.
+
+| Module | Original submodule | Current behavior | Main roles |
+| --- | --- | --- | --- |
+| 1 | Student Medical Records Management | Student search, profile, masked fields, health history, documents, own-record access, and RFID association | Admin, Doctor, Nurse; Student sees own data |
+| 2 | Clinic Visit & Consultation Logging | Walk-in, appointment, and RFID check-in; queue, claim, triage, handoff, final review, diagnosis, treatment, prescriptions, follow-up, and history | Admin, Doctor, Nurse; patients see own completed history |
+| 3 | Medicine Inventory & Dispensing | Catalog, zero-stock visibility, batches, prescriptions, dispensing, restock, alerts, expiry, and medicine movement logs | Admin, Doctor, Nurse with action-specific limits |
+| 4 | Appointment Scheduling System | Availability, blocks, booking, review, optional advisory evaluation, reminders, rescheduling, cancellation, check-in, and history | All roles according to scope |
+| 5 | Incident & Emergency Case Management | Patient and clinic reporting, classification, response, referral, emergency contacts, follow-up, closure, and history | Clinic roles; Student and Faculty reporting routes |
+| 6 | Faculty & Staff Health Services | Employee profiles, records, histories, documents, My Health, examinations, sick leave, and compliance data | Admin, Doctor, Nurse; Faculty and Staff see own data |
+| 7 | School Health Program Monitoring | Proposal, approval, participants, enrollment, schedules, screenings, immunizations, progress, and aggregate reports | Admin, Doctor, Nurse |
+| 8 | Health Clearance and Certification | Requests, requirements, supporting documents, evaluation, certificates, history, and patient status access | All roles according to scope |
+| 9 | Reporting and Compliance | Role-scoped dashboards, activity and operational reports, queued workbooks, audit evidence, and compliance documentation | Admin, Doctor, Nurse with scoped report rights |
+| 10 | User Access & Confidentiality Control | Authentication, active sessions, role routing, access administration, action authorization, RLS, grants, Storage, Realtime, privacy, and security controls | All; Admin manages approved access workflows |
+
+#### Compatibility with former technical-domain terms
+
+Earlier architecture drafts used eight technical responsibility groupings. They
+map to the canonical product submodules as follows and are not separate modules:
+
+| Former technical grouping | Canonical submodule ownership |
+| --- | --- |
+| Patient Registry | Modules 1 and 6 |
+| Clinical Records | Modules 1, 2, 6, and 8 |
+| Scheduling | Module 4 |
+| Pharmacy and Inventory | Module 3 |
+| Identity and Access | Module 10 |
+| Reporting and Audit | Modules 9 and 10 |
+| RFID integration | Modules 1, 2, and 6 |
+| Notifications | Cross-cutting support for Modules 4, 5, 7, 8, and 9 |
 
 #### Consultation workflow
 
@@ -594,12 +612,13 @@ utils/supabase/ Browser, server-session, middleware, and service-role clients
 
 ### 2.1 Architecture style and topology
 
-Zentraq uses a **serverless service-oriented architecture**. Domain folders
-separate responsibilities, while focused Supabase Edge Functions provide
-notification, report, and RFID service boundaries. The logical domains still
-share one Next.js deployment, one TypeScript codebase, and one primary Supabase
-project. PostgreSQL functions provide atomic database operations rather than
-acting as separately deployed services.
+Zentraq uses a **serverless service-oriented modular architecture**. The ten
+original clinic submodules define product ownership, while domain folders keep
+the implementation maintainable and focused Supabase Edge Functions provide
+notification, report, and RFID technical service boundaries. All ten
+submodules still share one Next.js deployment, one TypeScript codebase, and one
+primary Supabase project. PostgreSQL functions provide atomic database
+operations rather than acting as separately deployed services.
 
 This design favors simple deployment and transactional consistency. Its main
 trade-off is shared failure and release scope: an application deployment or
@@ -628,7 +647,7 @@ flowchart TB
         Proxy["proxy.ts"]
         Pages["Server and client components"]
         Actions["Server Actions"]
-        Services["Domain services"]
+        Submodules["Ten clinic submodules"]
     end
 
     subgraph SupabasePlatform["Supabase project"]
@@ -641,12 +660,12 @@ flowchart TB
 
     OpenRouter["Optional OpenRouter"]
 
-    Browser --> Proxy --> Pages --> Actions --> Services
+    Browser --> Proxy --> Pages --> Actions --> Submodules
     Proxy --> Auth
     Actions --> API --> Postgres
     Actions --> Storage
     Postgres --> Realtime --> Browser
-    Services -.->|optional| OpenRouter
+    Submodules -.->|optional| OpenRouter
 ```
 
 The repository contains a `.vercel` directory but no `vercel.json`. A Vercel
@@ -656,13 +675,13 @@ met.
 
 ### 2.2 Microservices foundation: staged serverless boundaries
 
-Zentraq uses a **serverless service-oriented microservices architecture**. It
-applies API-boundary, event-driven, domain-specific, and data-intensive
-microservice patterns. Notification delivery, report generation, and RFID
-check-in have focused source-defined Edge Function boundaries. Other logical
-services currently share the Next.js release and Supabase data platform, so the
-documentation does not claim that every domain can already be deployed, scaled,
-released, or recovered independently.
+Zentraq uses a **serverless service-oriented modular architecture with focused
+microservice boundaries**. It applies API-boundary, event-driven,
+submodule-oriented, and data-intensive patterns. Notification delivery, report
+generation, and RFID check-in have focused source-defined Edge Function
+boundaries. The ten clinic submodules otherwise share the Next.js release and
+Supabase data platform, so the documentation does not claim that each submodule
+can already be deployed, scaled, released, or recovered independently.
 
 #### Microservice pattern classification
 
@@ -670,7 +689,7 @@ released, or recovered independently.
 | --- | --- | --- |
 | API gateway or proxy | Next.js `proxy.ts` and Server Actions provide the browser-facing backend-for-frontend for authentication, authorization, validation, routing, and response minimization. | It is not a separately deployed gateway or project-owned load balancer and shares the Next.js failure and release boundary. |
 | Event-driven service | Metadata-only PGMQ queues, source-defined Cron jobs, `notifications-worker`, and `reports-worker` support asynchronous delivery and report processing. | Source is version-controlled; deployment, worker secrets, schedules, retries, and dead-letter behavior remain unverified. |
-| Domain-specific service | Eight logical domains separate business ownership and server workflows. | Most domains communicate through internal TypeScript functions, Server Actions, protected RPCs, and shared database transactions rather than service APIs. |
+| Submodule-oriented boundary | Ten original clinic submodules separate product ownership and workflows. | Most submodules communicate through internal TypeScript functions, Server Actions, protected RPCs, and shared database transactions rather than independent service APIs. |
 | Data-intensive service | Role-scoped aggregate RPCs and `reports-worker` generate administrative workbooks in private Storage. | Deployed execution, artifact access, expiry, and workbook output still require end-to-end verification. |
 
 ```mermaid
@@ -691,8 +710,8 @@ flowchart TB
         direction TB
         Portals["Role-specific Next.js portals"]
         Boundary["Backend-for-frontend<br/>proxy.ts / Server Actions<br/>authentication / authorization / validation"]
-        Domains["Logical domain services<br/>Identity and Access / Patient Registry / Scheduling<br/>Clinical Records / Pharmacy and Inventory<br/>Notifications / Reporting and Audit / Integrations"]
-        Portals --> Boundary --> Domains
+        Modules["Ten clinic submodules<br/>Records / Visits / Medicine / Appointments / Incidents<br/>Employee Health / Programs / Clearances / Reporting / Access"]
+        Portals --> Boundary --> Modules
     end
 
     Auth["Supabase Auth<br/>managed serverless identity"]
@@ -719,41 +738,45 @@ flowchart TB
     Users --> Portals
     Scanner --> Boundary
     Boundary --> Auth
-    Domains --> Database
+    Modules --> Database
     Database --> NotificationQueue
     NotificationWorker --> Database
-    Domains --> ReportQueue
+    Modules --> ReportQueue
     Boundary --> RfidWorker --> Database
-    Domains -.->|optional server-only request| OpenRouter
-    Domains -.-> Candidates
+    Modules -.->|optional server-only request| OpenRouter
+    Modules -.-> Candidates
     Candidates -.-> Database
-    Registrar -.-> Domains
-    OSAS -.-> Domains
+    Registrar -.-> Modules
+    OSAS -.-> Modules
 ```
 
-| Logical service | Current responsibility and ownership boundary |
-| --- | --- |
-| Identity and Access | Authenticates users, validates active sessions, and resolves roles for administrator, doctor, nurse, student, faculty, and staff; it must not store clinical data |
-| Patient Registry | Owns demographics, institutional identifiers, contact and emergency-contact data, patient type, and RFID association |
-| Scheduling | Owns appointments, clinician availability, schedule blocks, conflict checks, booking, rescheduling, cancellation, and check-in state |
-| Clinical Records | Owns consultations, visit reasons, triage, vitals, diagnoses, treatments, prescriptions, follow-ups, and protected clinical documents |
-| Pharmacy and Inventory | Owns medicine definitions, stock, batches, dispensing, expiry, and restocking workflows |
-| Notifications | Owns announcements, reminders, private user notifications, and their delivery or read state |
-| Reporting and Audit | Produces role-scoped aggregates and records implemented audit events without becoming an unrestricted secondary PHI store |
-| Integrations | Coordinates RFID input and optional OpenRouter evaluation; OSAS and Registrar synchronization remain future work |
-
-#### Core serverless opportunities
-
-| Core service | Suitable serverless responsibility | Keep transactional |
+| Module | Original submodule | Current responsibility and ownership boundary |
 | --- | --- | --- |
-| Identity and Access | Managed Supabase Auth is already serverless; future approved institutional account provisioning may use a focused function. | Login, active-role authorization, and local account writes remain in Auth plus protected Server Actions or RPCs. |
-| Patient Registry | Local-first Registrar or OSAS lookup and insert-only provisioning after an approved integration contract. | Patient correction, merge, and reconciliation must require authorized review and atomic writes. |
-| Scheduling | Due appointment and follow-up reminder production; optional governed OpenRouter evaluation isolation. | Booking, conflict checks, approval, rescheduling, cancellation, and check-in transitions. |
-| Clinical Records | Private-document signature validation, malware scanning, quarantine, preview generation, and due follow-up notification production. | Triage, diagnosis, treatment, prescriptions, and consultation finalization. |
-| Pharmacy and Inventory | Scheduled low-stock, zero-stock, and expiry detection that enqueues generic `inventory.attention` notifications. | Dispensing, stock receipt, batch adjustment, and restocking. |
-| Notifications | Source-implemented queued notification worker; future consent-aware external email or SMS delivery. | Notification ownership and authenticated inbox access. |
-| Reporting and Audit | Source-implemented aggregate report worker; future audit outbox processing, sanitized monitoring, and reviewed retention jobs. | Report authorization, artifact ownership, signed-URL issuance, and immutable audit writes. |
-| Integrations | Source-implemented RFID function; future one-function-per-contract Registrar, OSAS, or delivery-provider adapters. | Integration authorization, local invariants, and conflict-safe database transactions. |
+| 1 | Student Medical Records Management | Student identity, demographic and health records, protected documents, own-record access, and student RFID association |
+| 2 | Clinic Visit & Consultation Logging | Check-in, queue, consultation state, triage, handoff, clinical outcomes, follow-up, and history |
+| 3 | Medicine Inventory & Dispensing | Medicine definitions, zero-stock visibility, batches, stock receipt, dispensing, expiry, and movement logs |
+| 4 | Appointment Scheduling System | Availability, blocks, conflicts, booking, review, reminders, rescheduling, cancellation, check-in, and optional advisory evaluation |
+| 5 | Incident & Emergency Case Management | Incident intake, classification, response, emergency contacts, referral, follow-up, closure, and history |
+| 6 | Faculty & Staff Health Services | Faculty and Staff identity, health records, documents, My Health, consultation history, examinations, sick leave, and compliance |
+| 7 | School Health Program Monitoring | Program proposals, approvals, participants, schedules, screenings, immunizations, monitoring, and reports |
+| 8 | Health Clearance and Certification | Requests, requirements, evidence, clinical evaluation, certification, history, and patient access |
+| 9 | Reporting and Compliance | Role-scoped aggregates, administrative workbooks, audit evidence, operational monitoring, and compliance documentation |
+| 10 | User Access & Confidentiality Control | Authentication, sessions, roles, authorization, RLS, grants, Storage, Realtime, secrets, privacy, and security assurance |
+
+#### Submodule-aligned serverless opportunities
+
+| Module | Original submodule | Suitable serverless responsibility | Keep transactional or synchronous |
+| --- | --- | --- | --- |
+| 1 | Student Medical Records Management | Private-document validation and future approved local-first institutional lookup | Record correction, merge, ownership checks, and conflict-safe local writes |
+| 2 | Clinic Visit & Consultation Logging | Source-implemented `rfid-check-in` orchestration and future follow-up notification production | Queue claim, triage, handoff, diagnosis, treatment, prescription, and finalization |
+| 3 | Medicine Inventory & Dispensing | Scheduled low-stock, zero-stock, and expiry detection that enqueues generic attention notifications | Dispensing, receipt, adjustment, and restocking |
+| 4 | Appointment Scheduling System | Due reminder production and optional governed OpenRouter evaluation isolation | Booking, conflicts, approval, rescheduling, cancellation, and check-in transitions |
+| 5 | Incident & Emergency Case Management | Generic overdue follow-up notifications that contain no clinical narrative | Incident classification, response, referral, follow-up, and closure |
+| 6 | Faculty & Staff Health Services | Private-document validation and future approved local-first Registrar or HR lookup | Record correction, reconciliation, ownership, and health-record writes |
+| 7 | School Health Program Monitoring | Scheduled program reminders and aggregate refresh jobs | Proposal approval, participant changes, screenings, and immunization records |
+| 8 | Health Clearance and Certification | Expiry reminders and private-document security processing | Clinical evaluation, approval, certificate issuance, and ownership checks |
+| 9 | Reporting and Compliance | Source-implemented `reports-worker`, notification delivery, and future audit monitoring | Report authorization, artifact ownership, signed URLs, and immutable audit writes |
+| 10 | User Access & Confidentiality Control | Managed Supabase Auth and sanitized security monitoring | Login boundary, active-role authorization, session revocation, and local account writes |
 
 The recommended next candidates are appointment reminders, inventory attention,
 private-document security processing, and audit monitoring, in that order after
@@ -770,7 +793,7 @@ are maintained in
 
 | Status | Included capabilities | Interpretation |
 | --- | --- | --- |
-| Implemented modular services | Six role portals, domain-first Server Actions, Supabase Auth integration, patient registry, scheduling, clinical records, inventory, notifications, reporting, audit events, and RFID workflows | Production-oriented source is present; deployment-dependent controls are not automatically verified. |
+| Implemented clinic submodules | The ten original submodules, six role portals, domain-first Server Actions, Supabase Auth integration, notifications, audit events, and RFID workflows | Production-oriented source is present; deployment-dependent controls are not automatically verified. |
 | Source-implemented serverless boundaries | `notifications-worker`, `reports-worker`, `rfid-check-in`, protected RPCs, PGMQ queues, worker Cron migration, and private generated-report workflow | Functions, SQL, and configuration are version-controlled but are not confirmed deployed. |
 | Deployment-unverified infrastructure | Remote migrations, Edge Function deployment, secrets, Cron, queue grants and retries, Storage policies, RLS behavior, signed URLs, and six-role isolation | These remain open until tested against an authorized non-production or target Supabase project. |
 | Future capabilities | Registrar and OSAS synchronization, external email or SMS delivery, centralized observability, and possible independent service extraction | These require approved contracts, security and privacy review, operational ownership, and implementation evidence. |
@@ -1278,25 +1301,20 @@ no normal portal access identified.
 
 | Module | Admin | Doctor | Nurse | Student | Faculty | Staff |
 | --- | --- | --- | --- | --- | --- | --- |
-| Dashboard and analytics | Clinic-wide | Assigned | Assigned/view-only reports | Own summary | Own summary | Own summary |
-| Student records | Manage/view | Clinical view | Clinical view | Own | — | — |
-| Employee records | Manage/view | Clinical view | Clinical view | — | Own | Own |
-| Active consultations | Clinic-wide/claim/finalize | Assigned/claim/finalize | Assigned/claim/handoff | — | — | — |
-| Consultation history | Clinic-wide | Assigned | Assigned | Own | Own | Own |
-| Diagnosis/treatment | Permitted by current finalization | Manage assigned | — | View own completed data | View own completed data | View own completed data |
-| Prescriptions | Clinical/admin workflows | Prescribe | Dispense, no prescribing | View own | View own | View own |
-| Appointments | Book/review/manage | Assigned/review | Review/manage | Own request/reschedule | Own request/reschedule | Request works; history/cancel mapping is incomplete |
-| Medicine inventory | Manage | Selected views/actions | Stock, restock, dispense | — | — | — |
-| Incidents | Manage | Manage/view | Manage/report | Report route | Report route | — |
-| Health programs | Manage/approve | Propose/view | Propose/view | — | — | — |
-| Clearances | Manage/evaluate | Evaluate | History/support | Own request/history | Own request/history | Own request/history |
-| RFID registration | Manage | — | — | — | — | — |
-| RFID kiosk | Use | Use | Use | — | — | — |
-| Access control/audit | Manage/view | — | — | — | — | — |
-| Announcements | View/manage route | View | View | View | View | View |
-| Personal clinic-employee health | Own when linked to staff profile | Own when linked | Own when linked | — | — | — |
+| 1. Student Medical Records Management | Manage/view | Clinical view | Clinical view | Own | — | — |
+| 2. Clinic Visit & Consultation Logging | Clinic-wide, claim, finalize | Assigned, claim, finalize | Assigned, claim, handoff | Own completed history | Own completed history | Own completed history |
+| 3. Medicine Inventory & Dispensing | Manage | Stock, prescribe, selected dispensing | Stock, restock, dispense | View own prescriptions | View own prescriptions | View own prescriptions |
+| 4. Appointment Scheduling System | Book, review, manage | Assigned review and schedule | Review and manage | Own request/reschedule | Own request/reschedule | Own request; history/cancel repair is active |
+| 5. Incident & Emergency Case Management | Manage | Manage/view | Manage/report | Report route | Report route | — |
+| 6. Faculty & Staff Health Services | Manage/view; own when linked | Clinical view; own when linked | Clinical view; own when linked | — | Own | Own |
+| 7. School Health Program Monitoring | Manage/approve | Propose/view | Propose/view | — | — | — |
+| 8. Health Clearance and Certification | Manage/evaluate | Evaluate | History/support | Own request/history | Own request/history | Own request/history |
+| 9. Reporting and Compliance | Clinic-wide reports, workbooks, audit review | Assigned reports | Assigned/view-only reports | Own summary | Own summary | Own summary |
+| 10. User Access & Confidentiality Control | Manage approved access workflows | Own session and portal | Own session and portal | Own session and portal | Own session and portal | Own session and portal |
 
-This matrix summarizes present route/action intent. It is not a substitute for
+This matrix summarizes present route/action intent. RFID check-in supports
+Modules 1, 2, and 6; announcements and notifications support several modules;
+neither is an additional product module. The matrix is not a substitute for
 function-level authorization tests. Several action files share clinic-role read
 access while individual mutations use narrower lists.
 
@@ -1704,7 +1722,7 @@ after the relevant source, deployed configuration, and role behavior are tested.
 - [ ] Tables match the context schema and are not mislabeled as confirmed live.
 - [ ] Views and RPCs match current code references and migration evidence.
 - [ ] `patient_complaint` is canonical outside historical compatibility discussion.
-- [ ] No documentation claims every logical service is independently deployed, universal audit coverage,
+- [ ] No documentation claims every clinic submodule is independently deployed, universal audit coverage,
       browser-free Supabase use, deployed migration state, or legal compliance.
 - [ ] Markdown contains no broken encoding and `git diff --check` passes.
 
