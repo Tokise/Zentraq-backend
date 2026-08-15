@@ -136,6 +136,7 @@ next.config.ts Response security headers and Next.js configuration
 
 - [Software Architecture Document](docs/SOFTWARE_ARCHITECTURE_DOCUMENT.md)
 - [Serverless MicroServices](docs/SERVERLESS_MICROSERVICES_MIGRATION.md)
+- [Testing Strategy](docs/TESTING_STRATEGY.md)
 - [Server action boundaries](actions/README.md)
 - [Current sprint](SPRINT.md)
 - [Completed sprints](COMPLETED_SPRINTS.md)
