@@ -35,6 +35,7 @@ type ServiceName =
   | "reporting";
 
 const ROUTES: Array<{ prefixes: string[]; service: ServiceName }> = [
+  { prefixes: ["/api/v1/rfid/check-ins"], service: "clinical" },
   { prefixes: ["/api/v1/users", "/api/v1/rfid"], service: "identity" },
   {
     prefixes: [
@@ -46,9 +47,17 @@ const ROUTES: Array<{ prefixes: string[]; service: ServiceName }> = [
   },
   { prefixes: ["/api/v1/appointments"], service: "appointments" },
   { prefixes: ["/api/v1/inventory"], service: "inventory" },
-  { prefixes: ["/api/v1/notifications"], service: "notifications" },
   {
-    prefixes: ["/api/v1/reports", "/api/v1/audit", "/api/v1/dashboard"],
+    prefixes: ["/api/v1/notifications", "/api/v1/notification-jobs"],
+    service: "notifications",
+  },
+  {
+    prefixes: [
+      "/api/v1/reports",
+      "/api/v1/report-jobs",
+      "/api/v1/audit",
+      "/api/v1/dashboard",
+    ],
     service: "reporting",
   },
   { prefixes: ["/api/v1/ai"], service: "ai" },
@@ -250,6 +259,7 @@ async function proxyDomainRequest(
         method: request.method,
         headers: {
           accept: "application/json",
+          authorization: request.header("authorization") ?? "",
           "content-type": "application/json",
           "x-request-id": request.requestId,
           "x-zentraq-context": signed.payload,

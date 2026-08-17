@@ -21,6 +21,14 @@ import {
   type AuthContext,
 } from "@zentraq/shared";
 
+import {
+  enforceRfidRateLimit,
+  invokeRfidEdgeFunction,
+  requireForwardedAccessToken,
+  rfidCheckInSchema,
+  type RfidCheckInInvoker,
+} from "./rfid.js";
+
 const patientTypeSchema = z.enum(["student", "faculty", "staff"]);
 const idSchema = z.string().uuid();
 
@@ -39,6 +47,7 @@ interface ClinicalDependencies {
   contextSecret?: string;
   identityServiceUrl?: string;
   internalServiceKey?: string;
+  invokeRfidCheckIn?: RfidCheckInInvoker;
   reportingServiceUrl?: string;
   timeoutMs?: number;
 }
@@ -65,6 +74,38 @@ export function createClinicalApp(
   const timeoutMs = dependencies.timeoutMs ?? Number(process.env.SERVICE_TIMEOUT_MS ?? 8_000);
 
   app.use("/api/v1", requireInternalContext(contextSecret));
+
+  app.post(
+    "/api/v1/rfid/check-ins",
+    requireRoles("admin", "doctor", "nurse"),
+    asyncRoute(async (request, response) => {
+      const auth = authenticated(request.auth);
+      enforceRfidRateLimit(auth.userId);
+      const parsed = rfidCheckInSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new AppError(
+          400,
+          "VALIDATION_ERROR",
+          "The RFID check-in request is invalid.",
+        );
+      }
+      const invoke = dependencies.invokeRfidCheckIn ?? invokeRfidEdgeFunction;
+      const result = await invoke(
+        parsed.data,
+        requireForwardedAccessToken(request),
+        timeoutMs,
+      );
+      sendData(response, result);
+      void auditRfidCheckIn(
+        auth,
+        parsed.data.eventId,
+        result,
+        reportingServiceUrl,
+        internalServiceKey,
+        timeoutMs,
+      );
+    }),
+  );
 
   app.get(
     "/api/v1/records/me",
@@ -372,6 +413,49 @@ async function assignedVisitIds(clinicAccountId: string): Promise<string[]> {
     .limit(1_000);
   if (error) throw new AppError(503, "DATABASE_UNAVAILABLE", "Unable to load assigned visits.");
   return [...new Set((data ?? []).map((row) => row.visit_id))];
+}
+
+// Records a PHI-free RFID execution event without logging the card value.
+async function auditRfidCheckIn(
+  auth: AuthContext,
+  eventId: string,
+  result: {
+    createdNew: boolean;
+    patientType: "student" | "faculty" | "staff";
+    queueEntryId: string;
+  },
+  reportingUrl: string,
+  serviceKey: string,
+  timeoutMs: number,
+): Promise<void> {
+  try {
+    await serviceRequest(`${reportingUrl}/internal/audit`, {
+      body: {
+        action: "RFID_SCAN",
+        entityId: result.queueEntryId,
+        entityType: "rfid_check_in",
+        metadata: {
+          createdNew: result.createdNew,
+          eventId,
+          executionPath: "edge",
+          patientType: result.patientType,
+        },
+        userId: auth.userId,
+      },
+      requestId: auth.requestId,
+      serviceKey,
+      timeoutMs,
+    });
+  } catch {
+    console.error(
+      JSON.stringify({
+        code: "AUDIT_WRITE_FAILED",
+        event: "audit_write_failed",
+        requestId: auth.requestId,
+        service: "clinical-service",
+      }),
+    );
+  }
 }
 
 // Records a sanitized medical-record access event without delaying the read response.

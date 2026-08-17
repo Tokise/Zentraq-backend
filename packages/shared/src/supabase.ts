@@ -34,3 +34,25 @@ export function createAuthClient(): SupabaseClient {
     },
   );
 }
+
+// Creates a request-scoped client that preserves the caller's RLS identity.
+export function createUserClient(accessToken: string): SupabaseClient {
+  if (!accessToken.trim()) {
+    throw new Error("A user access token is required.");
+  }
+  return createClient(
+    requiredEnvironment("SUPABASE_URL"),
+    requiredEnvironment("SUPABASE_PUBLISHABLE_KEY"),
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      },
+    },
+  );
+}

@@ -36,7 +36,11 @@ const dashboardRoleSchema = z.enum(["admin", "doctor", "nurse"]);
 const reportRequestSchema = z
   .object({
     endDate: z.iso.date(),
-    reportType: z.enum(["consultations", "appointments", "inventory", "audit"]),
+    idempotencyKey: z
+      .string()
+      .regex(/^[A-Za-z0-9._:-]{8,128}$/)
+      .optional(),
+    reportType: z.literal("clinic-aggregate"),
     startDate: z.iso.date(),
   })
   .refine((value) => value.startDate <= value.endDate, {
@@ -88,19 +92,7 @@ export function createReportingApp(
     asyncRoute(async (request, response) => {
       const parsed = auditSchema.safeParse(request.body);
       if (!parsed.success) throw new AppError(400, "VALIDATION_ERROR", "Invalid audit event.");
-      const { data, error } = await createAdminClient()
-        .from("audit_logs")
-        .insert({
-          action: parsed.data.action,
-          entity_id: parsed.data.entityId ?? null,
-          entity_type: parsed.data.entityType ?? null,
-          metadata: parsed.data.metadata,
-          user_id: parsed.data.userId ?? null,
-        })
-        .select("id")
-        .single();
-      if (error || !data) throw new AppError(503, "AUDIT_UNAVAILABLE", "Unable to record audit event.");
-      sendData(response, data, 201);
+      sendData(response, await recordAuditEvent(parsed.data), 201);
     }),
   );
 
@@ -150,17 +142,19 @@ export function createReportingApp(
   );
 
   app.post(
-    "/api/v1/reports",
+    ["/api/v1/reports", "/api/v1/report-jobs"],
     requireRoles("admin"),
     asyncRoute(async (request, response) => {
       const auth = authenticated(request.auth);
       const parsed = reportRequestSchema.safeParse(request.body);
       if (!parsed.success) throw new AppError(400, "VALIDATION_ERROR", "Invalid report request.");
-      const idempotencyKey = [
-        parsed.data.reportType,
-        parsed.data.startDate,
-        parsed.data.endDate,
-      ].join(":");
+      const idempotencyKey =
+        parsed.data.idempotencyKey ??
+        [
+          parsed.data.reportType,
+          parsed.data.startDate,
+          parsed.data.endDate,
+        ].join(":");
       const { data, error } = await createAdminClient().rpc("enqueue_report_request", {
         requested_by: auth.userId,
         requested_correlation_id: randomUUID(),
@@ -172,12 +166,29 @@ export function createReportingApp(
       if (error || typeof data !== "string") {
         throw new AppError(503, "REPORT_UNAVAILABLE", "The report could not be queued.");
       }
-      sendData(response, { requestId: data }, 202);
+      publishAuditEvent({
+        action: "REPORT_REQUESTED",
+        entityId: data,
+        entityType: "report_request",
+        metadata: {
+          reportType: parsed.data.reportType,
+        },
+        userId: auth.userId,
+      });
+      sendData(
+        response,
+        {
+          jobId: data,
+          requestId: data,
+          status: "queued",
+        },
+        202,
+      );
     }),
   );
 
   app.get(
-    "/api/v1/reports/:reportId",
+    ["/api/v1/reports/:reportId", "/api/v1/report-jobs/:reportId"],
     requireRoles("admin"),
     asyncRoute(async (request, response) => {
       const auth = authenticated(request.auth);
@@ -186,13 +197,16 @@ export function createReportingApp(
       sendData(response, {
         errorCode: status.error_code,
         id: status.id,
-        status: status.status,
+        status: normalizeJobStatus(status.status),
       });
     }),
   );
 
   app.get(
-    "/api/v1/reports/:reportId/download",
+    [
+      "/api/v1/reports/:reportId/download",
+      "/api/v1/report-jobs/:reportId/result",
+    ],
     requireRoles("admin"),
     asyncRoute(async (request, response) => {
       const auth = authenticated(request.auth);
@@ -214,6 +228,13 @@ export function createReportingApp(
       if (signed.error || !signed.data.signedUrl) {
         throw new AppError(503, "REPORT_UNAVAILABLE", "The report download is unavailable.");
       }
+      publishAuditEvent({
+        action: "REPORT_DOWNLOADED",
+        entityId: reportId,
+        entityType: "report_request",
+        metadata: {},
+        userId: auth.userId,
+      });
       sendData(response, { expiresIn: 300, url: signed.data.signedUrl });
     }),
   );
@@ -221,6 +242,46 @@ export function createReportingApp(
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
+}
+
+// Persists one sanitized audit event owned by Reporting Service.
+async function recordAuditEvent(
+  input: z.infer<typeof auditSchema>,
+): Promise<{ id: string }> {
+  const { data, error } = await createAdminClient()
+    .from("audit_logs")
+    .insert({
+      action: input.action,
+      entity_id: input.entityId ?? null,
+      entity_type: input.entityType ?? null,
+      metadata: input.metadata,
+      user_id: input.userId ?? null,
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new AppError(
+      503,
+      "AUDIT_UNAVAILABLE",
+      "Unable to record audit event.",
+    );
+  }
+  return data;
+}
+
+// Publishes a best-effort audit event without delaying the domain response.
+function publishAuditEvent(
+  input: z.infer<typeof auditSchema>,
+): void {
+  void recordAuditEvent(input).catch(() => {
+    console.error(
+      JSON.stringify({
+        code: "AUDIT_WRITE_FAILED",
+        event: "audit_write_failed",
+        service: "reporting-service",
+      }),
+    );
+  });
 }
 
 // Requires a signed gateway context for reporting data.
@@ -278,6 +339,15 @@ async function dashboardAggregate(
   };
 }
 
+// Maps worker-specific states to the stable public job contract.
+export function normalizeJobStatus(
+  status: string,
+): "queued" | "processing" | "succeeded" | "failed" {
+  if (status === "completed") return "succeeded";
+  if (status === "dead_letter" || status === "expired") return "failed";
+  return status === "processing" ? "processing" : "queued";
+}
+
 // Retrieves one report status after the protected RPC rechecks Admin ownership.
 async function reportStatus(reportId: string, userId: string): Promise<ReportStatusRow> {
   const { data, error } = await createAdminClient().rpc("get_report_request_status", {
@@ -285,6 +355,19 @@ async function reportStatus(reportId: string, userId: string): Promise<ReportSta
     requested_report_id: reportId,
   });
   const row = Array.isArray(data) ? (data[0] as ReportStatusRow | undefined) : undefined;
-  if (error || !row) throw new AppError(404, "REPORT_NOT_FOUND", "The report request is unavailable.");
+  if (error) {
+    throw new AppError(
+      503,
+      "REPORT_UNAVAILABLE",
+      "The report status is temporarily unavailable.",
+    );
+  }
+  if (!row) {
+    throw new AppError(
+      404,
+      "REPORT_NOT_FOUND",
+      "The report request was not found.",
+    );
+  }
   return row;
 }

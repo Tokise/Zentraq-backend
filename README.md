@@ -20,7 +20,7 @@ Identity | Clinical | Appointments | Inventory
 Notifications | Reporting | AI
         |
         v
-One Supabase project: Auth + PostgreSQL + Storage
+One Supabase project: Auth + PostgreSQL + Storage + Queues + Edge Functions
 ```
 
 Only the API Gateway is intended to be public. Domain services are configured
@@ -34,10 +34,10 @@ every service must continue to reject unsigned direct access.
 | --- | ---: | --- |
 | API Gateway | 4000 | Public routing, request IDs, CORS, rate limiting, authentication coordination, timeouts, and public error envelopes |
 | Identity Service | 4001 | Supabase token validation, protected role resolution, profiles, clinic accounts, patient references, and RFID identity lookup |
-| Clinical Service | 4002 | Patient-owned and clinician-assigned records, visits, and consultations |
+| Clinical Service | 4002 | Patient-owned and clinician-assigned records, visits, consultations, and the RFID Edge Function adapter |
 | Appointment Service | 4003 | Booking, availability, appointment ownership, assignment, and state transitions |
 | Inventory Service | 4004 | Catalog stock views, idempotent receipts, atomic dispensing RPC orchestration, and dispensing logs |
-| Notification Service | 4005 | Notification creation, user-owned reads, and delivery state |
+| Notification Service | 4005 | User-scoped notification reads, read state, and asynchronous notification jobs |
 | Reporting Service | 4006 | Sanitized audit events, role-scoped dashboard aggregates, report jobs, and signed report downloads |
 | AI Service | 4007 | Advisory OpenRouter scheduling and inventory outputs; no database mutation credentials |
 
@@ -97,6 +97,7 @@ service name.
 - `GET /api/v1/users/me`
 - `GET /api/v1/users`
 - `POST /api/v1/rfid/lookup`
+- `POST /api/v1/rfid/check-ins`
 - `GET|POST /api/v1/appointments`
 - `GET|PATCH /api/v1/appointments/:appointmentId`
 - `GET /api/v1/appointments/availability`
