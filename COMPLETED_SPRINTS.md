@@ -238,14 +238,24 @@ until tested against the target Supabase project.
 - Migrations, RLS, grants, RPCs, Storage, and Realtime remain deployed-unverified.
 - Staff appointment creation uses `staff_id`, but current history/cancellation
   actions still use the faculty mapping.
-- The PHI helper has an unsafe fallback and is not integrated with clinical
-  persistence.
+- At Sprint 5 close, the PHI helper had an unsafe fallback and was not
+  integrated with clinical persistence. The fallback was removed in source on
+  2026-08-17; managed-key operations and field-level integration remain open.
 - Rate limiting is process-local; CSP retains unsafe allowances; audit coverage
   and monitoring are incomplete.
 - Critical E2E and role-by-role browser verification are not yet recorded.
 
 These limitations are committed to Sprint 6 or retained in the prioritized
 backlog; they are not silently treated as completed production controls.
+
+### 2026-08-17 architecture implementation note
+
+The local `zentraq-backend` repository now contains the source for eight
+independently runnable services, while the existing frontend Server Actions
+remain active during the safe migration window. This is implementation
+evidence, not a completed sprint or deployment claim. The target Supabase
+schema, Render services, Vercel configuration, and six-role end-to-end behavior
+remain open verification work.
 
 ## Completion policy
 

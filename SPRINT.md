@@ -1,6 +1,6 @@
 # Zentraq Current Sprint
 
-**Last reviewed:** 2026-08-14
+**Last reviewed:** 2026-08-17
 
 ## Sprint 6 — Release Hardening and Verification
 
@@ -38,7 +38,7 @@ workflows across the ten original submodules documented in the
 | F95 | Supabase authorization verification | User Access & Confidentiality Control | High | 8 | Ready |
 | F40 | Staff appointment ownership repair | Appointment Scheduling System | High | 3 | Ready |
 | F100 | Critical workflow test coverage | User Access & Confidentiality Control | High | 8 | Ready |
-| F98 | Fail-closed PHI secret handling | User Access & Confidentiality Control | High | 5 | Ready |
+| F98 | Fail-closed PHI secret handling | User Access & Confidentiality Control | High | 5 | Implemented (source); verification open |
 | **Total** |  |  |  | **35** |  |
 
 ## F90 — Current-system documentation baseline
@@ -197,11 +197,11 @@ error states, responsive layout, and absence of console/runtime errors.
 
 ### Tasks
 
-- [ ] Remove the hardcoded fallback from `lib/crypto-phi.ts`.
-- [ ] Fail startup or helper invocation clearly when a required key is absent.
+- [x] Remove the hardcoded fallback from `lib/crypto-phi.ts`.
+- [x] Fail helper invocation clearly when a required key is absent.
 - [ ] Use a managed, random, server-only key with a documented rotation design.
-- [ ] Confirm the helper is still unused before changing any stored format.
-- [ ] Do not encrypt existing columns until field selection, migration, search,
+- [x] Confirm the helper is still unused before changing any stored format.
+- [x] Do not encrypt existing columns until field selection, migration, search,
       rotation, backup, and recovery behavior are approved.
 - [ ] Scan source, history, configuration, and built assets for exposed secrets.
 
@@ -242,3 +242,23 @@ error states, responsive layout, and absence of console/runtime errors.
 - Destructive cleanup of historical database objects before live dependency
   analysis
 - A claim of HIPAA or Philippine Data Privacy Act certification
+
+## Microservices migration implementation addendum
+
+On 2026-08-17, a separate local `zentraq-backend` Git repository was created
+with an API Gateway and seven domain services. The frontend gained a typed API
+client, a server token bridge, and a conditional `/api/v1/*` rewrite. Existing
+clinic Server Actions remain the active paths because the services, secrets,
+target migration, Render network, and six-role workflows are not deployed or
+verified end to end.
+
+Locally verified evidence includes a frozen pnpm install, backend ESLint and
+type checks, four automated test files containing eight passing tests,
+production builds for all backend packages, and direct health responses from
+all eight services. Frontend focused ESLint, TypeScript, and production build
+checks pass. The first sandboxed build could not fetch Google Fonts; a rerun
+with network access compiled successfully and generated 145 routes.
+
+The source also adds `dispense_medicine_v1` as an atomic, idempotent inventory
+RPC migration. It has not been pushed because local and remote Supabase
+migration histories must be reconciled first.

@@ -6,14 +6,14 @@ inventory, incidents, health programs, clearances, reporting, and patient
 self-service. The current portals serve administrators, doctors, nurses,
 students, faculty members, and staff.
 
-The application follows a serverless service-oriented architecture. Pages and
-interactive workspaces call server-side actions, which enforce authentication,
-role checks, input validation, data scoping, and DTO shaping before accessing
-Supabase. Focused Supabase Edge Functions handle notification delivery, report
-generation, and RFID check-in boundaries. Supabase also provides Auth,
-PostgreSQL, Storage, Realtime, and database RPCs. An optional OpenRouter
-integration can provide appointment-priority decision support; it is not a
-diagnostic or prescribing system.
+Zentraq is in an incremental two-repository microservices migration. This
+repository remains the Next.js frontend and working backend-for-frontend while
+`zentraq-backend` contains a separately runnable API Gateway plus Identity,
+Appointment, Clinical, Inventory, Notification, Reporting, and AI services.
+Supabase remains the shared Auth, PostgreSQL, Storage, Realtime, and RPC
+platform. Existing Server Actions and focused Supabase Edge Functions remain
+active until equivalent gateway paths are deployed and verified for all six
+roles; source extraction alone is not a safe cutover signal.
 
 ## Core capabilities
 
@@ -56,6 +56,7 @@ Versions below come from the current `package.json`.
 | Charts | Recharts 3.8.0 |
 | Dates and icons | date-fns 4.4.0, Lucide React 1.24.0 |
 | Notifications | Sonner 2.0.7 and Supabase private Realtime broadcasts |
+| Backend migration | Node.js 22, Express 5, pnpm workspaces, Vitest, and Render Blueprint source in `zentraq-backend` |
 
 The local Supabase configuration targets PostgreSQL 17. A deployed project may
 differ and must be checked before applying migrations.
@@ -94,6 +95,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=replace-with-local-publishable-key
 
 # Server-only; never use a NEXT_PUBLIC_ prefix
 SUPABASE_SERVICE_ROLE=replace-with-local-service-role-key
+BACKEND_URL=http://localhost:4000
 
 # Optional appointment decision-support provider
 AI_PROVIDER=replace-with-openrouter-api-key
@@ -110,10 +112,11 @@ PHI_ENCRYPTION_KEY=replace-with-a-managed-random-secret
 or other secret in a `NEXT_PUBLIC_` variable; Next.js includes those variables
 in browser bundles.
 
-The current PHI encryption helper is not integrated into clinical persistence
-and contains a development fallback. Treat application-level PHI encryption as
-an open security item until the fallback is removed, keys are managed securely,
-and encrypted-field migrations are implemented and verified.
+The PHI encryption helper now fails closed unless a managed server-only key of
+at least 32 characters is configured. It is still not integrated into clinical
+persistence, so the source does not claim application-level encryption of
+clinical columns. Field selection, versioned ciphertext, key rotation, backup,
+recovery, and data migrations remain separate reviewed work.
 
 ## Project structure
 
@@ -123,7 +126,7 @@ app/           Next.js pages, layouts, loading, and error boundaries
 components/    Shared UI and domain workspaces
 constants/     Shared application constants
 docs/          Architecture and technical documentation
-lib/           Auth, security, validation, DTO, masking, and utility code
+lib/           Auth, API client, security, validation, DTO, masking, and utilities
 services/      AI, audit, and notification services
 supabase/      Local configuration, migrations, and seed data
 types/         Shared application and DTO types
@@ -137,6 +140,7 @@ next.config.ts Response security headers and Next.js configuration
 - [Software Architecture Document](docs/SOFTWARE_ARCHITECTURE_DOCUMENT.md)
 - [Serverless MicroServices](docs/SERVERLESS_MICROSERVICES_MIGRATION.md)
 - [Testing Strategy](docs/TESTING_STRATEGY.md)
+- [Microservices Migration Report](docs/MICROSERVICES_MIGRATION_REPORT.md)
 - [Server action boundaries](actions/README.md)
 - [Current sprint](SPRINT.md)
 - [Completed sprints](COMPLETED_SPRINTS.md)
@@ -149,6 +153,13 @@ that every migration is applied, every RLS policy or grant is active in a
 deployed Supabase project, or every operational safeguard is in place. Validate
 the target database, role paths, storage policies, backups, logging, and secrets
 before deployment.
+
+The local `zentraq-backend` repository and its Render Blueprint are
+source-implemented and locally verified, but no GitHub remote, Render service,
+Vercel rewrite, or target Supabase migration is claimed deployed by this
+repository. Frontend clinic call sites intentionally retain their working
+Server Action paths until the replacement services pass staging and six-role
+end-to-end verification.
 
 Zentraq handles health and identity information. The documented controls and
 HIPAA/Philippine Data Privacy Act mappings are engineering guidance, not legal

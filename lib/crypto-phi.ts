@@ -3,20 +3,19 @@ import crypto from "crypto"
 
 const ALGORITHM = "aes-256-gcm"
 const IV_LENGTH = 12
-const AUTH_TAG_LENGTH = 16
 
-/**
- * Derives a 32-byte encryption key from environment variables.
- */
+// Derives a 32-byte encryption key from the dedicated PHI secret.
 function getEncryptionKey(): Buffer {
-  const secret = process.env.PHI_ENCRYPTION_KEY || process.env.SUPABASE_SECRET_KEY || "zentraq-default-phi-secret-key-change-in-prod"
+  const secret = process.env.PHI_ENCRYPTION_KEY
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      "PHI_ENCRYPTION_KEY must contain at least 32 characters.",
+    )
+  }
   return crypto.scryptSync(secret, "zentraq-salt-v1", 32)
 }
 
-/**
- * Encrypts a Protected Health Information (PHI) string using AES-256-GCM.
- * Output format: iv_hex:auth_tag_hex:encrypted_data_hex
- */
+// Encrypts a PHI string with AES-256-GCM into iv:tag:ciphertext format.
 export function encryptPHI(text: string | null | undefined): string | null {
   if (!text) return null
 
@@ -37,9 +36,7 @@ export function encryptPHI(text: string | null | undefined): string | null {
   }
 }
 
-/**
- * Decrypts a Protected Health Information (PHI) payload encrypted with AES-256-GCM.
- */
+// Decrypts one AES-256-GCM PHI payload while preserving legacy plaintext reads.
 export function decryptPHI(encryptedPayload: string | null | undefined): string | null {
   if (!encryptedPayload) return null
 
