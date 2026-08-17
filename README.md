@@ -51,12 +51,12 @@ Versions below come from the current `package.json`.
 | Language | TypeScript 5 |
 | Styling | Tailwind CSS 4 |
 | UI primitives | Base UI 1.6.0, Radix Tabs 1.1.21, shadcn configuration |
-| Data platform | Supabase JS, SSR, and Functions JS 2.110.2 |
+| Data platform | Supabase JS and SSR for frontend Auth; PostgreSQL, Storage, RPCs, Queues, Cron, and retained Edge Functions owned from zentraq-backend |
 | Validation | Zod 4.4.3 |
 | Charts | Recharts 3.8.0 |
 | Dates and icons | date-fns 4.4.0, Lucide React 1.24.0 |
 | Notifications | Sonner 2.0.7 and Supabase private Realtime broadcasts |
-| Backend migration | Node.js 22, Express 5, pnpm workspaces, Vitest, and Render Blueprint source in `zentraq-backend` |
+| Backend migration | Node.js 22, Express 5, pnpm workspaces, Vitest, and manually managed Render services in `zentraq-backend` |
 
 The local Supabase configuration targets PostgreSQL 17. A deployed project may
 differ and must be checked before applying migrations.
@@ -141,6 +141,7 @@ next.config.ts Response security headers and Next.js configuration
 - [Serverless MicroServices](docs/SERVERLESS_MICROSERVICES_MIGRATION.md)
 - [Testing Strategy](docs/TESTING_STRATEGY.md)
 - [Microservices Migration Report](docs/MICROSERVICES_MIGRATION_REPORT.md)
+- [Render API migration status](docs/RENDER_API_MIGRATION_STATUS.md)
 - [Server action boundaries](actions/README.md)
 - [Current sprint](SPRINT.md)
 - [Completed sprints](COMPLETED_SPRINTS.md)

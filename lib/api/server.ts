@@ -2,10 +2,25 @@ import "server-only"
 
 import { cookies } from "next/headers"
 
-import { apiRequest, type ApiRequestOptions } from "@/lib/api/client"
+import {
+  apiRequest,
+  type ApiRequestOptions,
+} from "@/lib/api/client"
 import { createClient } from "@/utils/supabase/server"
 
-// Calls the gateway from server code with the current Supabase access token.
+// Resolves the server-only gateway URL with a safe local fallback.
+function backendUrl(): string {
+  const configured = process.env.BACKEND_URL?.trim()
+  if (configured) return configured
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "BACKEND_URL is required in production.",
+    )
+  }
+  return "http://localhost:4000"
+}
+
+// Calls the gateway with the current Supabase access token.
 export async function authenticatedApiRequest<T>(
   path: `/api/v1/${string}`,
   options: Omit<ApiRequestOptions, "accessToken"> = {},
@@ -20,6 +35,6 @@ export async function authenticatedApiRequest<T>(
   return apiRequest<T>(path, {
     ...options,
     accessToken: session.access_token,
-    baseUrl: process.env.BACKEND_URL ?? "http://localhost:4000",
+    baseUrl: backendUrl(),
   })
 }
