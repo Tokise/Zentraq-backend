@@ -1,6 +1,6 @@
 # Zentraq Product Backlog (User Stories)
 
-**Last reviewed:** 2026-08-14
+**Last reviewed:** 2026-08-17
 
 This backlog uses the ten original Clinic Management System submodules as the
 canonical product structure. Each submodule owns ten user stories, producing a
@@ -150,6 +150,21 @@ Sprint 6 is detailed in [SPRINT.md](SPRINT.md).
 | F40 | Staff appointment ownership repair | Appointment Scheduling System | High | Current Sprint |
 | F100 | Critical workflow test coverage | User Access & Confidentiality Control | High | Current Sprint |
 | F98 | Fail-closed PHI secret handling | User Access & Confidentiality Control | High | Current Sprint |
+
+### Microservices migration traceability
+
+The 2026-08-17 extraction does not create a new catalog ID or an eleventh
+product module.
+It is an architectural implementation spanning the existing F1-F100 catalog:
+Identity maps primarily to F91-F96; Appointment to F31-F40; Clinical to the
+clinical capabilities in Modules 1, 2, 5, 6, 7, and 8; Inventory to F21-F30;
+Notification to cross-cutting reminder work; Reporting to F81-F90; and AI to
+the policy-dependent portions of F36 and F99.
+
+The local backend source, API client, Render Blueprint, and inventory RPC are
+implemented. Deployment, call-site cutover, database application, browser
+verification, and cloud operations remain `Deployment Verification`. See the
+[migration report](docs/MICROSERVICES_MIGRATION_REPORT.md).
 
 ## Open-work requirements
 

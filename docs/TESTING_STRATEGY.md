@@ -2,9 +2,9 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | Proposed testing baseline |
-| Source review date | 2026-08-15 |
-| Applies to | Current Zentraq source tree |
+| Status | Active transitional baseline; partial backend automation implemented |
+| Source review date | 2026-08-17 |
+| Applies to | `zentraq` frontend and local `zentraq-backend` source trees |
 | Audience | Capstone evaluators, developers, testers, security reviewers, and clinic stakeholders |
 
 ## 1. Purpose and status boundary
@@ -14,13 +14,16 @@ through a complete clinic workflow. The strategy prioritizes patient safety,
 confidentiality, authorization, data integrity, accessibility, and reliable
 recovery over raw test-count or coverage percentages.
 
-This is a strategy document, not evidence that the described automation already
-exists. At the review date:
+This document separates implemented evidence from proposed coverage. At the
+review date:
 
 - `package.json` provides `dev`, `build`, `start`, and `lint` scripts, but no
   automated unit, integration, or end-to-end test scripts.
-- No Vitest, Playwright, Jest, Cypress, or pgTAP test suites were found in the
-  source tree. The root `test.md` file is empty and is not an executable suite.
+- The frontend has no Vitest, Playwright, Jest, Cypress, or pgTAP suite. The root
+  `test.md` file is empty and is not an executable suite.
+- The backend workspace uses Vitest and Supertest. Four test files with eight
+  tests cover shared signed context, Gateway behavior, Identity authorization,
+  and AI authorization/fallback. Domain integration coverage remains open.
 - Supabase is configured for imperative migrations, local Auth, PostgreSQL,
   Storage, Realtime, and Edge Functions.
 - Notification, report, and RFID check-in Edge Functions are source-defined.
@@ -28,8 +31,9 @@ exists. At the review date:
 - Source-defined migrations and security controls do not prove that the same
   objects, grants, RLS policies, or function versions are active remotely.
 
-No application, migration, database, or infrastructure change is made by this
-document.
+Backend source, a frontend API bridge, and an atomic inventory migration now
+exist, but this strategy is not evidence that any cloud or Supabase deployment
+is active.
 
 ## 2. Testing objectives
 
@@ -130,8 +134,8 @@ record or committing an invalid clinical state.
 
 ## 5. Test layers and recommended tools
 
-Tool choices below are recommendations for a later implementation request. They
-are not installed or configured by this document.
+Frontend tool choices below remain recommendations. Vitest and Supertest are
+already installed in the backend workspace with pinned lockfile versions.
 
 ### 5.1 Static verification
 
@@ -141,6 +145,15 @@ Every change should first pass the repository's current static checks:
 pnpm run lint
 pnpm exec tsc --noEmit
 pnpm run build
+```
+
+The backend repository must also pass:
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
 Static checks should also reject committed secrets, accidental
@@ -259,7 +272,31 @@ HTTP method, payload limits, dependency timeouts, database errors, and duplicate
 delivery. Worker tests must prove at-least-once execution does not produce
 duplicate externally visible effects.
 
-### 5.7 End-to-end browser tests
+### 5.7 Backend API and service tests
+
+Run Gateway and domain-service tests at three levels: isolated middleware,
+HTTP contracts with mocked downstream services, and staging integration against
+synthetic Supabase fixtures. Every public endpoint requires missing-token,
+invalid-token, wrong-role, cross-account/assignment, malformed-input, timeout,
+and safe-error cases.
+
+| Service | Priority evidence |
+| --- | --- |
+| API Gateway | CORS allowlist, request IDs, rate limits, invalid/expired token, Identity timeout, route timeout, no upstream detail leakage |
+| Identity | Token validation, active role from protected records, disabled account, minimized profile, RFID input and authorization |
+| Appointment | Patient ownership, clinician assignment, availability/conflicts, transitions, idempotency, notification failure isolation |
+| Clinical | Own-record denial, assignment filtering, role-specific DTOs, consultation state, audit failure behavior |
+| Inventory | Admin/Nurse role, positive quantity, idempotency, concurrent stock, prescription match, rollback on invariant failure |
+| Notification | Own inbox only, admin create, idempotent internal create, read-state ownership, pagination bounds |
+| Reporting | Role scope, aggregate minimization, report authorization, signed-download expiry, audit metadata sanitization |
+| AI | Allowed roles, strict schema, invalid provider JSON, timeout, deterministic fallback, unknown identifier rejection, no mutation |
+
+Internal services must reject unsigned, expired, or incorrectly signed context
+and wrong service credentials even if reached directly. Tests must assert that
+tokens, keys, RFID values, and medical narrative are absent from logs and public
+errors.
+
+### 5.8 End-to-end browser tests
 
 Use Playwright against a production build and an isolated local or staging
 Supabase environment. Cover Chromium first in pull requests; run Chromium,
@@ -498,6 +535,8 @@ flowchart TB
 - Changed Server Actions include allowed-role and denied-role tests.
 - Changed clinical, authorization, Storage, Realtime, RPC, or worker behavior
   includes relevant integration and negative tests.
+- Changed Gateway or service behavior includes authentication, authorization,
+  validation, timeout, direct-service, and safe-error regression tests.
 - No committed secret or browser-exposed privileged key.
 - Documentation and requirement traceability are updated for changed behavior.
 
@@ -508,6 +547,10 @@ flowchart TB
   release source.
 - RLS, grants, views, RPC execution, Storage policies, Realtime topics, Edge
   Function JWT/secret enforcement, schedules, and queues are live-tested.
+- Render exposes only the Gateway publicly; every domain service validates
+  signed internal context and rejects direct/expired/forged requests.
+- Vercel Network evidence shows only explicitly migrated clinic capabilities
+  using `/api/v1/*`; retained Server Actions still work until accepted cutover.
 - All six roles pass route, action, ownership, assignment, and direct-object
   negative tests.
 - No open critical or high-severity defect; lower-severity acceptance requires a
@@ -550,12 +593,13 @@ authorization claims.
 
 ### Phase 1: Fast foundation
 
-1. Add approved Vitest, React Testing Library, and Playwright development tooling
-   with pinned versions and the existing `pnpm-lock.yaml` workflow.
+1. Expand the backend Vitest/Supertest foundation to every domain service; add
+   approved React Testing Library and Playwright tooling to the frontend with
+   pinned versions and each repository's authoritative `pnpm-lock.yaml`.
 2. Add deterministic scripts for lint, type check, unit, component, E2E, and
    aggregate CI execution.
-3. Unit-test validation, role routes, authorization helpers, DTO masking, and
-   critical utilities.
+3. Unit-test validation, role routes, signed context, authorization helpers,
+   DTO masking, API error normalization, timeouts, and critical utilities.
 4. Create synthetic users and fixture builders without production data.
 
 ### Phase 2: Database and authorization assurance
@@ -570,11 +614,12 @@ authorization claims.
 
 ### Phase 3: Workflow and Edge Function coverage
 
-1. Add Deno unit and HTTP contract suites for the three Edge Functions.
-2. Add Playwright smoke tests for all six portals.
-3. Automate the consultation, appointment, inventory, RFID, report, and patient
+1. Add staging HTTP/integration suites for the Gateway and seven services.
+2. Add Deno unit and HTTP contract suites for the three Edge Functions.
+3. Add Playwright smoke tests for all six portals.
+4. Automate the consultation, appointment, inventory, RFID, report, and patient
    self-service critical paths.
-4. Add accessibility checks and cross-browser release suites.
+5. Add accessibility checks and cross-browser release suites.
 
 ### Phase 4: Operational hardening
 

@@ -1,18 +1,20 @@
 # Zentraq Software Architecture Document
 
-**Version:** 3.1
+**Version:** 4.0
 
-**Status:** Current-system baseline
+**Status:** Transitional two-repository source baseline
 
-**Last reviewed:** 2026-08-14
+**Last reviewed:** 2026-08-17
 
 **Audience:** Developers, evaluators, clinic administrators, privacy officers,
 and security reviewers
 
-This document describes the implementation present in the repository at the
-review date. It is not a target-state blueprint. A source-code observation does
-not prove that the same migration, policy, grant, secret, or operational control
-is active in a deployed environment.
+This document describes the implementation present in the frontend repository
+and the adjacent local `zentraq-backend` repository at the review date. The
+backend extraction is implemented in source, while the existing frontend
+Server Actions remain the active clinic-data path until deployed replacements
+are verified. Source observations do not prove cloud, migration, policy, grant,
+secret, network, or operational state.
 
 Status terms used throughout this document:
 
@@ -35,7 +37,7 @@ Status terms used throughout this document:
    - [Folder structure and integrations](#16-folder-structure-and-integrations)
 2. [Infrastructure and Architecture](#2-infrastructure-and-architecture)
    - [Architecture style and topology](#21-architecture-style-and-topology)
-   - [Microservices foundation: staged serverless boundaries](#22-microservices-foundation-staged-serverless-boundaries)
+   - [Microservices foundation and staged cutover](#22-microservices-foundation-and-staged-cutover)
    - [Layers and trust boundaries](#23-layers-and-trust-boundaries)
    - [Supabase data infrastructure](#24-supabase-data-infrastructure)
    - [Database architecture and schema authority](#25-database-architecture-and-schema-authority)
@@ -82,10 +84,13 @@ provide.
 
 #### Current boundaries
 
-- Zentraq is one Next.js application and one Supabase-backed data platform.
-- Its ten original clinic submodules share the Next.js release and Supabase data
-  platform, while notification, report, and RFID workloads have focused
-  source-defined Edge Function boundaries.
+- Zentraq now has exactly two local Git repositories: the Next.js `zentraq`
+  frontend and the Node/Express `zentraq-backend` microservices workspace.
+- The backend workspace contains an API Gateway and seven domain services with
+  independent build/deployment definitions. Cloud deployment is unverified.
+- The ten original clinic submodules remain the product taxonomy and share one
+  Supabase project. Existing Server Actions remain active during cutover, while
+  notification, report, and RFID Edge Functions are retained transition paths.
 - The browser uses Supabase Auth and private Realtime broadcast channels. Current
   clinical table reads and writes are performed through server-side actions or
   database RPCs rather than direct browser table queries.
@@ -128,6 +133,9 @@ local Supabase configuration.
 | Notifications | Sonner 2.0.7 and Supabase Realtime | Local feedback and private invalidation events |
 | Optional AI | OpenRouter chat-completions endpoint | Appointment priority and staff/slot recommendation |
 | Package manager | pnpm | `pnpm-lock.yaml` is the authoritative dependency lockfile |
+| Backend services | Node.js 22, Express 5, TypeScript 6 | API Gateway and seven independently runnable services in `zentraq-backend` |
+| Backend tests | Vitest and Supertest | Shared signing, Gateway, Identity, and AI behavior currently covered |
+| Backend deployment source | Render Blueprint | One public gateway and seven private services; deployment unverified |
 
 The installed Next.js package requires Node.js 20.9.0 or newer, while the
 installed Supabase JS package requires Node.js 22.0.0 or newer. The effective
@@ -584,6 +592,7 @@ components/
   medical/      Records and patient self-service workspaces
   ui/           Shared design-system controls
 lib/
+  api/          Typed frontend API client and server token bridge
   auth/         Role routing and session helpers
   data/         DTO builders, masks, and query helpers
   security/     Server Action actor and origin guards
@@ -597,6 +606,11 @@ supabase/
 types/          Shared TypeScript contracts
 utils/supabase/ Browser, server-session, middleware, and service-role clients
 ```
+
+The adjacent `zentraq-backend` repository owns `packages/shared`,
+`services/api-gateway`, and the Identity, Appointment, Clinical, Inventory,
+Notification, Reporting, and AI service packages. It is intentionally not
+nested into this frontend Git repository.
 
 | Integration | Data exchanged | Boundary |
 | --- | --- | --- |
@@ -612,18 +626,18 @@ utils/supabase/ Browser, server-session, middleware, and service-role clients
 
 ### 2.1 Architecture style and topology
 
-Zentraq uses a **serverless service-oriented modular architecture**. The ten
-original clinic submodules define product ownership, while domain folders keep
-the implementation maintainable and focused Supabase Edge Functions provide
-notification, report, and RFID technical service boundaries. All ten
-submodules still share one Next.js deployment, one TypeScript codebase, and one
-primary Supabase project. PostgreSQL functions provide atomic database
-operations rather than acting as separately deployed services.
+Zentraq uses a **serverless service-oriented microservices architecture**. The
+ten original clinic submodules define product ownership; the runtime source is
+split between a Next.js frontend and a Node/Express backend workspace. The
+backend provides an API Gateway and seven domain services. Focused Supabase
+Edge Functions remain during migration, and one Supabase project provides Auth,
+PostgreSQL, Storage, Realtime, and atomic RPCs.
 
-This design favors simple deployment and transactional consistency. Its main
-trade-off is shared failure and release scope: an application deployment or
-database outage can affect all modules, and service-role misuse in one action can
-cross domain boundaries.
+The shared database limits data isolation and remains a platform-wide failure
+domain, but it preserves referential integrity and transactional clinical and
+inventory workflows during extraction. Service boundaries add network,
+credential, timeout, observability, and partial-failure risks; deployment must
+therefore be incremental and reversible.
 
 ```mermaid
 ---
@@ -639,58 +653,70 @@ config:
     layoutDirection: TB
 ---
 flowchart TB
-    subgraph Client["Untrusted client environment"]
-        Browser["Browser and RFID workstation"]
+    Browser["Browser and RFID workstation"]
+
+    subgraph Frontend["zentraq frontend"]
+        Pages["Role portals"]
+        Actions["Existing Server Actions"]
+        Client["Typed API client"]
+        Pages --> Actions
+        Pages --> Client
     end
 
-    subgraph NextRuntime["Next.js runtime"]
-        Proxy["proxy.ts"]
-        Pages["Server and client components"]
-        Actions["Server Actions"]
-        Submodules["Ten clinic submodules"]
+    subgraph Backend["zentraq-backend · source implemented"]
+        Gateway["API Gateway"]
+        Identity["Identity Service"]
+        Domains["Appointment · Clinical · Inventory<br/>Notification · Reporting · AI"]
+        Gateway --> Identity
+        Gateway --> Domains
     end
 
-    subgraph SupabasePlatform["Supabase project"]
+    subgraph SupabasePlatform["One Supabase project"]
         Auth["Auth"]
-        API["Data API and RPC"]
-        Postgres["PostgreSQL 17 locally"]
+        Data["PostgreSQL · RPC · RLS"]
         Storage["Storage"]
         Realtime["Realtime"]
+        Edge["Retained Edge Functions"]
     end
 
     OpenRouter["Optional OpenRouter"]
 
-    Browser --> Proxy --> Pages --> Actions --> Submodules
-    Proxy --> Auth
-    Actions --> API --> Postgres
+    Browser --> Pages
+    Browser --> Auth
+    Actions --> Data
     Actions --> Storage
-    Postgres --> Realtime --> Browser
-    Submodules -.->|optional| OpenRouter
+    Client -.->|after verified cutover| Gateway
+    Identity --> Auth
+    Identity --> Data
+    Domains --> Data
+    Domains --> Storage
+    Domains -.-> OpenRouter
+    Data --> Realtime --> Browser
+    Actions --> Edge --> Data
 ```
 
-The repository contains a `.vercel` directory but no `vercel.json`. A Vercel
-deployment is plausible, not verified by source. The Next.js runtime may be
-deployed elsewhere if environment, network, and server-only requirements are
-met.
+The frontend has a conditional `/api/v1/*` rewrite to `BACKEND_URL`. The
+backend has a Render Blueprint defining one public gateway and seven private
+services. These are deployment source, not evidence that Vercel or Render has
+been configured.
 
-### 2.2 Microservices foundation: staged serverless boundaries
+### 2.2 Microservices foundation and staged cutover
 
-Zentraq uses a **serverless service-oriented modular architecture with focused
-microservice boundaries**. It applies API-boundary, event-driven,
-submodule-oriented, and data-intensive patterns. Notification delivery, report
-generation, and RFID check-in have focused source-defined Edge Function
-boundaries. The ten clinic submodules otherwise share the Next.js release and
-Supabase data platform, so the documentation does not claim that each submodule
-can already be deployed, scaled, released, or recovered independently.
+Zentraq applies API-gateway, domain-service, event-driven, and data-intensive
+patterns. The seven backend services are independently runnable packages and
+have separate Render build filters. Notification delivery, report generation,
+and RFID check-in retain focused Edge Function boundaries during migration.
+Operational independence is not claimed until deployment, monitoring, rollback,
+and failure-isolation behavior are verified.
 
 #### Microservice pattern classification
 
 | Pattern | Current implementation | Architectural boundary |
 | --- | --- | --- |
-| API gateway or proxy | Next.js `proxy.ts` and Server Actions provide the browser-facing backend-for-frontend for authentication, authorization, validation, routing, and response minimization. | It is not a separately deployed gateway or project-owned load balancer and shares the Next.js failure and release boundary. |
+| API gateway | Public `/api/v1`, request IDs, CORS, rate limiting, Identity coordination, HMAC-signed internal context, routing, and timeouts | Source implemented and locally tested; deployment and shared/distributed rate limiting remain unverified. |
 | Event-driven service | Metadata-only PGMQ queues, source-defined Cron jobs, `notifications-worker`, and `reports-worker` support asynchronous delivery and report processing. | Source is version-controlled; deployment, worker secrets, schedules, retries, and dead-letter behavior remain unverified. |
-| Submodule-oriented boundary | Ten original clinic submodules separate product ownership and workflows. | Most submodules communicate through internal TypeScript functions, Server Actions, protected RPCs, and shared database transactions rather than independent service APIs. |
-| Data-intensive service | Role-scoped aggregate RPCs and `reports-worker` generate administrative workbooks in private Storage. | Deployed execution, artifact access, expiry, and workbook output still require end-to-end verification. |
+| Domain services | Identity, Appointment, Clinical, Inventory, Notification, Reporting, and AI expose versioned capability contracts. | Services share one database and privileged key during the first phase; every query therefore needs service-side scope enforcement. |
+| Data-intensive service | Reporting owns aggregate/report contracts; Inventory calls a protected atomic dispensing RPC. | Target migration, live artifact authorization, and concurrent behavior require staging evidence. |
 
 ```mermaid
 ---
@@ -704,50 +730,19 @@ config:
 ---
 flowchart TB
     Users["Users<br/>Student / Faculty / Staff<br/>Nurse / Doctor / Administrator"]
-    Scanner["RFID workstation"]
+    Frontend["Next.js frontend<br/>Server Actions retained"]
+    Gateway["API Gateway<br/>new paths after verification"]
+    Identity["Identity Service<br/>Supabase token + role resolution"]
+    Domains["Appointment · Clinical · Inventory<br/>Notification · Reporting · AI"]
+    Supabase["Shared Supabase project<br/>Auth · PostgreSQL · Storage · Realtime"]
+    Edge["Retained Edge Functions<br/>notification · report · RFID"]
 
-    subgraph Application["Implemented source - shared Next.js deployment"]
-        direction TB
-        Portals["Role-specific Next.js portals"]
-        Boundary["Backend-for-frontend<br/>proxy.ts / Server Actions<br/>authentication / authorization / validation"]
-        Modules["Ten clinic submodules<br/>Records / Visits / Medicine / Appointments / Incidents<br/>Employee Health / Programs / Clearances / Reporting / Access"]
-        Portals --> Boundary --> Modules
-    end
-
-    Auth["Supabase Auth<br/>managed serverless identity"]
-    Database["Shared Supabase PostgreSQL<br/>RLS / protected RPCs / audit data"]
-
-    subgraph Focused["Source-defined serverless boundaries - deployment unverified"]
-        direction TB
-        NotificationQueue["Metadata-only notification queue"]
-        NotificationWorker["notifications-worker"]
-        ReportQueue["Metadata-only report queue"]
-        ReportWorker["reports-worker"]
-        ReportStorage["Private generated-reports Storage"]
-        RfidWorker["rfid-check-in<br/>user JWT required"]
-
-        NotificationQueue --> NotificationWorker
-        ReportQueue --> ReportWorker --> ReportStorage
-    end
-
-    OpenRouter["Optional OpenRouter<br/>server-only appointment evaluation"]
-    Candidates["Proposed core serverless candidates<br/>reminder producer / inventory monitor<br/>document security processor / audit monitor"]
-    Registrar["Future Registrar API<br/>local-first synchronization"]
-    OSAS["Future OSAS API<br/>contract not approved"]
-
-    Users --> Portals
-    Scanner --> Boundary
-    Boundary --> Auth
-    Modules --> Database
-    Database --> NotificationQueue
-    NotificationWorker --> Database
-    Modules --> ReportQueue
-    Boundary --> RfidWorker --> Database
-    Modules -.->|optional server-only request| OpenRouter
-    Modules -.-> Candidates
-    Candidates -.-> Database
-    Registrar -.-> Modules
-    OSAS -.-> Modules
+    Users --> Frontend
+    Frontend --> Supabase
+    Frontend -.->|incremental cutover| Gateway
+    Gateway --> Identity --> Supabase
+    Gateway --> Domains --> Supabase
+    Frontend --> Edge --> Supabase
 ```
 
 | Module | Original submodule | Current responsibility and ownership boundary |
@@ -793,36 +788,35 @@ are maintained in
 
 | Status | Included capabilities | Interpretation |
 | --- | --- | --- |
-| Implemented clinic submodules | The ten original submodules, six role portals, domain-first Server Actions, Supabase Auth integration, notifications, audit events, and RFID workflows | Production-oriented source is present; deployment-dependent controls are not automatically verified. |
+| Implemented clinic submodules | The ten original submodules, six role portals, domain-first Server Actions, Supabase Auth integration, notifications, audit events, and RFID workflows | These remain the working frontend paths during migration. |
+| Source-implemented backend services | API Gateway, seven domain services, shared security/contracts, and Render Blueprint | Frozen install, type checks, eight tests, builds, and local health checks passed; no cloud deployment is claimed. |
 | Source-implemented serverless boundaries | `notifications-worker`, `reports-worker`, `rfid-check-in`, protected RPCs, PGMQ queues, worker Cron migration, and private generated-report workflow | Functions, SQL, and configuration are version-controlled but are not confirmed deployed. |
-| Deployment-unverified infrastructure | Remote migrations, Edge Function deployment, secrets, Cron, queue grants and retries, Storage policies, RLS behavior, signed URLs, and six-role isolation | These remain open until tested against an authorized non-production or target Supabase project. |
-| Future capabilities | Registrar and OSAS synchronization, external email or SMS delivery, centralized observability, and possible independent service extraction | These require approved contracts, security and privacy review, operational ownership, and implementation evidence. |
+| Deployment-unverified infrastructure | GitHub remotes, Render/Vercel, private networking, service secrets, remote migrations, Edge Functions, Cron, queues, Storage, RLS, signed URLs, and six-role isolation | These remain open until tested against authorized staging and target environments. |
+| Future capabilities | Registrar/OSAS, external email/SMS, domain schemas and database roles, distributed limiting, and centralized observability | These require approved contracts, security/privacy review, operational ownership, and implementation evidence. |
 
 #### Architectural justification and next implementation line
 
-The current design provides domain separation, maintainability, server-first
-security review, shared transactional consistency, and focused asynchronous
-processing without introducing distributed transactions and additional network
-trust boundaries. Independent scaling, release, technology selection, and
-failure isolation remain future capabilities. They would require authenticated
-service APIs, enforceable data ownership, separate credentials and pipelines,
-monitoring, idempotent communication, and recovery procedures.
+The current source adds authenticated network boundaries while retaining shared
+transactional consistency. It avoids distributed transactions by keeping
+atomic clinical and inventory state changes in PostgreSQL RPCs. The trade-off is
+more timeout, credential, partial-failure, logging, and operational complexity.
+Independent production scaling and failure isolation remain deployment-
+unverified even though independent build definitions now exist.
 
 Work proceeds in this order:
 
 1. Reconcile local and remote migration histories in a disposable or staging
    project.
-2. Deploy and configure the three Edge Functions, queues, Cron jobs, worker
-   secrets, migrations, and private generated-report Storage.
-3. Verify authentication, authorization, RLS, grants, idempotency, retries,
-   concurrency, signed-URL behavior, and positive and negative tests for all six
-   roles.
-4. Add protected observability, alerts, dead-letter review, recovery, cleanup,
-   and rollback procedures.
-5. Implement Registrar or OSAS only after their contracts, authentication,
-   privacy rules, data mappings, and reconciliation behavior are approved.
-6. Extract additional independently deployed services only when measured load,
-   release cadence, ownership, or reliability requirements justify the cost.
+2. Configure and deploy Gateway and Identity in staging with scoped secrets and
+   private networking.
+3. Verify token validation, signed internal context, direct-service rejection,
+   RLS/grants, and positive/negative tests for all six roles.
+4. Cut over one domain capability at a time while retaining the working Server
+   Action and an explicit rollback route.
+5. Add protected observability, alerts, queue recovery, artifact cleanup, and
+   operational runbooks before broader promotion.
+6. Retire duplicate paths only after acceptance evidence; implement Registrar
+   or OSAS only after their contracts and privacy controls are approved.
 
 The repository contains production-oriented source for queued notification
 delivery, queued aggregate workbooks, and synchronous authenticated RFID
@@ -840,7 +834,9 @@ verification gates are maintained in
 | Routes and layouts | Select the portal, load initial data, compose workspaces | Treat route visibility as sufficient authorization |
 | Client workspaces | Interaction, accessible controls, local state, invalidation subscriptions | Hold service-role keys or query clinical tables directly |
 | Server Actions | Resolve actor, authorize, validate, scope, mutate/query, return DTOs | Trust client role, owner IDs, or raw form input |
-| Services | Reusable audit, notification, and AI behavior | Bypass the calling action's authorization contract |
+| API Gateway | Authenticate by coordination, sign internal context, route, limit, time out, and normalize errors | Query domain tables or trust browser role headers |
+| Domain services | Reauthorize roles, ownership/assignment, validate, minimize DTOs, and own capability APIs | Accept unsigned context or query another domain casually |
+| Frontend services | Reusable audit, notification, and legacy AI behavior retained during migration | Bypass the calling action's authorization contract |
 | Validation and DTOs | Reject invalid input and minimize output | Expose raw rows by default |
 | Supabase session client | Act as the authenticated user and call authorized RPCs | Assume every exposed object has safe RLS |
 | Supabase admin client | Perform server-only privileged queries | Rely on RLS or enter a browser bundle |
@@ -859,6 +855,12 @@ verification gates are maintained in
 
 One-device invalidation is source-verified. Session expiry, token rotation,
 revocation behavior, and target-project Auth settings remain deployment-dependent.
+
+For migrated calls, the frontend sends the Supabase access token to the API
+Gateway. Identity Service validates it against Supabase Auth, resolves roles and
+profile references from protected records, and returns a minimized actor. The
+Gateway signs a short-lived internal context; every domain service verifies the
+signature and expiry before applying its own authorization checks.
 
 #### Mutation flow
 
@@ -1235,6 +1237,10 @@ first inspect live dependencies and migration history.
 - Application code performs some multi-step service-role mutations without an
   explicit surrounding database transaction. Partial failure must be considered
   for inventory, notification, and other composed workflows.
+- `dispense_medicine_v1` is now migration-defined as an atomic, idempotent
+  prescription/stock/dispensing boundary. It remains deployment-unverified.
+- Notification and audit side effects from domain services are best-effort
+  after the primary transaction unless a reviewed outbox/RPC makes them atomic.
 
 #### Failure modes
 
@@ -1249,6 +1255,9 @@ first inspect live dependencies and migration history.
 | Audit write failure | Business operation continues and logs a server error | Alert on failure; define which events must be transactional |
 | Service-role exposure | RLS can be bypassed and broad data compromised | Rotate immediately, investigate, and keep secrets server-only |
 | In-memory rate limiter reset | Limits disappear on restart and are not shared across replicas | Use a distributed, atomic production limiter |
+| Identity Service unavailable | Gateway cannot safely resolve the actor | Fail closed with a dependency error; never trust cached browser role input |
+| Domain service unavailable or timed out | A migrated capability cannot complete | Return a stable error, preserve the existing path during migration, monitor, and roll back the cutover if required |
+| Side-effect service unavailable | Notification or audit delivery may lag after a primary write | Use idempotency/outbox where required; alert and retry without repeating the primary mutation |
 
 #### Observability
 
@@ -1265,11 +1274,17 @@ formal audit-retention configuration is established by the repository.
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Publishable client key; still constrained by grants and RLS |
 | `SUPABASE_SERVICE_ROLE` | Server secret | Privileged server client |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server secret | Supported legacy variable name |
+| `BACKEND_URL` | Server configuration | Frontend target for the API Gateway rewrite and server API helper |
 | `PHI_ENCRYPTION_KEY` | Server secret | Key source for the currently unused PHI helper |
 | `AI_PROVIDER` | Server secret | OpenRouter API key in current code |
 | `OPENROUTER_MODEL` | Server configuration | Optional model identifier |
 | `AI_TIMEOUT_MS` | Server configuration | Provider timeout |
 | `AI_MAX_TOKENS` | Server configuration | Provider output bound |
+
+The backend repository separately requires its gateway origin allowlist,
+Supabase URL/service key, HMAC signing secret, internal service key, service
+URLs, report signing key, and OpenRouter key/model. Render/Vercel secret
+managers must provide them; values must not be committed or logged.
 
 Secrets must be supplied through a deployment secret manager, rotated, scoped,
 and excluded from logs and browser bundles.
@@ -1647,7 +1662,7 @@ policy, COOP/CORP, and CSP. Production TLS termination must still be verified.
 
 | ID | Severity | Evidence and status | Risk | Required remediation and verification |
 | --- | --- | --- | --- | --- |
-| SEC-01 | High | `lib/crypto-phi.ts` falls back to a hardcoded secret; helper is not referenced by active persistence | False confidence and decryptable data if later enabled without configuration | Remove fallback and fail closed; use managed versioned keys; design field migration and rotation; test backup/restore and key loss |
+| SEC-01 | Resolved in source; operations open | `lib/crypto-phi.ts` now requires a server-only key of at least 32 characters and has no hardcoded or Supabase-key fallback; helper remains outside active persistence | Misconfigured invocation now fails closed, but key loss/rotation and field migration are not designed | Provision a managed versioned key; design field migration and rotation; test backup/restore and key loss before integrating the helper |
 | SEC-02 | High | Live migrations, RLS, grants, view definitions, function owners, and RPC signatures were not checked | Broken access control or runtime failure can differ from repository intent | Compare target schema, run migration list/advisors, inspect grants/policies, and execute role-negative tests |
 | SEC-03 | High | Nine code-referenced views have no complete local `CREATE VIEW` definition | Unreproducible deployments and unknown RLS/view-owner behavior | Capture reviewed `security_invoker` or otherwise protected definitions in versioned migrations; test every role |
 | SEC-04 | High | Optional OpenRouter request contains reasons and symptoms; prompt/response are stored | Unauthorized cross-border/provider disclosure and secondary PHI copies | Disable by default for real data until legal/vendor review, minimization, contracts, notice, retention, and deletion controls are approved |
@@ -1661,6 +1676,8 @@ policy, COOP/CORP, and CSP. Production TLS termination must still be verified.
 | SEC-12 | Medium | Kiosk route has special unauthenticated handling and RFID identifiers can be copied | Unauthorized lookup/check-in or unattended PHI exposure | Review exact kiosk actions, restrict network/device/location, minimize displayed data, add inactivity reset, and audit scans |
 | SEC-13 | Medium | Storage policies, MIME validation, malware scanning, and signed-URL expiry were not verified end to end | Malicious upload or attachment disclosure | Enforce private buckets, ownership policies, size/MIME/signature checks, scanning, short signed URLs, and download auditing |
 | SEC-14 | Operational | Workforce training, sanctions, workstation use, media disposal, and facility safeguards are absent from code | Insider error and physical compromise | Adopt organizational and physical safeguard policies with recurring training and evidence |
+| SEC-15 | High | New services initially share a privileged Supabase key and shared database | A missing service-side ownership or assignment check can become BOLA/IDOR across domains | Use signed internal context, strict DTOs and allowlists now; add scoped database roles/schemas after API ownership stabilizes; run cross-role negative tests |
+| SEC-16 | Medium | Gateway rate limiting is process-local and private-network behavior is not deployed | Abuse limits reset across replicas, and exposed internal services would expand the attack surface | Keep only the gateway public, require internal credentials/signatures, verify Render networking, then introduce a distributed limiter when required |
 
 Severity reflects potential impact, not proof of exploitation. Close a gap only
 after the relevant source, deployed configuration, and role behavior are tested.
@@ -1674,8 +1691,12 @@ after the relevant source, deployed configuration, and role behavior are tested.
 - [ ] Store service-role, AI, and encryption keys only in a secret manager.
 - [ ] Confirm no secret uses a `NEXT_PUBLIC_` prefix or appears in logs/builds.
 - [ ] Rotate any key previously exposed and investigate its use.
-- [ ] Remove the PHI encryption fallback before enabling the helper.
+- [x] Remove the PHI encryption fallback before enabling the helper.
+- [ ] Provision, rotate, back up, and recovery-test a managed encryption key
+      before integrating encrypted fields.
 - [ ] Build in production mode and verify headers without `unsafe-eval` where possible.
+- [ ] Configure the Gateway as the only public backend service and verify every
+      private service rejects unsigned or direct requests.
 
 #### Supabase and migrations
 

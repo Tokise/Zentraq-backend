@@ -4,6 +4,13 @@ Server Actions are Zentraq's browser-facing backend-for-frontend boundary. Page
 and client components import actions from this directory and must not use a
 privileged Supabase client directly.
 
+During the two-repository migration, these actions remain the working clinic
+paths. A capability may move to `lib/api` and the `zentraq-backend` Gateway only
+after its deployed service passes authentication, role, ownership/assignment,
+validation, transaction, timeout, and six-role browser verification. Do not
+delete an action merely because an equivalent backend endpoint exists in local
+source.
+
 ## Domain map
 
 - `access/` - roles, permissions, and audit-trail reads.
