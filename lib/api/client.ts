@@ -1,4 +1,5 @@
-export interface ApiRequestOptions extends Omit<RequestInit, "body" | "headers"> {
+export interface ApiRequestOptions
+  extends Omit<RequestInit, "body" | "headers"> {
   accessToken: string
   baseUrl?: string
   body?: unknown
@@ -38,7 +39,7 @@ export class ZentraqApiError extends Error {
   }
 }
 
-// Calls the same-origin API Gateway using an already-issued Supabase token.
+// Calls the API Gateway with an already-issued Supabase user token.
 export async function apiRequest<T>(
   path: `/api/v1/${string}`,
   options: ApiRequestOptions,
@@ -53,16 +54,37 @@ export async function apiRequest<T>(
   const headers = new Headers(inputHeaders)
   headers.set("accept", "application/json")
   headers.set("authorization", `Bearer ${accessToken}`)
+  headers.set("x-request-id", crypto.randomUUID())
   if (body !== undefined) headers.set("content-type", "application/json")
 
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
-    ...requestOptions,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let response: Response
+  try {
+    response = await fetch(
+      `${baseUrl.replace(/\/$/, "")}${path}`,
+      {
+        ...requestOptions,
+        cache: requestOptions.cache ?? "no-store",
+        headers,
+        body: body === undefined
+          ? undefined
+          : JSON.stringify(body),
+        signal:
+          requestOptions.signal ??
+          AbortSignal.timeout(10_000),
+      },
+    )
+  } catch {
+    throw new ZentraqApiError(
+      503,
+      "BACKEND_UNAVAILABLE",
+      "The backend is temporarily unavailable.",
+    )
+  }
+
   let payload: ApiSuccess<T> | ApiFailure
   try {
-    payload = (await response.json()) as ApiSuccess<T> | ApiFailure
+    payload =
+      (await response.json()) as ApiSuccess<T> | ApiFailure
   } catch {
     throw new ZentraqApiError(
       response.status || 502,
@@ -71,11 +93,20 @@ export async function apiRequest<T>(
     )
   }
   if (!response.ok || !payload.success) {
-    const code = payload.success ? "API_ERROR" : payload.error.code
+    const code = payload.success
+      ? "API_ERROR"
+      : payload.error.code
     const message = payload.success
       ? "The request could not be completed."
       : payload.error.message
-    throw new ZentraqApiError(response.status, code, message)
+    throw new ZentraqApiError(
+      response.status,
+      code,
+      message,
+    )
   }
-  return { data: payload.data, pagination: payload.pagination }
+  return {
+    data: payload.data,
+    pagination: payload.pagination,
+  }
 }

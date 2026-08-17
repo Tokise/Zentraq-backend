@@ -1,10 +1,9 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { createClient } from "@/utils/supabase/server";
-import { logAuditEvent } from "@/lib/audit-logger";
-import { assertSameOrigin } from "@/lib/security/action-guard";
 import { z } from "zod";
+
+import { authenticatedApiRequest } from "@/lib/api/server";
+import { assertSameOrigin } from "@/lib/security/action-guard";
 
 export type NotificationType =
   | "appointment"
@@ -12,6 +11,7 @@ export type NotificationType =
   | "inventory"
   | "incident"
   | "system";
+
 export interface NotificationDTO {
   id: string;
   title: string;
@@ -23,100 +23,123 @@ export interface NotificationDTO {
   related_resource_id: string | null;
 }
 
-async function currentUser() {
-  const store = await cookies();
-  const supabase = createClient(store);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return { supabase, user };
+interface NotificationApiRow {
+  created_at: string;
+  entity_id: string | null;
+  entity_type: string | null;
+  id: string;
+  message: string;
+  read_at: string | null;
+  title: string;
+  type: NotificationType;
 }
 
-export async function getNotificationsAction(options?: { limit?: number }) {
-  const { supabase, user } = await currentUser();
-  if (!user)
+// Maps a minimized gateway row to the existing notification UI contract.
+function notificationDto(
+  item: NotificationApiRow,
+): NotificationDTO {
+  return {
+    id: item.id,
+    title: item.title,
+    message: item.message,
+    type: item.type,
+    is_read: item.read_at !== null,
+    created_at: item.created_at,
+    related_resource: item.entity_type,
+    related_resource_id: item.entity_id,
+  };
+}
+
+// Loads the current user's notifications through the Render gateway.
+export async function getNotificationsAction(
+  options?: { limit?: number },
+) {
+  const limit = Math.max(
+    1,
+    Math.min(options?.limit ?? 20, 30),
+  );
+  try {
+    const { data } =
+      await authenticatedApiRequest<NotificationApiRow[]>(
+        `/api/v1/notifications?page=1&limit=${limit}`,
+      );
     return {
-      error: "Not authenticated",
+      error: null,
+      notifications: data.map(notificationDto),
+    };
+  } catch {
+    return {
+      error: "Unable to load notifications",
       notifications: [] as NotificationDTO[],
     };
-  const { data, error } = await supabase
-    .from("notifications")
-    .select(
-      "id, title, message, type, entity_type, entity_id, read_at, created_at",
-    )
-    .eq("receiver_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(Math.max(1, Math.min(options?.limit ?? 20, 30)));
-  return {
-    error: error ? "Unable to load notifications" : null,
-    notifications: (data ?? []).map((item) => ({
-      id: item.id,
-      title: item.title,
-      message: item.message,
-      type: item.type as NotificationType,
-      is_read: item.read_at !== null,
-      created_at: item.created_at,
-      related_resource: item.entity_type,
-      related_resource_id: item.entity_id,
-    })),
-  };
+  }
 }
 
+// Loads the current user's unread count through the Render gateway.
 export async function getUnreadNotificationCountAction() {
-  const { supabase, user } = await currentUser();
-  if (!user) return { error: "Not authenticated", count: 0 };
-  const { count, error } = await supabase
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("receiver_id", user.id)
-    .is("read_at", null);
-  return {
-    error: error ? "Unable to load notification count" : null,
-    count: count ?? 0,
-  };
+  try {
+    const { data } =
+      await authenticatedApiRequest<{ count: number }>(
+        "/api/v1/notifications/unread-count",
+      );
+    return { error: null, count: data.count };
+  } catch {
+    return {
+      error: "Unable to load notification count",
+      count: 0,
+    };
+  }
 }
 
-export async function markNotificationAsReadAction(id: string, isRead: boolean) {
-  const { supabase, user } = await currentUser();
-  if (!user) return { error: "Not authenticated" };
+// Changes one owned notification's read state through the gateway.
+export async function markNotificationAsReadAction(
+  id: string,
+  isRead: boolean,
+) {
   const parsedId = z.string().uuid().safeParse(id);
-  if (!parsedId.success || !(await assertSameOrigin())) {
+  if (
+    !parsedId.success ||
+    !(await assertSameOrigin())
+  ) {
     return { error: "Unable to update notification" };
   }
-  const { error } = await supabase
-    .from("notifications")
-    .update({ read_at: isRead ? new Date().toISOString() : null })
-    .eq("id", parsedId.data)
-    .eq("receiver_id", user.id);
-  if (!error)
-    await logAuditEvent({
-      action: isRead ? "NOTIFICATION_READ" : "NOTIFICATION_UNREAD",
-      userId: user.id,
-      email: user.email,
-      resource: parsedId.data,
-    });
-  return error ? { error: "Unable to update notification" } : { success: true };
+  try {
+    await authenticatedApiRequest(
+      `/api/v1/notifications/${parsedId.data}`,
+      {
+        method: "PATCH",
+        body: { isRead },
+      },
+    );
+    return { success: true };
+  } catch {
+    return { error: "Unable to update notification" };
+  }
 }
 
+// Marks every unread owned notification through one atomic gateway request.
 export async function markAllNotificationsAsReadAction() {
-  const { supabase, user } = await currentUser();
-  if (!user) return { error: "Not authenticated" };
   if (!(await assertSameOrigin())) {
     return { error: "Unable to update notifications" };
   }
-  const { data, error } = await supabase
-    .from("notifications")
-    .update({ read_at: new Date().toISOString() })
-    .eq("receiver_id", user.id)
-    .is("read_at", null)
-    .select("id");
-  return error
-    ? { error: "Unable to update notifications" }
-    : { success: true, updatedCount: data?.length ?? 0 };
+  try {
+    const { data } =
+      await authenticatedApiRequest<{
+        updatedCount: number;
+      }>("/api/v1/notifications", {
+        method: "PATCH",
+        body: { allRead: true },
+      });
+    return {
+      success: true,
+      updatedCount: data.updatedCount,
+    };
+  } catch {
+    return { error: "Unable to update notifications" };
+  }
 }
 
-// Notifications are immutable audit-relevant records in the SAD schema.
-// Dismissal maps to read rather than deleting a record.
+// Maps dismissal to the existing immutable notification read state.
 export async function deleteNotificationAction(id: string) {
   return markNotificationAsReadAction(id, true);
 }
