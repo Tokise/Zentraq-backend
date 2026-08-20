@@ -47,6 +47,15 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        hostname: "*.supabase.co",
+        pathname: "/storage/v1/object/sign/**",
+        protocol: "https",
+      },
+    ],
+  },
   allowedDevOrigins: ["http://localhost:3000", "http://192.168.100.89:3000"],
   async headers() {
     return [

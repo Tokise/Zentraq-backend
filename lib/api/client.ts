@@ -39,11 +39,61 @@ export class ZentraqApiError extends Error {
   }
 }
 
-// Calls the API Gateway with an already-issued Supabase user token.
+// Calls the API Gateway with a Supabase token and retries only safe GET requests.
 export async function apiRequest<T>(
   path: `/api/v1/${string}`,
   options: ApiRequestOptions,
 ): Promise<{ data: T; pagination?: ApiPagination }> {
+  const {
+    accessToken,
+    baseUrl = "",
+    body,
+    headers: inputHeaders,
+    ...requestOptions
+  } = options
+  const method = (requestOptions.method ?? "GET").toUpperCase()
+  const attempts = method === "GET" ? 2 : 1
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const response = await performRequest(
+      path,
+      {
+        accessToken,
+        baseUrl,
+        body,
+        headers: inputHeaders,
+        ...requestOptions,
+      },
+    ).catch((error: unknown) => {
+      if (attempt < attempts) return null
+      throw error
+    })
+    if (!response) {
+      await retryDelay()
+      continue
+    }
+    if (
+      attempt < attempts &&
+      [502, 503, 504].includes(response.status)
+    ) {
+      await retryDelay()
+      continue
+    }
+    return parseApiResponse<T>(response)
+  }
+
+  throw new ZentraqApiError(
+    503,
+    "BACKEND_UNAVAILABLE",
+    "The backend is temporarily unavailable.",
+  )
+}
+
+// Performs one bounded gateway request without mutation retries.
+async function performRequest(
+  path: `/api/v1/${string}`,
+  options: ApiRequestOptions,
+): Promise<Response> {
   const {
     accessToken,
     baseUrl = "",
@@ -57,9 +107,8 @@ export async function apiRequest<T>(
   headers.set("x-request-id", crypto.randomUUID())
   if (body !== undefined) headers.set("content-type", "application/json")
 
-  let response: Response
   try {
-    response = await fetch(
+    return await fetch(
       `${baseUrl.replace(/\/$/, "")}${path}`,
       {
         ...requestOptions,
@@ -70,7 +119,7 @@ export async function apiRequest<T>(
           : JSON.stringify(body),
         signal:
           requestOptions.signal ??
-          AbortSignal.timeout(10_000),
+          AbortSignal.timeout(70_000),
       },
     )
   } catch {
@@ -80,7 +129,12 @@ export async function apiRequest<T>(
       "The backend is temporarily unavailable.",
     )
   }
+}
 
+// Parses the standard success or error envelope from the gateway.
+async function parseApiResponse<T>(
+  response: Response,
+): Promise<{ data: T; pagination?: ApiPagination }> {
   let payload: ApiSuccess<T> | ApiFailure
   try {
     payload =
@@ -109,4 +163,9 @@ export async function apiRequest<T>(
     data: payload.data,
     pagination: payload.pagination,
   }
+}
+
+// Adds one short delay before retrying an idempotent GET.
+async function retryDelay(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 600))
 }

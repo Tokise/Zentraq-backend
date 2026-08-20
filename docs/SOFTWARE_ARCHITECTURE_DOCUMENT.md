@@ -1752,3 +1752,16 @@ The principal evidence sources for this baseline are `package.json`,
 `lib/navigation.ts`, `lib/security/action-guard.ts`, `actions`, `services`, and
 the role-specific `app` route trees. Re-run the inventory whenever those sources
 change materially.
+## Hybrid runtime boundary update (2026-08-20)
+
+The approved demo architecture keeps UI and Supabase Auth session handling in
+Next.js, routes frontend domain requests through the Render API Gateway, and
+uses separate caller-scoped Supabase Edge Functions for clinical workflows and
+RFID check-in. Appointment, Inventory, Notification, Reporting, and AI remain
+Render Web Services. Supabase retains PostgreSQL, RLS, Storage, PGMQ, Cron, and
+durable job state.
+
+The gateway has no Supabase secret/service-role credential. Edge calls require
+the original user JWT plus an expiring HMAC bound to timestamp, request ID,
+method, path, and body hash. This is a Free-plan capstone/demo topology and is
+not a production availability claim.

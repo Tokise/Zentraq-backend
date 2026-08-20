@@ -239,7 +239,7 @@ Source completion is not deployment completion. Final verification requires:
 
 ### 10.1 Backend repository
 
-A separate local Git repository exists at `D:\Documents\Coding\zentraq-backend`
+A separate local Git repository exists at `D:\Documents\Coding\zentraq\backend`
 on branch `rei/dev`, with verified source committed locally as `49624fa`. It
 contains a pnpm workspace, shared contracts and security
 middleware, one public API Gateway, and seven domain services:

@@ -35,7 +35,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  parseRfidCheckInCompletedEvent,
+  RFID_CHECK_IN_CHANNEL,
+} from "@/lib/rfid/check-in-events";
 import { createClient as createBrowserClient } from "@/utils/supabase/client";
+import { useDomainInvalidation } from "@/components/realtime/app-realtime-sync";
 import {
   Table,
   TableBody,
@@ -50,6 +55,13 @@ const PAGE_SIZE = 10;
 
 interface ClinicalRfidKioskWorkspaceProps {
   role: ClinicRole;
+}
+
+interface LoadQueueOptions {
+  selectInitialPatient?: boolean;
+  selectNewPatient?: boolean;
+  selectQueueEntryId?: string;
+  showLoading?: boolean;
 }
 
 // Renders the full-width clinical RFID queue and selected read-only record preview.
@@ -73,34 +85,131 @@ export function ClinicalRfidKioskWorkspace({
     string | null
   >(null);
   const previewRequestId = useRef(0);
+  const previewSectionRef = useRef<HTMLElement>(null);
+  const knownQueueEntryIds = useRef<Set<string>>(new Set());
+  const queueInitialized = useRef(false);
 
-  // Refreshes only queue entries the active clinician is allowed to open.
-  const loadQueue = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
-    const result = await getRfidQueueAction();
-    setQueue(result.queue);
-    setError(result.error);
-    setLoading(false);
-  }, []);
+  // Selects a queue entry and loads its authorized read-only clinical record.
+  const loadPatientRecord = useCallback(
+    async (
+      item: RfidQueueItem,
+      resetTab: boolean,
+      revealProfile = false,
+    ) => {
+      const requestId = previewRequestId.current + 1;
+      previewRequestId.current = requestId;
+      setSelected(item);
+      if (resetTab) {
+        setRecord(null);
+        setPreviewTab("profile");
+      }
+      setPreviewError(null);
+      setPreviewLoading(true);
+
+      if (revealProfile) {
+        window.requestAnimationFrame(() => {
+          previewSectionRef.current?.scrollIntoView({
+            behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+              .matches
+              ? "auto"
+              : "smooth",
+            block: "start",
+          });
+        });
+      }
+
+      const result = await getComplianceRecordAction({
+        patientId: item.patientId,
+        patientRole: item.patientType,
+      });
+      if (previewRequestId.current !== requestId) return;
+      setRecord(result.record);
+      setPreviewError(result.error);
+
+      if (previewRequestId.current === requestId) {
+        setPreviewLoading(false);
+      }
+    },
+    [],
+  );
+
+  // Refreshes authorized queue DTOs and selects the patient requested by a scan.
+  const loadQueue = useCallback(
+    async (options: LoadQueueOptions = {}) => {
+      const {
+        selectInitialPatient = false,
+        selectNewPatient = false,
+        selectQueueEntryId,
+        showLoading = true,
+      } = options;
+      if (showLoading) setLoading(true);
+
+      const result = await getRfidQueueAction();
+      const wasInitialized = queueInitialized.current;
+      const previousIds = knownQueueEntryIds.current;
+      const newItems = result.queue.filter((item) => !previousIds.has(item.id));
+
+      knownQueueEntryIds.current = new Set(result.queue.map((item) => item.id));
+      queueInitialized.current = true;
+      setQueue(result.queue);
+      setError(result.error);
+      setLoading(false);
+
+      if (result.error) return;
+      const requestedItem = selectQueueEntryId
+        ? result.queue.find((item) => item.id === selectQueueEntryId)
+        : null;
+      const detectedNewItem = selectNewPatient && wasInitialized
+        ? getNewestQueueItem(newItems)
+        : null;
+      const initialItem = selectInitialPatient && !wasInitialized
+        ? getNewestQueueItem(result.queue)
+        : null;
+      const itemToSelect = requestedItem ?? detectedNewItem ?? initialItem;
+      if (!itemToSelect) return;
+
+      setQueuePage(1);
+      void loadPatientRecord(
+        itemToSelect,
+        true,
+        Boolean(requestedItem || detectedNewItem),
+      );
+    },
+    [loadPatientRecord],
+  );
+
+  // Reloads the minimized queue when another domain view changes it.
+  const refreshQueue = useCallback(() => {
+    void loadQueue({ showLoading: false });
+  }, [loadQueue]);
+
+  // Reloads the queue and opens a newly inserted patient's profile.
+  const refreshQueueAndSelectNew = useCallback(() => {
+    void loadQueue({
+      selectNewPatient: true,
+      showLoading: false,
+    });
+  }, [loadQueue]);
+
+  useDomainInvalidation("consultations", refreshQueue);
 
   // Subscribes to private queue invalidations and reloads minimized server DTOs.
   useEffect(() => {
     const initialLoad = window.setTimeout(() => {
-      void loadQueue();
+      void loadQueue({ selectInitialPatient: true });
     }, 0);
     let reloadTimer: number | undefined;
     const channel = supabase.channel("clinic:rfid-queue", {
       config: { private: true },
     });
 
-    void supabase.realtime.setAuth().then(() => {
+    void supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session) return;
+      await supabase.realtime.setAuth(data.session.access_token);
       channel
         .on("broadcast", { event: "queue-changed" }, () => {
           window.clearTimeout(reloadTimer);
-          reloadTimer = window.setTimeout(() => {
-            setQueuePage(1);
-            void loadQueue(false);
-          }, 100);
+          reloadTimer = window.setTimeout(refreshQueueAndSelectNew, 100);
         })
         .subscribe();
     });
@@ -110,7 +219,28 @@ export function ClinicalRfidKioskWorkspace({
       window.clearTimeout(reloadTimer);
       void supabase.removeChannel(channel);
     };
-  }, [loadQueue, supabase]);
+  }, [loadQueue, refreshQueueAndSelectNew, supabase]);
+
+  useEffect(() => {
+    if (!("BroadcastChannel" in window)) return;
+    const channel = new BroadcastChannel(RFID_CHECK_IN_CHANNEL);
+
+    // Reloads server-authorized data before trusting a same-origin scan notice.
+    function handleCompletedCheckIn(event: MessageEvent<unknown>) {
+      const completed = parseRfidCheckInCompletedEvent(event.data);
+      if (!completed) return;
+      void loadQueue({
+        selectQueueEntryId: completed.queueEntryId,
+        showLoading: false,
+      });
+    }
+
+    channel.addEventListener("message", handleCompletedCheckIn);
+    return () => {
+      channel.removeEventListener("message", handleCompletedCheckIn);
+      channel.close();
+    };
+  }, [loadQueue]);
 
   // Loads sanitized serverless rollout state for Admin operators only.
   useEffect(() => {
@@ -153,38 +283,10 @@ export function ClinicalRfidKioskWorkspace({
     router.push(recordPath);
   }
 
-  // Selects a queue entry and loads its read-only clinical record beneath the table.
-  const loadPatientRecord = useCallback(
-    async (item: RfidQueueItem, resetTab: boolean) => {
-      const requestId = previewRequestId.current + 1;
-      previewRequestId.current = requestId;
-      setSelected(item);
-      if (resetTab) {
-        setRecord(null);
-        setPreviewTab("profile");
-      }
-      setPreviewError(null);
-      setPreviewLoading(true);
-
-      const result = await getComplianceRecordAction({
-        patientId: item.patientId,
-        patientRole: item.patientType,
-      });
-      if (previewRequestId.current !== requestId) return;
-      setRecord(result.record);
-      setPreviewError(result.error);
-
-      if (previewRequestId.current === requestId) {
-        setPreviewLoading(false);
-      }
-    },
-    [],
-  );
-
   // Selects a new patient and resets the embedded record to Profile Overview.
   function selectPatient(item: RfidQueueItem) {
     setQueuePage(1);
-    void loadPatientRecord(item, true);
+    void loadPatientRecord(item, true, true);
   }
 
   const queueTotalPages = Math.ceil(queue.length / PAGE_SIZE);
@@ -203,7 +305,9 @@ export function ClinicalRfidKioskWorkspace({
       config: { private: true },
     });
 
-    void supabase.realtime.setAuth().then(() => {
+    void supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session) return;
+      await supabase.realtime.setAuth(data.session.access_token);
       channel
         .on("broadcast", { event: "patient-record-changed" }, () => {
           window.clearTimeout(reloadTimer);
@@ -380,7 +484,11 @@ export function ClinicalRfidKioskWorkspace({
       </Card>
 
       {selected && (
-        <section aria-live="polite" className="space-y-5">
+        <section
+          ref={previewSectionRef}
+          aria-live="polite"
+          className="scroll-mt-6 space-y-5"
+        >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-semibold">Medical record preview</h2>
@@ -464,6 +572,16 @@ function getInitials(name: string): string {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+// Returns the most recently checked-in item from a minimized queue slice.
+function getNewestQueueItem(
+  items: RfidQueueItem[],
+): RfidQueueItem | null {
+  return items.reduce<RfidQueueItem | null>((newest, item) => {
+    if (!newest || item.checkedInAt > newest.checkedInAt) return item;
+    return newest;
+  }, null);
 }
 
 // Describes whether the selected queue entry will be claimed, resumed, or reviewed.
