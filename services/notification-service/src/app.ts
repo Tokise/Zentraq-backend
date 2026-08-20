@@ -20,6 +20,8 @@ import {
   sendData,
 } from "@zentraq/shared";
 
+import { drainNotificationJobs } from "./worker.js";
+
 const notificationSchema = z.object({
   entityId: z.string().uuid().optional().nullable(),
   entityType: z.string().trim().min(1).max(80).optional().nullable(),
@@ -105,6 +107,17 @@ export function createNotificationApp(
     }),
   );
 
+  app.post(
+    "/internal/workers/notifications/drain",
+    requireInternalServiceKey(internalServiceKey),
+    asyncRoute(async (request, response) => {
+      const body = request.body as { batchSize?: unknown } | undefined;
+      sendData(
+        response,
+        await drainNotificationJobs(body?.batchSize),
+      );
+    }),
+  );
   app.use("/api/v1", requireInternalContext(contextSecret));
 
   app.get(
@@ -206,6 +219,7 @@ export function createNotificationApp(
       if (error || typeof data !== "string") {
         throw mapNotificationJobError(error?.message);
       }
+      scheduleNotificationDrain();
       sendData(
         response,
         {
@@ -342,6 +356,21 @@ export function createNotificationApp(
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
+}
+
+// Drains newly queued notifications while the already-awake web service can work.
+function scheduleNotificationDrain(): void {
+  setImmediate(() => {
+    void drainNotificationJobs(10).catch((error: unknown) => {
+      console.error(
+        JSON.stringify({
+          code: "NOTIFICATION_DRAIN_FAILED",
+          event: "notification_drain_failed",
+          message: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    });
+  });
 }
 
 // Extracts the user identity already verified and signed by the gateway.

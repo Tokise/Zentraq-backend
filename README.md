@@ -1,160 +1,144 @@
-# Zentraq Backend Microservices
+# Zentraq Backend
 
-This repository contains Zentraq's independently runnable Node.js, Express,
-and TypeScript backend services. The existing Next.js application remains in
-the separate frontend repository and sends clinic-domain requests only to the
-API Gateway.
+This independent repository contains Zentraq's Render services, shared Node.js
+infrastructure, Supabase Edge Functions, and database migrations. Its local
+path is `D:\Documents\Coding\zentraq\backend`; the frontend repository is the
+sibling `D:\Documents\Coding\zentraq\frontend`.
 
-## Architecture
+See the frontend
+[Local Workspace and Git Guide](https://github.com/Tokise/Zentraq/blob/rei/development/docs/LOCAL_WORKSPACE_AND_GIT_GUIDE.md)
+for run, verification, and folder-specific push commands.
+
+## Hybrid runtime boundary
 
 ```text
 Next.js / Vercel
-        |
-        | /api/v1/* + Supabase access token
-        v
-API Gateway / Render public web service
-        |
-        | signed, expiring internal context
-        v
-Identity | Clinical | Appointments | Inventory
-Notifications | Reporting | AI
-        |
-        v
-One Supabase project: Auth + PostgreSQL + Storage + Queues + Edge Functions
+  UI + Auth cookies + login/logout/reset Server Actions
+       |                                  |
+       | user JWT                         | user JWT from RFID Server Action
+       v                                  v
+Render API Gateway                 rfid-check-in Edge Function
+       |                                  |
+       | signed context / Edge HMAC       | check_in_rfid_v1
+       v                                  |
+Render services + clinical-service Edge   |
+       \__________________________________/
+          Supabase Auth + PostgreSQL + RLS + Storage + PGMQ + Cron
 ```
 
-Only the API Gateway is intended to be public. Domain services are configured
-as Render private services. If a budget plan requires protected web services,
-the frontend must still use only the gateway, CORS must remain restricted, and
-every service must continue to reject unsigned direct access.
+The public gateway has only the Supabase project URL and publishable key. It
+must never receive a Supabase secret/service-role key. It validates the user
+with `auth.getUser`, calls the authenticated `resolve_request_context_v1()`
+RPC, and signs only the verified user ID and active roles.
 
-## Service ownership
+`rfid-check-in` is called directly by its Next.js Server Action with the
+operator's user JWT. The protected `check_in_rfid_v1` RPC independently verifies
+an active Admin, Doctor, or Nurse account and preserves event idempotency.
+`clinical-service` remains gateway-only and requires the original JWT plus the
+replay-bounded gateway HMAC.
+
+## Render services
+
+`render.yaml` declares six Free Web Services:
 
 | Service | Port | Responsibility |
 | --- | ---: | --- |
-| API Gateway | 4000 | Public routing, request IDs, CORS, rate limiting, authentication coordination, timeouts, and public error envelopes |
-| Identity Service | 4001 | Supabase token validation, protected role resolution, profiles, clinic accounts, patient references, and RFID identity lookup |
-| Clinical Service | 4002 | Patient-owned and clinician-assigned records, visits, consultations, and the RFID Edge Function adapter |
-| Appointment Service | 4003 | Booking, availability, appointment ownership, assignment, and state transitions |
-| Inventory Service | 4004 | Catalog stock views, idempotent receipts, atomic dispensing RPC orchestration, and dispensing logs |
-| Notification Service | 4005 | User-scoped notification reads, read state, and asynchronous notification jobs |
-| Reporting Service | 4006 | Sanitized audit events, role-scoped dashboard aggregates, report jobs, and signed report downloads |
-| AI Service | 4007 | Advisory OpenRouter scheduling and inventory outputs; no database mutation credentials |
+| API Gateway | 4000 | Authentication, routing, request IDs, rate limits, bounded timeouts, and stable envelopes |
+| Appointment | 4003 | Booking, availability, ownership, assignment, and state transitions |
+| Inventory | 4004 | Stock, idempotent receipts, and atomic dispensing |
+| Notification | 4005 | User notification APIs and protected PGMQ drain endpoint |
+| Reporting | 4006 | Audits, aggregates, report jobs, artifacts, and protected PGMQ drain endpoint |
+| AI | 4007 | Advisory OpenRouter results without database mutation credentials |
 
-The shared package contains only cross-service infrastructure: response types,
-pagination, request IDs, structured logging, Supabase client factories,
-timeouts, and signed internal context. It contains no domain repository or
-business workflow.
+Identity and Clinical service source directories remain temporarily as rollback
+and comparison code, but they are not Render deploy targets. Delete them only
+after deployed role, browser, and RFID acceptance tests pass.
 
-## Authentication and internal trust
+Render Free services can sleep after inactivity and are demo infrastructure,
+not production infrastructure. The frontend shows an accessible cold-start
+state. GET requests receive at most one automatic retry. Mutations are not
+automatically retried; RFID can be retried explicitly with the same `eventId`.
 
-1. The frontend authenticates with Supabase Auth and sends
-   `Authorization: Bearer <access-token>` to the gateway.
-2. The gateway calls Identity Service over the internal network.
-3. Identity Service validates the token with Supabase Auth and resolves roles
-   from `user_roles` and `roles`; it never authorizes from user metadata.
-4. The gateway creates a short-lived HMAC-signed context bound to the request
-   ID.
-5. Every domain service validates that signature, expiry, and request binding.
+## Worker boundary
 
-`INTERNAL_SERVICE_KEY` protects machine-only endpoints. It is separate from
-`INTERNAL_CONTEXT_SECRET`, the Supabase secret key, and the OpenRouter key. Use
-independent random values with at least 32 characters and rotate them through
-Render secrets.
+Supabase retains PGMQ queues, private durable job records, status RPCs,
+visibility timeouts, retries, and dead-letter state. Render exposes only:
+
+- `POST /internal/workers/notifications/drain`
+- `POST /internal/workers/reports/drain`
+
+Both require `x-zentraq-service-key` and bound batch sizes. The local migration
+`20260819204546_hybrid_gateway_context_and_workers.sql` changes Supabase Cron
+to inspect queue metrics first and call only fixed Render URLs stored in Vault.
+It never accepts a caller-provided URL.
+
+Required Vault names are:
+
+- `zentraq_notifications_worker_url`
+- `zentraq_reports_worker_url`
+- `zentraq_worker_service_key`
+
+Keep the old Edge worker functions until each deployed Render worker passes
+queue, retry, dead-letter, and empty-queue acceptance tests.
 
 ## Local development
 
-Requirements:
+Requirements are Node.js 22 or newer and pnpm 11.19.0.
 
-- Node.js 22 or newer
-- pnpm 11.19.0
-- an authorized non-production Supabase project or local Supabase stack
+```powershell
+Set-Location D:\Documents\Coding\zentraq\backend
 
-Copy `.env.example` to an untracked `.env` and set only the values required by
-each process. For a simple local session, a root environment can provide all
-service URLs and secrets.
+if (-not (Test-Path .env.local)) {
+  Copy-Item .env.example .env.local
+}
 
-The tracked `.env.example` must contain descriptive placeholders only. Never
-paste an `sb_secret_...`, legacy `service_role` JWT, OpenRouter key, or internal
-signing secret into it. Adding a file to `.gitignore` does not remove a secret
-from commits that already contain the file; rewrite unpushed history or follow
-the approved incident-response procedure for published history.
-
-```bash
 pnpm install --frozen-lockfile
-pnpm lint
-pnpm typecheck
-pnpm build
-pnpm test
-pnpm dev
+pnpm run typecheck
+pnpm run test
+pnpm run dev
 ```
 
-Every service exposes `GET /health`. Health responses contain only status and
-service name.
+Fill every placeholder in the ignored `.env.local` before starting. The normal
+`pnpm run dev` command builds `@zentraq/shared`, loads `.env.local` inside each
+service process, and starts only the six current Render targets on ports 4000
+and 4003 through 4007. It intentionally excludes the rollback-only Identity
+and Clinical Node services. Use `pnpm run dev:legacy` only when explicitly
+testing those two rollback implementations.
 
-## Public API summary
+Every service exposes `GET /health`. Environment placeholders belong in
+`.env.example`; real values stay in ignored local files and deployment secret
+stores. `EDGE_GATEWAY_HMAC_SECRET` must be at least 32 characters and must
+match the secret configured for the deployed `clinical-service` and
+`rfid-check-in` Edge Functions. A local-only value lets the gateway start but
+cannot authenticate against Edge Functions configured with a different value.
 
-- `GET /api/v1/users/me`
-- `GET /api/v1/users`
-- `POST /api/v1/rfid/lookup`
-- `POST /api/v1/rfid/check-ins`
-- `GET|POST /api/v1/appointments`
-- `GET|PATCH /api/v1/appointments/:appointmentId`
-- `GET /api/v1/appointments/availability`
-- `GET /api/v1/records/me`
-- `GET /api/v1/records/:patientType/:patientId`
-- `GET /api/v1/consultations`
-- `GET /api/v1/visits`
-- `GET /api/v1/inventory/stock`
-- `POST /api/v1/inventory/restock`
-- `POST /api/v1/inventory/dispense`
-- `GET /api/v1/inventory/dispensing`
-- `GET|POST /api/v1/notifications`
-- `PATCH /api/v1/notifications/:notificationId`
-- `GET /api/v1/dashboard/:role`
-- `GET /api/v1/audit`
-- `POST /api/v1/reports`
-- `GET /api/v1/reports/:reportId`
-- `GET /api/v1/reports/:reportId/download`
-- `POST /api/v1/ai/appointments/recommend`
-- `POST /api/v1/ai/inventory/insights`
+## Supabase source and migration safety
 
-Collection endpoints use `page` and `limit` and return a consistent pagination
-object. Public errors use stable codes and do not include raw Supabase errors,
-stack traces, tokens, or internal URLs.
+The complete `supabase\` source tree is versionable. Only
+`supabase\.temp\` and `supabase\functions\node_modules\` remain ignored.
+`clinic.sql` is a non-migration snapshot under `supabase\baselines\clinic.sql`.
+The duplicate `20250726000007` local version was resolved by assigning the
+rename migration `20250726000008`.
 
-## Data and failure boundaries
+Do not run `supabase db push` or migration repair while the remote ledger still
+records only `001`. First compare every local migration with the live schema,
+run database and security advisors, and repair only individually verified
+history entries.
 
-- One Supabase project remains the Auth, PostgreSQL, and Storage platform.
-- Existing public tables remain in place for the initial migration. Service
-  ownership is enforced in code before schema extraction.
-- Clinical workflow RPCs remain transaction boundaries.
-- Dispensing uses `dispense_medicine_v1`, which atomically validates the
-  prescription and stock, creates one idempotent dispensing record, and updates
-  prescription state while preserving the existing stock-decrement trigger.
-- Notification and audit failures do not roll back a successful appointment or
-  stock operation. Failures are logged with request IDs for retry/operations.
-- AI failures return a deterministic, labeled fallback. AI never schedules an
-  appointment or changes stock directly.
+## Security boundary
 
-## Render deployment
-
-`render.yaml` declares one public web service and seven private services with
-service-specific build filters and environment variables. The Blueprint source
-is ready for review, but this repository does not claim the services are
-deployed until Render health checks, private networking, secrets, and
-independent redeploy behavior are verified in the target account.
+- Rotate the database password and Vercel OIDC token exposed during earlier
+  diagnostics. Source cleanup cannot rotate external credentials.
+- Never place Supabase secret/service-role keys, database URLs, internal HMAC
+  keys, or provider credentials in the frontend or public gateway.
+- Validate all input server-side and rely on caller-scoped RLS by default.
+- Protect cross-table mutations with authenticated atomic RPCs.
+- Return minimized DTOs and sanitized errors; propagate `x-request-id`.
 
 ## Verification boundary
 
-Passing local tests and builds proves source consistency only. Before migrating
-frontend call sites or removing a Server Action, verify:
-
-- missing/invalid/expired token responses;
-- wrong-role and unsigned direct-service rejection;
-- Student, Faculty, and Staff cross-account ownership isolation;
-- Doctor and Nurse assignment filters;
-- atomic inventory behavior under concurrent and retried requests;
-- Supabase migrations, RLS, grants, RPC ownership, Storage, and Realtime;
-- Render private service discovery, timeout behavior, and service secrets;
-- browser Network requests and unchanged role workflows.
+Local typechecks and tests prove source consistency only. Before removing
+rollback code or legacy frontend actions, verify deployed health endpoints,
+wrong-role access, cross-patient isolation, RFID tap output, HMAC expiry and
+replay rejection, Cron-to-Render queue processing, empty-queue behavior,
+Storage artifacts, browser traffic, and unchanged UI workflows.

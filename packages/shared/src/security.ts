@@ -1,4 +1,5 @@
 import {
+  createHash,
   createHmac,
   timingSafeEqual,
 } from "node:crypto";
@@ -137,4 +138,33 @@ export function primaryRole(
   const role = precedence.find((candidate) => context.roles.includes(candidate));
   if (!role) throw new AppError(403, "ROLE_REQUIRED", "An active role is required.");
   return role;
+}
+
+interface EdgeRequestInput {
+  body: string;
+  method: string;
+  path: string;
+  requestId: string;
+  timestamp: string;
+}
+
+// Creates a replay-bounded signature for one gateway-to-Edge request.
+export function signEdgeRequest(
+  input: EdgeRequestInput,
+  secret: string,
+): { bodySha256: string; signature: string } {
+  const bodySha256 = createHash("sha256")
+    .update(input.body)
+    .digest("hex");
+  const canonical = [
+    input.timestamp,
+    input.requestId,
+    input.method.toUpperCase(),
+    input.path,
+    bodySha256,
+  ].join("\n");
+  const signature = createHmac("sha256", secret)
+    .update(canonical)
+    .digest("base64url");
+  return { bodySha256, signature };
 }

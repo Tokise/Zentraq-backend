@@ -1,14 +1,17 @@
-import type { Express, NextFunction, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response as ExpressResponse } from "express";
 
 import {
   AppError,
   asyncRoute,
+  createAuthClient,
   createServiceApp,
+  createUserClient,
   errorHandler,
   notFoundHandler,
   requireStrongSecret,
+  signEdgeRequest,
   signInternalContext,
-  type ApiResponse,
+  ZENTRAQ_ROLES,
   type ZentraqRole,
 } from "@zentraq/shared";
 
@@ -17,9 +20,16 @@ interface AuthResolution {
   userId: string;
 }
 
+interface RequestContextRow {
+  roles: string[];
+  user_id: string;
+}
+
 interface GatewayDependencies {
   contextSecret?: string;
-  internalServiceKey?: string;
+  edgeFunctionsUrl?: string;
+  edgeGatewaySecret?: string;
+  publishableKey?: string;
   resolveToken?: (token: string, requestId: string) => Promise<AuthResolution>;
   serviceUrls?: Partial<Record<ServiceName, string>>;
   timeoutMs?: number;
@@ -28,28 +38,36 @@ interface GatewayDependencies {
 type ServiceName =
   | "ai"
   | "appointments"
-  | "clinical"
-  | "identity"
   | "inventory"
   | "notifications"
   | "reporting";
 
-const ROUTES: Array<{ prefixes: string[]; service: ServiceName }> = [
-  { prefixes: ["/api/v1/rfid/check-ins"], service: "clinical" },
-  { prefixes: ["/api/v1/users", "/api/v1/rfid"], service: "identity" },
+type RouteTarget =
+  | { functionName: "clinical-service"; kind: "edge" }
+  | { kind: "render"; service: ServiceName };
+
+const ROUTES: Array<{ prefixes: string[]; target: RouteTarget }> = [
+
   {
     prefixes: [
       "/api/v1/records",
       "/api/v1/consultations",
       "/api/v1/visits",
+      "/api/v1/clinical",
     ],
-    service: "clinical",
+    target: { functionName: "clinical-service", kind: "edge" },
   },
-  { prefixes: ["/api/v1/appointments"], service: "appointments" },
-  { prefixes: ["/api/v1/inventory"], service: "inventory" },
+  {
+    prefixes: ["/api/v1/appointments"],
+    target: { kind: "render", service: "appointments" },
+  },
+  {
+    prefixes: ["/api/v1/inventory"],
+    target: { kind: "render", service: "inventory" },
+  },
   {
     prefixes: ["/api/v1/notifications", "/api/v1/notification-jobs"],
-    service: "notifications",
+    target: { kind: "render", service: "notifications" },
   },
   {
     prefixes: [
@@ -58,15 +76,20 @@ const ROUTES: Array<{ prefixes: string[]; service: ServiceName }> = [
       "/api/v1/audit",
       "/api/v1/dashboard",
     ],
-    service: "reporting",
+    target: { kind: "render", service: "reporting" },
   },
-  { prefixes: ["/api/v1/ai"], service: "ai" },
+  {
+    prefixes: ["/api/v1/ai"],
+    target: { kind: "render", service: "ai" },
+  },
 ];
 
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 
-// Creates the public gateway without giving it ownership of domain data.
-export function createGatewayApp(dependencies: GatewayDependencies = {}): Express {
+// Creates the public gateway without privileged database credentials.
+export function createGatewayApp(
+  dependencies: GatewayDependencies = {},
+): Express {
   const app = createServiceApp("api-gateway");
   app.set("trust proxy", 1);
   const contextSecret =
@@ -75,21 +98,24 @@ export function createGatewayApp(dependencies: GatewayDependencies = {}): Expres
       process.env.INTERNAL_CONTEXT_SECRET,
       "INTERNAL_CONTEXT_SECRET",
     );
-  const internalServiceKey =
-    dependencies.internalServiceKey ??
-    requireStrongSecret(process.env.INTERNAL_SERVICE_KEY, "INTERNAL_SERVICE_KEY");
-  const timeoutMs = dependencies.timeoutMs ?? Number(process.env.SERVICE_TIMEOUT_MS ?? 8_000);
+  const edgeGatewaySecret =
+    dependencies.edgeGatewaySecret ??
+    requireStrongSecret(
+      process.env.EDGE_GATEWAY_HMAC_SECRET,
+      "EDGE_GATEWAY_HMAC_SECRET",
+    );
+  const publishableKey =
+    dependencies.publishableKey ??
+    requiredEnvironment("SUPABASE_PUBLISHABLE_KEY");
+  const edgeFunctionsUrl =
+    dependencies.edgeFunctionsUrl ??
+    requiredEnvironment("SUPABASE_EDGE_FUNCTIONS_URL");
+  const timeoutMs =
+    dependencies.timeoutMs ??
+    Number(process.env.SERVICE_TIMEOUT_MS ?? 65_000);
   const serviceUrls = serviceUrlMap(dependencies.serviceUrls);
   const resolveToken =
-    dependencies.resolveToken ??
-    ((token: string, requestId: string) =>
-      resolveIdentityToken(
-        token,
-        requestId,
-        serviceUrls.identity,
-        internalServiceKey,
-        timeoutMs,
-      ));
+    dependencies.resolveToken ?? resolveRequestContext;
 
   app.use(restrictCors);
   app.use("/api/v1", gatewayRateLimit);
@@ -110,13 +136,14 @@ export function createGatewayApp(dependencies: GatewayDependencies = {}): Expres
   app.use(
     "/api/v1",
     asyncRoute(async (request, response) => {
-      await proxyDomainRequest(
-        request,
-        response,
-        serviceUrls,
+      await proxyDomainRequest(request, response, {
         contextSecret,
+        edgeFunctionsUrl,
+        edgeGatewaySecret,
+        publishableKey,
+        serviceUrls,
         timeoutMs,
-      );
+      });
     }),
   );
   app.use(notFoundHandler);
@@ -124,15 +151,25 @@ export function createGatewayApp(dependencies: GatewayDependencies = {}): Expres
   return app;
 }
 
-// Applies strict same-origin allowlisting while permitting private service calls.
-function restrictCors(request: Request, response: Response, next: NextFunction): void {
+// Applies strict same-origin allowlisting while permitting server calls without Origin.
+function restrictCors(
+  request: Request,
+  response: ExpressResponse,
+  next: NextFunction,
+): void {
   const origin = request.header("origin");
   const allowed = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
   if (origin && !allowed.includes(origin)) {
-    next(new AppError(403, "ORIGIN_NOT_ALLOWED", "This request origin is not allowed."));
+    next(
+      new AppError(
+        403,
+        "ORIGIN_NOT_ALLOWED",
+        "This request origin is not allowed.",
+      ),
+    );
     return;
   }
   if (origin) {
@@ -155,7 +192,11 @@ function restrictCors(request: Request, response: Response, next: NextFunction):
 }
 
 // Enforces a bounded process-local gateway request budget per client address.
-function gatewayRateLimit(request: Request, response: Response, next: NextFunction): void {
+function gatewayRateLimit(
+  request: Request,
+  response: ExpressResponse,
+  next: NextFunction,
+): void {
   const now = Date.now();
   const key = request.ip ?? "unknown";
   const current = rateBuckets.get(key);
@@ -166,9 +207,18 @@ function gatewayRateLimit(request: Request, response: Response, next: NextFuncti
   bucket.count += 1;
   rateBuckets.set(key, bucket);
   response.setHeader("ratelimit-limit", "120");
-  response.setHeader("ratelimit-remaining", String(Math.max(0, 120 - bucket.count)));
+  response.setHeader(
+    "ratelimit-remaining",
+    String(Math.max(0, 120 - bucket.count)),
+  );
   if (bucket.count > 120) {
-    next(new AppError(429, "RATE_LIMITED", "Too many requests. Try again shortly."));
+    next(
+      new AppError(
+        429,
+        "RATE_LIMITED",
+        "Too many requests. Try again shortly.",
+      ),
+    );
     return;
   }
   next();
@@ -178,120 +228,243 @@ function gatewayRateLimit(request: Request, response: Response, next: NextFuncti
 function bearerToken(request: Request): string {
   const authorization = request.header("authorization");
   if (!authorization?.startsWith("Bearer ")) {
-    throw new AppError(401, "UNAUTHENTICATED", "A valid access token is required.");
+    throw new AppError(
+      401,
+      "UNAUTHENTICATED",
+      "A valid access token is required.",
+    );
   }
   const token = authorization.slice("Bearer ".length).trim();
   if (!token) {
-    throw new AppError(401, "UNAUTHENTICATED", "A valid access token is required.");
+    throw new AppError(
+      401,
+      "UNAUTHENTICATED",
+      "A valid access token is required.",
+    );
   }
   return token;
 }
 
-// Resolves one verified token and protected database role through Identity Service.
-async function resolveIdentityToken(
+// Resolves a verified user and active roles through caller-scoped Supabase access.
+async function resolveRequestContext(
   token: string,
-  requestId: string,
-  identityUrl: string,
-  internalServiceKey: string,
-  timeoutMs: number,
+  _requestId: string,
 ): Promise<AuthResolution> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(`${identityUrl}/internal/auth/resolve`, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "x-request-id": requestId,
-        "x-zentraq-service-key": internalServiceKey,
-      },
-      signal: controller.signal,
-    });
-    const payload = (await response.json()) as ApiResponse<AuthResolution>;
-    if (!response.ok || !payload.success) {
-      throw new AppError(
-        response.status === 401 ? 401 : 503,
-        response.status === 401 ? "UNAUTHENTICATED" : "IDENTITY_UNAVAILABLE",
-        response.status === 401
-          ? "A valid access token is required."
-          : "Identity verification is temporarily unavailable.",
-      );
-    }
-    return payload.data;
-  } catch (error) {
-    if (error instanceof AppError) throw error;
+  const {
+    data: { user },
+    error: authError,
+  } = await createAuthClient().auth.getUser(token);
+  if (authError || !user) {
+    throw new AppError(
+      401,
+      "UNAUTHENTICATED",
+      "A valid access token is required.",
+    );
+  }
+
+  const { data, error } = await createUserClient(token).rpc(
+    "resolve_request_context_v1",
+  );
+  const row = Array.isArray(data)
+    ? (data[0] as RequestContextRow | undefined)
+    : undefined;
+  if (error) {
     throw new AppError(
       503,
-      "IDENTITY_UNAVAILABLE",
-      "Identity verification is temporarily unavailable.",
+      "AUTHORIZATION_UNAVAILABLE",
+      "Authorization is temporarily unavailable.",
     );
-  } finally {
-    clearTimeout(timeout);
   }
+  if (!row || row.user_id !== user.id) {
+    throw new AppError(
+      403,
+      "ROLE_REQUIRED",
+      "An active Zentraq role is required.",
+    );
+  }
+
+  const allowed = new Set<string>(ZENTRAQ_ROLES);
+  const roles = [...new Set(row.roles)]
+    .filter((role) => allowed.has(role)) as ZentraqRole[];
+  if (roles.length === 0) {
+    throw new AppError(
+      403,
+      "ROLE_REQUIRED",
+      "An active Zentraq role is required.",
+    );
+  }
+  return { roles, userId: user.id };
 }
 
-// Routes a sanitized request to the service that owns the public path.
+interface ProxyConfiguration {
+  contextSecret: string;
+  edgeFunctionsUrl: string;
+  edgeGatewaySecret: string;
+  publishableKey: string;
+  serviceUrls: Record<ServiceName, string>;
+  timeoutMs: number;
+}
+
+// Routes a sanitized request to the service or Edge Function owning the path.
 async function proxyDomainRequest(
   request: Request,
-  response: Response,
-  serviceUrls: Record<ServiceName, string>,
-  contextSecret: string,
-  timeoutMs: number,
+  response: ExpressResponse,
+  configuration: ProxyConfiguration,
 ): Promise<void> {
   if (!request.auth) {
-    throw new AppError(401, "UNAUTHENTICATED", "Authentication is required.");
+    throw new AppError(
+      401,
+      "UNAUTHENTICATED",
+      "Authentication is required.",
+    );
   }
-  const pathname = new URL(request.originalUrl, "http://gateway.local").pathname;
+  const pathname = new URL(
+    request.originalUrl,
+    "http://gateway.local",
+  ).pathname;
   const route = ROUTES.find((candidate) =>
     candidate.prefixes.some((prefix) => pathname.startsWith(prefix)),
   );
-  if (!route) throw new AppError(404, "NOT_FOUND", "No service owns this route.");
-
-  const signed = signInternalContext(request.auth, contextSecret);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const upstream = await fetch(
-      `${serviceUrls[route.service]}${request.originalUrl}`,
-      {
-        method: request.method,
-        headers: {
-          accept: "application/json",
-          authorization: request.header("authorization") ?? "",
-          "content-type": "application/json",
-          "x-request-id": request.requestId,
-          "x-zentraq-context": signed.payload,
-          "x-zentraq-signature": signed.signature,
-        },
-        body:
-          request.method === "GET" || request.method === "HEAD"
-            ? undefined
-            : JSON.stringify(request.body ?? {}),
-        signal: controller.signal,
-      },
-    );
-    const body = await upstream.text();
-    response.status(upstream.status);
-    response.setHeader(
-      "content-type",
-      upstream.headers.get("content-type") ?? "application/json",
-    );
-    response.send(body);
-  } catch (error) {
-    const isTimeout = error instanceof Error && error.name === "AbortError";
+  if (!route) {
     throw new AppError(
-      503,
-      isTimeout ? "SERVICE_TIMEOUT" : "SERVICE_UNAVAILABLE",
-      "The requested service is temporarily unavailable.",
+      404,
+      "NOT_FOUND",
+      "No service owns this route.",
     );
-  } finally {
-    clearTimeout(timeout);
   }
+
+  const body =
+    request.method === "GET" || request.method === "HEAD"
+      ? ""
+      : JSON.stringify(request.body ?? {});
+  const upstream = await fetchUpstream(
+    request,
+    route.target,
+    request.originalUrl,
+    body,
+    configuration,
+  );
+  const responseBody = await upstream.text();
+  response.status(upstream.status);
+  response.setHeader("x-request-id", request.requestId);
+  response.setHeader(
+    "content-type",
+    upstream.headers.get("content-type") ?? "application/json",
+  );
+  response.send(responseBody);
 }
 
-// Resolves environment-backed internal service URLs without exposing them publicly.
+// Calls one upstream with a single automatic retry only for idempotent GET requests.
+async function fetchUpstream(
+  request: Request,
+  target: RouteTarget,
+  signedPath: string,
+  body: string,
+  configuration: ProxyConfiguration,
+): Promise<globalThis.Response> {
+  const attempts = request.method === "GET" ? 2 : 1;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      configuration.timeoutMs,
+    );
+    try {
+      return await fetch(
+        upstreamUrl(target, request.originalUrl, configuration),
+        {
+          body: body || undefined,
+          headers: upstreamHeaders(
+            request,
+            target,
+            signedPath,
+            body,
+            configuration,
+          ),
+          method: request.method,
+          signal: controller.signal,
+        },
+      );
+    } catch (error) {
+      const retry = attempt < attempts;
+      if (!retry) {
+        const isTimeout =
+          error instanceof Error && error.name === "AbortError";
+        throw new AppError(
+          503,
+          isTimeout ? "SERVICE_TIMEOUT" : "SERVICE_UNAVAILABLE",
+          "The requested service is temporarily unavailable.",
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw new AppError(
+    503,
+    "SERVICE_UNAVAILABLE",
+    "The requested service is temporarily unavailable.",
+  );
+}
+
+// Builds upstream headers for either caller-scoped Edge or signed Render traffic.
+function upstreamHeaders(
+  request: Request,
+  target: RouteTarget,
+  signedPath: string,
+  body: string,
+  configuration: ProxyConfiguration,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    authorization: request.header("authorization") ?? "",
+    "content-type": "application/json",
+    "x-request-id": request.requestId,
+  };
+  if (target.kind === "render") {
+    const signed = signInternalContext(
+      request.auth!,
+      configuration.contextSecret,
+    );
+    headers["x-zentraq-context"] = signed.payload;
+    headers["x-zentraq-signature"] = signed.signature;
+    return headers;
+  }
+
+  const timestamp = String(Date.now());
+  const signed = signEdgeRequest(
+    {
+      body,
+      method: request.method,
+      path: signedPath,
+      requestId: request.requestId,
+      timestamp,
+    },
+    configuration.edgeGatewaySecret,
+  );
+  headers.apikey = configuration.publishableKey;
+  headers["x-zentraq-body-sha256"] = signed.bodySha256;
+  headers["x-zentraq-path"] = signedPath;
+  headers["x-zentraq-timestamp"] = timestamp;
+  headers["x-zentraq-signature"] = signed.signature;
+  return headers;
+}
+
+// Resolves the concrete upstream URL without accepting caller-controlled hosts.
+function upstreamUrl(
+  target: RouteTarget,
+  originalUrl: string,
+  configuration: ProxyConfiguration,
+): string {
+  if (target.kind === "edge") {
+    const query = new URL(originalUrl, "https://gateway.local").search;
+    return `${configuration.edgeFunctionsUrl.replace(/\/$/, "")}/${target.functionName}${query}`;
+  }
+  return `${configuration.serviceUrls[target.service]}${originalUrl}`;
+}
+
+// Resolves environment-backed Render service URLs.
 function serviceUrlMap(
   overrides: GatewayDependencies["serviceUrls"],
 ): Record<ServiceName, string> {
@@ -301,17 +474,24 @@ function serviceUrlMap(
       overrides?.appointments ??
       process.env.APPOINTMENT_SERVICE_URL ??
       "http://localhost:4003",
-    clinical:
-      overrides?.clinical ?? process.env.CLINICAL_SERVICE_URL ?? "http://localhost:4002",
-    identity:
-      overrides?.identity ?? process.env.IDENTITY_SERVICE_URL ?? "http://localhost:4001",
     inventory:
-      overrides?.inventory ?? process.env.INVENTORY_SERVICE_URL ?? "http://localhost:4004",
+      overrides?.inventory ??
+      process.env.INVENTORY_SERVICE_URL ??
+      "http://localhost:4004",
     notifications:
       overrides?.notifications ??
       process.env.NOTIFICATION_SERVICE_URL ??
       "http://localhost:4005",
     reporting:
-      overrides?.reporting ?? process.env.REPORTING_SERVICE_URL ?? "http://localhost:4006",
+      overrides?.reporting ??
+      process.env.REPORTING_SERVICE_URL ??
+      "http://localhost:4006",
   };
+}
+
+// Reads one required gateway environment value without logging it.
+function requiredEnvironment(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required.`);
+  return value;
 }

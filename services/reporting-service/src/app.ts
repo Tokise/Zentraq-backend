@@ -20,9 +20,10 @@ import {
   requireStrongSecret,
   sendCollection,
   sendData,
-  serviceRequest,
   type AuthContext,
 } from "@zentraq/shared";
+
+import { drainReportJobs } from "./worker.js";
 
 const auditSchema = z.object({
   action: z.string().trim().min(1).max(120),
@@ -64,9 +65,7 @@ interface ReportStatusRow {
 
 interface ReportingDependencies {
   contextSecret?: string;
-  identityServiceUrl?: string;
   internalServiceKey?: string;
-  timeoutMs?: number;
 }
 
 // Creates Reporting Service for sanitized audits, aggregates, and report artifacts.
@@ -80,11 +79,6 @@ export function createReportingApp(
   const internalServiceKey =
     dependencies.internalServiceKey ??
     requireStrongSecret(process.env.INTERNAL_SERVICE_KEY, "INTERNAL_SERVICE_KEY");
-  const identityServiceUrl =
-    dependencies.identityServiceUrl ??
-    process.env.IDENTITY_SERVICE_URL ??
-    "http://localhost:4001";
-  const timeoutMs = dependencies.timeoutMs ?? Number(process.env.SERVICE_TIMEOUT_MS ?? 8_000);
 
   app.post(
     "/internal/audit",
@@ -96,6 +90,17 @@ export function createReportingApp(
     }),
   );
 
+  app.post(
+    "/internal/workers/reports/drain",
+    requireInternalServiceKey(internalServiceKey),
+    asyncRoute(async (request, response) => {
+      const body = request.body as { batchSize?: unknown } | undefined;
+      sendData(
+        response,
+        await drainReportJobs(body?.batchSize),
+      );
+    }),
+  );
   app.use("/api/v1", requireInternalContext(contextSecret));
 
   app.get(
@@ -133,10 +138,7 @@ export function createReportingApp(
       const clinicAccount =
         actorRole === "admin"
           ? null
-          : await serviceRequest<ClinicAccountReference>(
-              `${identityServiceUrl}/internal/users/${auth.userId}/clinic-account`,
-              { requestId: request.requestId, serviceKey: internalServiceKey, timeoutMs },
-            );
+          : await clinicAccountReference(auth.userId);
       sendData(response, await dashboardAggregate(requestedRole, clinicAccount?.id ?? null));
     }),
   );
@@ -166,6 +168,7 @@ export function createReportingApp(
       if (error || typeof data !== "string") {
         throw new AppError(503, "REPORT_UNAVAILABLE", "The report could not be queued.");
       }
+      scheduleReportDrain();
       publishAuditEvent({
         action: "REPORT_REQUESTED",
         entityId: data,
@@ -244,6 +247,21 @@ export function createReportingApp(
   return app;
 }
 
+// Drains a new report while the already-awake web service can process it.
+function scheduleReportDrain(): void {
+  setImmediate(() => {
+    void drainReportJobs(1).catch((error: unknown) => {
+      console.error(
+        JSON.stringify({
+          code: "REPORT_DRAIN_FAILED",
+          event: "report_drain_failed",
+          message: error instanceof Error ? error.message : "unknown",
+        }),
+      );
+    });
+  });
+}
+
 // Persists one sanitized audit event owned by Reporting Service.
 async function recordAuditEvent(
   input: z.infer<typeof auditSchema>,
@@ -290,6 +308,33 @@ function authenticated(context: AuthContext | undefined): AuthContext {
   return context;
 }
 
+// Resolves one active clinic account for role-scoped aggregates.
+async function clinicAccountReference(
+  userId: string,
+): Promise<ClinicAccountReference> {
+  const { data, error } = await createAdminClient()
+    .from("clinic_accounts")
+    .select("id,user_id,role")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .in("role", ["admin", "doctor", "nurse"])
+    .maybeSingle();
+  if (error) {
+    throw new AppError(
+      503,
+      "DATABASE_UNAVAILABLE",
+      "Unable to resolve the clinic account.",
+    );
+  }
+  if (!data) {
+    throw new AppError(
+      403,
+      "FORBIDDEN",
+      "An active clinic account is required.",
+    );
+  }
+  return data as ClinicAccountReference;
+}
 // Loads minimized role-scoped dashboard counts without returning source rows.
 async function dashboardAggregate(
   role: "admin" | "doctor" | "nurse",

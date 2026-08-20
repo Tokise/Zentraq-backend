@@ -107,10 +107,7 @@ export function createAppointmentApp(
   const internalServiceKey =
     dependencies.internalServiceKey ??
     requireStrongSecret(process.env.INTERNAL_SERVICE_KEY, "INTERNAL_SERVICE_KEY");
-  const identityServiceUrl =
-    dependencies.identityServiceUrl ??
-    process.env.IDENTITY_SERVICE_URL ??
-    "http://localhost:4001";
+  const identityServiceUrl = dependencies.identityServiceUrl ?? "";
   const notificationServiceUrl =
     dependencies.notificationServiceUrl ??
     process.env.NOTIFICATION_SERVICE_URL ??
@@ -412,48 +409,116 @@ function applyAppointmentScope<T>(query: T, scope: AppointmentScope): T {
   return query;
 }
 
-// Resolves the current user through the Identity Service patient boundary.
+// Resolves one active patient reference from server-only database access.
 async function patientReference(
   userId: string,
-  requestId: string,
-  identityUrl: string,
-  serviceKey: string,
-  timeoutMs: number,
+  _requestId: string,
+  _identityUrl: string,
+  _serviceKey: string,
+  _timeoutMs: number,
 ): Promise<PatientReference> {
-  return serviceRequest<PatientReference>(
-    `${identityUrl}/internal/users/${userId}/patient-ref`,
-    { requestId, serviceKey, timeoutMs },
+  const admin = createAdminClient();
+  const [student, faculty, staff] = await Promise.all([
+    admin
+      .from("students")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle(),
+    admin
+      .from("faculty")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle(),
+    admin
+      .from("staff")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle(),
+  ]);
+  const error = student.error ?? faculty.error ?? staff.error;
+  if (error) {
+    throw new AppError(
+      503,
+      "DATABASE_UNAVAILABLE",
+      "Unable to resolve the patient profile.",
+    );
+  }
+  if (student.data) return { id: student.data.id, patientType: "student" };
+  if (faculty.data) return { id: faculty.data.id, patientType: "faculty" };
+  if (staff.data) return { id: staff.data.id, patientType: "staff" };
+  throw new AppError(
+    404,
+    "PATIENT_NOT_FOUND",
+    "Patient profile not found.",
   );
 }
 
-// Resolves an active clinician without querying Identity-owned tables directly.
+// Resolves one active Doctor or Nurse account by its clinic identifier.
 async function clinicianReference(
   clinicAccountId: string,
-  requestId: string,
-  identityUrl: string,
-  serviceKey: string,
-  timeoutMs: number,
+  _requestId: string,
+  _identityUrl: string,
+  _serviceKey: string,
+  _timeoutMs: number,
 ): Promise<ClinicAccountReference> {
-  return serviceRequest<ClinicAccountReference>(
-    `${identityUrl}/internal/clinicians/${clinicAccountId}`,
-    { requestId, serviceKey, timeoutMs },
-  );
+  const { data, error } = await createAdminClient()
+    .from("clinic_accounts")
+    .select("id,user_id,display_name,role,is_active")
+    .eq("id", clinicAccountId)
+    .eq("is_active", true)
+    .in("role", ["doctor", "nurse"])
+    .maybeSingle();
+  if (error) {
+    throw new AppError(
+      503,
+      "DATABASE_UNAVAILABLE",
+      "Unable to validate the clinician.",
+    );
+  }
+  if (!data) {
+    throw new AppError(
+      404,
+      "CLINICIAN_NOT_FOUND",
+      "Clinician not found.",
+    );
+  }
+  return data as ClinicAccountReference;
 }
 
-// Resolves the signed-in clinician's active clinic account through Identity Service.
+// Resolves the signed-in user's active clinic account from server-only access.
 async function clinicAccountReference(
   userId: string,
-  requestId: string,
-  identityUrl: string,
-  serviceKey: string,
-  timeoutMs: number,
+  _requestId: string,
+  _identityUrl: string,
+  _serviceKey: string,
+  _timeoutMs: number,
 ): Promise<ClinicAccountReference> {
-  return serviceRequest<ClinicAccountReference>(
-    `${identityUrl}/internal/users/${userId}/clinic-account`,
-    { requestId, serviceKey, timeoutMs },
-  );
+  const { data, error } = await createAdminClient()
+    .from("clinic_accounts")
+    .select("id,user_id,display_name,role,is_active")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .in("role", ["admin", "doctor", "nurse"])
+    .maybeSingle();
+  if (error) {
+    throw new AppError(
+      503,
+      "DATABASE_UNAVAILABLE",
+      "Unable to validate the clinic account.",
+    );
+  }
+  if (!data) {
+    throw new AppError(
+      404,
+      "CLINIC_ACCOUNT_NOT_FOUND",
+      "Clinic account not found.",
+    );
+  }
+  return data as ClinicAccountReference;
 }
-
 // Verifies availability, blocks, and occupied slots before scheduling.
 async function assertSlotAvailable(
   clinicianId: string,
