@@ -1,0 +1,264 @@
+# Zentraq Current Sprint
+
+**Last reviewed:** 2026-08-17
+
+## Sprint 6 — Release Hardening and Verification
+
+**Dates:** 2026-08-11 to 2026-08-17
+
+**Goal:** Turn the current source-complete clinical system into a reproducible,
+security-reviewed release candidate by closing known database, authorization,
+patient-workflow, testing, and secret-management blockers.
+
+This sprint does not add new clinic submodules. It verifies and hardens the
+workflows across the ten original submodules documented in the
+[Software Architecture Document](docs/SOFTWARE_ARCHITECTURE_DOCUMENT.md).
+
+### Canonical product structure
+
+| Module | Original submodule | Sprint 6 relationship |
+| --- | --- | --- |
+| 1 | Student Medical Records Management | Existing workflow covered by cross-role verification |
+| 2 | Clinic Visit & Consultation Logging | Existing workflow covered by database, authorization, and browser verification |
+| 3 | Medicine Inventory & Dispensing | Existing workflow covered by authorization and browser verification |
+| 4 | Appointment Scheduling System | Direct commitment through F40 and cross-role tests |
+| 5 | Incident & Emergency Case Management | Existing workflow covered by cross-role verification |
+| 6 | Faculty & Staff Health Services | Existing workflow covered by staff repair and ownership tests |
+| 7 | School Health Program Monitoring | Existing workflow covered by RPC and role verification |
+| 8 | Health Clearance and Certification | Existing workflow covered by Storage and role verification |
+| 9 | Reporting and Compliance | Direct commitments through F89 and completed F90 |
+| 10 | User Access & Confidentiality Control | Direct commitments through F95, F98, and F100 |
+
+## Sprint status
+
+| User Story No. | Features/Task | Module | Priority | Points | Status |
+| --- | --- | --- | --- | ---: | --- |
+| F90 | Documentation baseline | Reporting and Compliance | High | 3 | Completed |
+| F89 | Database reproducibility | Reporting and Compliance | High | 8 | Ready |
+| F95 | Supabase authorization verification | User Access & Confidentiality Control | High | 8 | Ready |
+| F40 | Staff appointment ownership repair | Appointment Scheduling System | High | 3 | Ready |
+| F100 | Critical workflow test coverage | User Access & Confidentiality Control | High | 8 | Ready |
+| F98 | Fail-closed PHI secret handling | User Access & Confidentiality Control | High | 5 | Implemented (source); verification open |
+| **Total** |  |  |  | **35** |  |
+
+## F90 — Current-system documentation baseline
+
+### Deliverables
+
+- [x] Replace the README with a concise system overview, safe setup, and links.
+- [x] Rewrite the architecture document around the ten original submodules,
+      technical service boundaries, database catalog, roles, privacy, and
+      security.
+- [x] Remove stale routes, schemas, framework versions, and encoding corruption
+      from the primary documentation.
+- [x] Reclassify implemented work, active work, and deferred work across the
+      backlog and sprint history.
+- [x] Perform final cross-document link, terminology, and whitespace checks.
+
+### Acceptance criteria
+
+- Only documentation files are changed by this item.
+- Documentation distinguishes source evidence, local migration evidence,
+  deployed verification, and operational compliance.
+- `patient_complaint` is canonical; historical names appear only when explaining
+  compatibility history.
+
+## F89 — Database reproducibility
+
+### Problem
+
+Current code references nine views whose complete `CREATE VIEW` definitions were
+not found in the reviewed local migration set. The target project may also have
+different migration, function, or grant state. A prior environment reported
+`public.complaints` missing while applying consultation-catalog SQL.
+
+### Tasks
+
+- [ ] Check Supabase CLI version and discover commands through `--help`.
+- [ ] Compare local and target migration histories without modifying production.
+- [ ] Confirm `consultations.patient_complaint` and `public.complaints` exist in
+      the target schema before running dependent SQL.
+- [ ] Capture reviewed definitions for:
+  - `v_appointment_overview`
+  - `v_patient_medical_record`
+  - `v_consultation_summary`
+  - `v_medicine_stock_summary`
+  - `v_complaint_frequency`
+  - `v_dispensing_summary`
+  - `v_clearance_completion`
+  - `v_daily_consultations`
+  - `v_rfid_patient_profiles`
+- [ ] Make app-facing views `security_invoker` where supported, or protect them
+      with explicit grants and safe underlying access.
+- [ ] Verify the four application RPC contracts:
+  - `check_in_rfid`
+  - `claim_consultation`
+  - `finalize_consultation_workflow`
+  - `approve_health_program`
+- [ ] Run migrations against a disposable/staging database in order.
+- [ ] Run database advisors and record unresolved findings.
+- [ ] Verify seed behavior without copying production PHI.
+
+### Acceptance criteria
+
+- A clean non-production environment can be built from version-controlled files.
+- All nine views and four RPCs have reviewed, versioned definitions/signatures.
+- The complaint migration works whether the compatible catalog already exists or
+  must be created.
+- Migration list and advisor output are recorded; timeouts or unavailable tools
+  remain explicitly unverified.
+
+## F95 — Authorization and Supabase security verification
+
+### Tasks
+
+- [ ] Inventory every table/view grant in exposed schemas.
+- [ ] Confirm RLS is enabled on every intended Data API object.
+- [ ] Test ownership policies for student, faculty, and staff records.
+- [ ] Test assignment isolation for doctor and nurse queues, details, histories,
+      dashboards, reports, and direct action inputs.
+- [ ] Test admin clinic-wide access only where intentionally implemented.
+- [ ] Inspect every `SECURITY DEFINER` function owner, `search_path`, internal
+      `auth.uid()`/role checks, default `PUBLIC` execution, and explicit grants.
+- [ ] Verify private Realtime topics reject unauthorized subscribers and contain
+      no clinical payload.
+- [ ] Verify private medical buckets and public announcement media policies.
+- [ ] Confirm service-role keys remain server-only and are absent from built
+      client assets.
+
+### Acceptance criteria
+
+- Positive and negative tests pass for all six roles.
+- An authenticated user cannot gain access merely because an object is granted
+  to `authenticated`.
+- Views do not bypass intended row policies.
+- Privileged RPCs reject unauthorized roles and invalid workflow states.
+- Storage and Realtime behavior matches the architecture document.
+
+## F40 — Staff appointment ownership repair
+
+### Problem
+
+Appointment creation correctly maps staff to `staff` and `staff_id`, but the
+current `getMyAppointments` and `cancelAppointment` actions resolve every
+non-student through `faculty` and `faculty_id`.
+
+### Tasks
+
+- [ ] Centralize patient-role to profile-table and foreign-key mapping.
+- [ ] Use `staff`/`staff_id` for staff appointment history and cancellation.
+- [ ] Extend appointment DTO types to include `patient_type: "staff"`.
+- [ ] Review reminder/notification helpers for the same two-role assumption.
+- [ ] Add ownership tests for student, faculty, and staff.
+
+### Acceptance criteria
+
+- Staff can list and cancel only their own eligible appointments.
+- Student and faculty behavior remains unchanged.
+- Supplying another profile or appointment ID does not bypass ownership.
+
+## F100 — Critical-flow test coverage
+
+### Automated coverage
+
+- [ ] Login, role redirect, invalidated session, and logout.
+- [ ] RFID lookup, duplicate check-in protection, queue invalidation, and claim
+      race behavior.
+- [ ] Consultation tabs, visit reason search/Other validation, nurse handoff,
+      doctor/admin final review, and catalog deduplication.
+- [ ] Visit and history tables with 0, 1, 10, and 11 rows.
+- [ ] Patient booking, slot conflict, staff history/cancellation, staff review,
+      and AI success/fallback behavior.
+- [ ] Own-record access and cross-patient denial for student, faculty, and staff.
+- [ ] Signed attachment authorization and expiry.
+- [ ] Dashboard/report assignment scope and all six clinical activity series.
+
+### Browser and accessibility smoke matrix
+
+| Role | Minimum browser paths |
+| --- | --- |
+| Admin | Dashboard, records, visits/history, appointments, reports, access control, RFID registration |
+| Doctor | Dashboard, assigned records/visits/history, final review, appointments, clearances, reports |
+| Nurse | Dashboard, assigned visits/history, handoff, appointments, medicine, incidents, reports |
+| Student | Dashboard, appointment, own record/history, incident report, clearance |
+| Faculty | Dashboard, appointment, own record/history, incident report, clearance |
+| Staff | Dashboard, appointment/history/cancel, own record/history, clearance |
+
+For each path, verify keyboard order, visible focus, control names, empty/loading/
+error states, responsive layout, and absence of console/runtime errors.
+
+### Acceptance criteria
+
+- Critical automated checks pass in CI or have a recorded environment blocker.
+- Role-by-role browser results identify the tested environment and account scope.
+- No failed or timed-out check is described as passing.
+
+## F98 — Fail-closed PHI secret handling
+
+### Tasks
+
+- [x] Remove the hardcoded fallback from `lib/crypto-phi.ts`.
+- [x] Fail helper invocation clearly when a required key is absent.
+- [ ] Use a managed, random, server-only key with a documented rotation design.
+- [x] Confirm the helper is still unused before changing any stored format.
+- [x] Do not encrypt existing columns until field selection, migration, search,
+      rotation, backup, and recovery behavior are approved.
+- [ ] Scan source, history, configuration, and built assets for exposed secrets.
+
+### Acceptance criteria
+
+- No production path can silently use a default encryption secret.
+- No secret is exposed through a `NEXT_PUBLIC_` variable or client bundle.
+- The change does not falsely claim that clinical columns are application-level
+  encrypted when the helper is not integrated.
+
+## Definition of done
+
+- All six sprint items meet their acceptance criteria.
+- TypeScript, focused ESLint, automated tests, migration verification, Supabase
+  advisors, secret scanning, and `git diff --check` pass where available.
+- Browser smoke results cover all roles and explicitly record environment limits.
+- No application-facing view or privileged RPC remains definition-unknown.
+- High-severity open findings have an owner and are either fixed or explicitly
+  accepted by the appropriate security/privacy/clinical authority.
+- [BACKLOG.md](BACKLOG.md), [COMPLETED_SPRINTS.md](COMPLETED_SPRINTS.md), the
+  README, and architecture document reflect the final sprint outcome.
+
+## Risks and controls
+
+| Risk | Control |
+| --- | --- |
+| Target migrations differ from local history | Inspect first, stage changes, back up, and never repair production blindly |
+| Privileged function tests modify clinical data | Use disposable test identities and non-production fixtures |
+| Hardening breaks role workflows | Run positive and negative tests for all six roles before promotion |
+| Security work expands beyond one week | Keep release blockers in scope and return non-blockers to the prioritized backlog |
+| Environment or network unavailable | Record the exact blocker and do not mark the item verified |
+
+## Out of scope for Sprint 6
+
+- New clinical modules or autonomous AI behavior
+- Bulk imports, external identity synchronization, SMS/email providers, PWA/
+  offline mode, internationalization, laboratory workflows, or a new timeline UI
+- Destructive cleanup of historical database objects before live dependency
+  analysis
+- A claim of HIPAA or Philippine Data Privacy Act certification
+
+## Microservices migration implementation addendum
+
+On 2026-08-17, a separate local `zentraq-backend` Git repository was created
+with an API Gateway and seven domain services. The frontend gained a typed API
+client, a server token bridge, and a conditional `/api/v1/*` rewrite. Existing
+clinic Server Actions remain the active paths because the services, secrets,
+target migration, Render network, and six-role workflows are not deployed or
+verified end to end.
+
+Locally verified evidence includes a frozen pnpm install, backend ESLint and
+type checks, four automated test files containing eight passing tests,
+production builds for all backend packages, and direct health responses from
+all eight services. Frontend focused ESLint, TypeScript, and production build
+checks pass. The first sandboxed build could not fetch Google Fonts; a rerun
+with network access compiled successfully and generated 145 routes.
+
+The source also adds `dispense_medicine_v1` as an atomic, idempotent inventory
+RPC migration. It has not been pushed because local and remote Supabase
+migration histories must be reconciled first.

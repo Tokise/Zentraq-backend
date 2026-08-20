@@ -1,0 +1,168 @@
+services:
+  - type: web
+    name: zentraq-api-gateway
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/api-gateway build
+    startCommand: pnpm --filter @zentraq/api-gateway start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - services/api-gateway/**
+        - packages/shared/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+    envVars:
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_EDGE_FUNCTIONS_URL
+        sync: false
+      - key: EDGE_GATEWAY_HMAC_SECRET
+        sync: false
+      - key: INTERNAL_CONTEXT_SECRET
+        sync: false
+      - key: APPOINTMENT_SERVICE_URL
+        sync: false
+      - key: INVENTORY_SERVICE_URL
+        sync: false
+      - key: NOTIFICATION_SERVICE_URL
+        sync: false
+      - key: REPORTING_SERVICE_URL
+        sync: false
+      - key: AI_SERVICE_URL
+        sync: false
+      - key: SERVICE_TIMEOUT_MS
+        value: "65000"
+
+  - type: web
+    name: zentraq-appointments
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/appointment-service build
+    startCommand: pnpm --filter @zentraq/appointment-service start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - services/appointment-service/**
+        - packages/shared/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: NOTIFICATION_SERVICE_URL
+        sync: false
+      - key: REPORTING_SERVICE_URL
+        sync: false
+      - key: INTERNAL_SERVICE_KEY
+        sync: false
+      - key: INTERNAL_CONTEXT_SECRET
+        sync: false
+
+  - type: web
+    name: zentraq-inventory
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/inventory-service build
+    startCommand: pnpm --filter @zentraq/inventory-service start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - services/inventory-service/**
+        - packages/shared/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: REPORTING_SERVICE_URL
+        sync: false
+      - key: INTERNAL_SERVICE_KEY
+        sync: false
+      - key: INTERNAL_CONTEXT_SECRET
+        sync: false
+
+  - type: web
+    name: zentraq-notifications
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/notification-service build
+    startCommand: pnpm --filter @zentraq/notification-service start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - services/notification-service/**
+        - packages/shared/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: INTERNAL_SERVICE_KEY
+        sync: false
+      - key: INTERNAL_CONTEXT_SECRET
+        sync: false
+      - key: EMAIL_PROVIDER_API_KEY
+        sync: false
+
+  - type: web
+    name: zentraq-reporting
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/reporting-service build
+    startCommand: pnpm --filter @zentraq/reporting-service start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - services/reporting-service/**
+        - packages/shared/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: INTERNAL_SERVICE_KEY
+        sync: false
+      - key: INTERNAL_CONTEXT_SECRET
+        sync: false
+
+  - type: web
+    name: zentraq-ai
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/ai-service build
+    startCommand: pnpm --filter @zentraq/ai-service start
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - services/ai-service/**
+        - packages/shared/**
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+    envVars:
+      - key: INTERNAL_CONTEXT_SECRET
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        sync: false
+      - key: OPENROUTER_TIMEOUT_MS
+        value: "10000"
