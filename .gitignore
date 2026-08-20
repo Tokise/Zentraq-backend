@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.env
+.env*
+!.env.example
+*.tsbuildinfo
+.DS_Store
+# Supabase source is versioned; local link state and function installs are not.
+/supabase/.temp/
+/supabase/functions/node_modules/
