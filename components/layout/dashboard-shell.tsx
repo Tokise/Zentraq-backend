@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { UserRole } from "@/lib/auth/roles"
 import { NotificationDropdown } from "@/components/layout/notification-dropdown"
+import { AppRealtimeSync } from "@/components/realtime/app-realtime-sync"
 import { signOutAction } from "@/actions/auth/session"
 
 type DashboardShellProps = {
@@ -89,6 +90,7 @@ export function DashboardShell({
   const roleLabel = userRole === "admin" ? "Admin" : userRole === "nurse" ? "Nurse" : userRole === "doctor" ? "Doctor" : userRole === "faculty" ? "Faculty" : userRole === "student" ? "Student" : userRole || "User"
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <AppRealtimeSync />
       {/* Sidebar — responsive */}
       <div
         className={cn(

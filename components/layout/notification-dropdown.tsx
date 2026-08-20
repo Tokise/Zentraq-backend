@@ -160,11 +160,11 @@ export function NotificationDropdown({ userRole = "nurse" }: NotificationDropdow
         let active = true
 
         async function subscribe() {
-            const { data } = await supabase.auth.getUser()
-            if (!active || !data.user) return
-            await supabase.realtime.setAuth()
+            const { data } = await supabase.auth.getSession()
+            if (!active || !data.session) return
+            await supabase.realtime.setAuth(data.session.access_token)
             channel = supabase
-                .channel(`notifications:${data.user.id}`, {
+                .channel(`notifications:${data.session.user.id}`, {
                     config: { private: true },
                 })
                 .on(

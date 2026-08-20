@@ -9,6 +9,7 @@ import {
   type AnnouncementDTO,
 } from "@/actions/communications/announcements"
 import { PageHeader } from "@/components/common/page-header"
+import { useDomainInvalidation } from "@/components/realtime/app-realtime-sync"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -21,10 +22,10 @@ export function ClinicAnnouncementsWorkspace() {
   const [loading, setLoading] = useState(true)
 
   // Loads the authenticated clinic announcement DTOs.
-  const loadAnnouncements = useCallback(async () => {
-    setLoading(true)
+  const loadAnnouncements = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true)
     const result = await getAnnouncementsAction()
-    setLoading(false)
+    if (showLoading) setLoading(false)
     if (result.error) {
       toast.error(result.error)
       setAnnouncements([])
@@ -39,6 +40,11 @@ export function ClinicAnnouncementsWorkspace() {
     }, 0)
     return () => window.clearTimeout(initialLoad)
   }, [loadAnnouncements])
+
+  useDomainInvalidation("announcements", () => {
+    setPage(1)
+    void loadAnnouncements(false)
+  })
 
   const totalPages = Math.ceil(announcements.length / PAGE_SIZE)
   const rows = useMemo(() => {

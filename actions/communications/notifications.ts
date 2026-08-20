@@ -8,9 +8,14 @@ import { assertSameOrigin } from "@/lib/security/action-guard";
 export type NotificationType =
   | "appointment"
   | "clearance"
-  | "inventory"
+  | "consultation"
+  | "emergency"
   | "incident"
-  | "system";
+  | "inventory"
+  | "rfid"
+  | "service"
+  | "system"
+  | "visit_log";
 
 export interface NotificationDTO {
   id: string;

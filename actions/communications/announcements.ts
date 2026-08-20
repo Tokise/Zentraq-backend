@@ -41,6 +41,41 @@ export interface AnnouncementDTO {
     poster_name: string | null
 }
 
+// Creates one generic announcement notification per role-mapped user.
+async function notifyAnnouncementRecipients(
+    admin: ReturnType<typeof createAdminClient>,
+    senderId: string,
+    announcementId: string,
+) {
+    const { data, error } = await admin
+        .from("user_roles")
+        .select("user_id")
+    if (error) {
+        console.error("[announcement notifications]: unable to resolve recipients")
+        return
+    }
+
+    const receiverIds = [
+        ...new Set((data ?? []).map((assignment) => assignment.user_id)),
+    ]
+    for (let start = 0; start < receiverIds.length; start += 500) {
+        const batch = receiverIds.slice(start, start + 500).map((receiverId) => ({
+            entity_id: announcementId,
+            entity_type: "announcement",
+            message: "A new clinic announcement is available.",
+            receiver_id: receiverId,
+            sender_id: senderId,
+            title: "New clinic announcement",
+            type: "system",
+        }))
+        const inserted = await admin.from("notifications").insert(batch)
+        if (inserted.error) {
+            console.error("[announcement notifications]: batch insert failed")
+            return
+        }
+    }
+}
+
 // Converts an unknown server exception into a safe client-facing message.
 function errorMessage(error: unknown, fallback: string) {
     return error instanceof Error ? error.message : fallback
@@ -148,8 +183,9 @@ export async function createAnnouncementAction(title: string, content: string, i
             .select("id")
             .single()
 
-        if (error) return { error: error.message }
+        if (error || !data) return { error: error?.message ?? "Unable to create announcement" }
 
+        await notifyAnnouncementRecipients(admin, auth.user.id, data.id)
         await logAuditEvent({ action: "INVENTORY_MODIFICATION", userId: auth.user.id, email: auth.user.email, resource: data?.id, details: { action: "ANNOUNCEMENT_CREATED", title } })
         revalidatePath("/admin/announcement")
         return { success: true }
