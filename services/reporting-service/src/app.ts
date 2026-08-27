@@ -24,6 +24,8 @@ import {
 } from "@zentraq/shared";
 
 import { drainReportJobs } from "./worker.js";
+import { drainReportDeliveryJobs } from "./delivery-worker.js";
+import { loadGoogleWorkspaceConfig } from "./google-workspace.js";
 
 const auditSchema = z.object({
   action: z.string().trim().min(1).max(120),
@@ -48,6 +50,24 @@ const reportRequestSchema = z
     message: "The report period is invalid.",
   });
 const idSchema = z.string().uuid();
+const reportDeliverySchema = z
+  .object({
+    emailRecipients: z.array(z.string().email()).max(10),
+    idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,128}$/),
+    publishToSheets: z.boolean(),
+    uploadToDrive: z.boolean(),
+  })
+  .refine(
+    (value) =>
+      value.uploadToDrive ||
+      value.publishToSheets ||
+      value.emailRecipients.length > 0,
+    "At least one delivery destination is required.",
+  )
+  .refine(
+    (value) => value.emailRecipients.length === 0 || value.uploadToDrive,
+    "Email delivery requires a restricted Drive upload.",
+  );
 
 interface ClinicAccountReference {
   id: string;
@@ -68,6 +88,23 @@ interface ReportingDependencies {
   internalServiceKey?: string;
 }
 
+interface ReportDeliveryStatusRow {
+  created_at: string;
+  drive_file_id: string | null;
+  drive_status: string;
+  drive_web_view_link: string | null;
+  error_code: string | null;
+  gmail_status: string;
+  id: string;
+  report_id: string;
+  retry_count: number;
+  sheets_published_at: string | null;
+  sheets_snapshot_id: string | null;
+  sheets_status: string;
+  status: string;
+  updated_at: string;
+}
+
 // Creates Reporting Service for sanitized audits, aggregates, and report artifacts.
 export function createReportingApp(
   dependencies: ReportingDependencies = {},
@@ -79,6 +116,7 @@ export function createReportingApp(
   const internalServiceKey =
     dependencies.internalServiceKey ??
     requireStrongSecret(process.env.INTERNAL_SERVICE_KEY, "INTERNAL_SERVICE_KEY");
+  const googleConfig = loadGoogleWorkspaceConfig();
 
   app.post(
     "/internal/audit",
@@ -98,6 +136,19 @@ export function createReportingApp(
       sendData(
         response,
         await drainReportJobs(body?.batchSize),
+      );
+    }),
+  );
+  app.post(
+    "/internal/workers/report-deliveries/drain",
+    requireInternalServiceKey(internalServiceKey),
+    asyncRoute(async (request, response) => {
+      const body = request.body as { batchSize?: unknown } | undefined;
+      sendData(
+        response,
+        await drainReportDeliveryJobs(body?.batchSize, {
+          internalServiceKey,
+        }),
       );
     }),
   );
@@ -123,6 +174,127 @@ export function createReportingApp(
         data ?? [],
         paginationMeta(parsed.data.page, parsed.data.limit, count ?? 0),
       );
+    }),
+  );
+
+  app.post(
+    "/api/v1/report-jobs/:reportId/deliver",
+    requireRoles("admin"),
+    asyncRoute(async (request, response) => {
+      const auth = authenticated(request.auth);
+      const reportId = idSchema.parse(request.params.reportId);
+      const parsed = reportDeliverySchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new AppError(
+          400,
+          "VALIDATION_ERROR",
+          "Invalid report delivery request.",
+        );
+      }
+      if (!googleConfig) {
+        throw new AppError(
+          503,
+          "GOOGLE_WORKSPACE_DISABLED",
+          "Google Workspace delivery is not enabled.",
+        );
+      }
+
+      const status = await reportStatus(reportId, auth.userId);
+      if (status.status !== "completed") {
+        throw new AppError(
+          409,
+          "REPORT_NOT_READY",
+          "The report must be completed before delivery.",
+        );
+      }
+      const recipients = await resolveApprovedRecipients(
+        parsed.data.emailRecipients,
+        googleConfig.allowedDomain,
+      );
+      const { data, error } = await createAdminClient().rpc(
+        "enqueue_report_delivery_job",
+        {
+          requested_by: auth.userId,
+          requested_correlation_id: randomUUID(),
+          requested_email_recipients: recipients,
+          requested_idempotency_key: parsed.data.idempotencyKey,
+          requested_publish_to_sheets: parsed.data.publishToSheets,
+          requested_report_id: reportId,
+          requested_upload_to_drive: parsed.data.uploadToDrive,
+        },
+      );
+      if (error || typeof data !== "string") {
+        throw new AppError(
+          503,
+          "REPORT_DELIVERY_UNAVAILABLE",
+          "The report delivery could not be queued.",
+        );
+      }
+      scheduleReportDeliveryDrain(internalServiceKey);
+      publishAuditEvent({
+        action: "REPORT_DELIVERY_REQUESTED",
+        entityId: data,
+        entityType: "report_delivery_job",
+        metadata: {
+          emailRecipientCount: recipients.length,
+          publishToSheets: parsed.data.publishToSheets,
+          uploadToDrive: parsed.data.uploadToDrive,
+        },
+        userId: auth.userId,
+      });
+      sendData(response, {
+        deliveryJobId: data,
+        status: "queued",
+      }, 202);
+    }),
+  );
+
+  app.get(
+    "/api/v1/report-delivery-jobs/:deliveryJobId",
+    requireRoles("admin"),
+    asyncRoute(async (request, response) => {
+      const auth = authenticated(request.auth);
+      const deliveryJobId = idSchema.parse(request.params.deliveryJobId);
+      const { data, error } = await createAdminClient().rpc(
+        "get_report_delivery_job_status",
+        {
+          requested_by: auth.userId,
+          requested_delivery_job_id: deliveryJobId,
+        },
+      );
+      const row = Array.isArray(data)
+        ? data[0] as ReportDeliveryStatusRow | undefined
+        : undefined;
+      if (error) {
+        throw new AppError(
+          503,
+          "REPORT_DELIVERY_UNAVAILABLE",
+          "The report delivery status is unavailable.",
+        );
+      }
+      if (!row) {
+        throw new AppError(
+          404,
+          "REPORT_DELIVERY_NOT_FOUND",
+          "The report delivery job was not found.",
+        );
+      }
+      sendData(response, {
+        createdAt: row.created_at,
+        driveFileId: row.drive_file_id,
+        driveStatus: row.drive_status,
+        driveWebViewLink: row.drive_web_view_link,
+        errorCode: row.error_code,
+        gmailStatus: row.gmail_status,
+        id: row.id,
+        reportId: row.report_id,
+        retryCount: row.retry_count,
+        sheetsPublishedAt: row.sheets_published_at,
+        sheetsSnapshotId: row.sheets_snapshot_id,
+        sheetsStatus: row.sheets_status,
+        status: row.status,
+        updatedAt: row.updated_at,
+      });
     }),
   );
 
@@ -258,6 +430,18 @@ function scheduleReportDrain(): void {
           message: error instanceof Error ? error.message : "unknown",
         }),
       );
+    });
+  });
+}
+
+// Drains one newly queued external delivery without blocking its API response.
+function scheduleReportDeliveryDrain(internalServiceKey: string): void {
+  setImmediate(() => {
+    void drainReportDeliveryJobs(1, { internalServiceKey }).catch(() => {
+      console.error(JSON.stringify({
+        code: "REPORT_DELIVERY_DRAIN_FAILED",
+        event: "report_delivery_drain_failed",
+      }));
     });
   });
 }
@@ -415,4 +599,62 @@ async function reportStatus(reportId: string, userId: string): Promise<ReportSta
     );
   }
   return row;
+}
+
+// Resolves active Zentraq users or explicit recipients in the allowed domain.
+async function resolveApprovedRecipients(
+  requestedRecipients: string[],
+  allowedDomain: string,
+): Promise<string[]> {
+  const recipients = Array.from(new Set(
+    requestedRecipients.map((value) => value.trim().toLowerCase()),
+  ));
+  if (recipients.length === 0) return [];
+
+  const explicitAllowlist = new Set(
+    (process.env.GOOGLE_GMAIL_ALLOWED_RECIPIENTS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  for (const recipient of recipients) {
+    if (
+      !recipient.endsWith(`@${allowedDomain}`) &&
+      !explicitAllowlist.has(recipient)
+    ) {
+      throw new AppError(
+        400,
+        "REPORT_RECIPIENT_NOT_ALLOWED",
+        "A report recipient is not approved.",
+      );
+    }
+  }
+
+  const { data, error } = await createAdminClient()
+    .from("users")
+    .select("email,is_active")
+    .in("email", recipients)
+    .eq("is_active", true);
+  if (error) {
+    throw new AppError(
+      503,
+      "REPORT_RECIPIENT_LOOKUP_FAILED",
+      "Report recipients could not be verified.",
+    );
+  }
+  const active = new Set(
+    (data ?? []).map((row) => String(row.email).toLowerCase()),
+  );
+  if (
+    recipients.some((recipient) =>
+      !active.has(recipient) && !explicitAllowlist.has(recipient),
+    )
+  ) {
+    throw new AppError(
+      400,
+      "REPORT_RECIPIENT_NOT_ALLOWED",
+      "A report recipient is not an active approved account.",
+    );
+  }
+  return recipients;
 }

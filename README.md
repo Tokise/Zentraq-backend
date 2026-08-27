@@ -66,6 +66,7 @@ visibility timeouts, retries, and dead-letter state. Render exposes only:
 
 - `POST /internal/workers/notifications/drain`
 - `POST /internal/workers/reports/drain`
+- `POST /internal/workers/report-deliveries/drain`
 
 Both require `x-zentraq-service-key` and bound batch sizes. The local migration
 `20260819204546_hybrid_gateway_context_and_workers.sql` changes Supabase Cron
@@ -76,6 +77,7 @@ Required Vault names are:
 
 - `zentraq_notifications_worker_url`
 - `zentraq_reports_worker_url`
+- `zentraq_report_deliveries_worker_url`
 - `zentraq_worker_service_key`
 
 Keep the old Edge worker functions until each deployed Render worker passes
@@ -142,3 +144,15 @@ rollback code or legacy frontend actions, verify deployed health endpoints,
 wrong-role access, cross-patient isolation, RFID tap output, HMAC expiry and
 replay rejection, Cron-to-Render queue processing, empty-queue behavior,
 Storage artifacts, browser traffic, and unchanged UI workflows.
+
+## Optional Google Workspace delivery
+
+Reporting Service can upload completed aggregate workbooks to an explicitly
+shared Google Drive folder and publish fixed sanitized ranges to Google Sheets.
+Notification Service can send metadata-only links through a dedicated Gmail
+mailbox. Both integrations default to disabled, use separate credentials, and
+must be staged independently.
+
+Source implementation does not configure Google, Render, Supabase Vault, Cron,
+or Looker Studio. Follow the frontend repository's
+`docs/GOOGLE_WORKSPACE_INTEGRATION_GUIDE.md` before enabling either flag.
