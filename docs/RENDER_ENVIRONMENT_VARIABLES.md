@@ -172,3 +172,40 @@ Do not paste a local `PORT`. Render supplies it. Each service already reads
 5. Deploy the gateway.
 6. Put only the gateway `BACKEND_URL` on Vercel.
 7. Verify unauthorized and wrong-role requests before workflow testing.
+
+## Google Workspace report delivery
+
+Notification Service additions:
+
+```env
+GOOGLE_GMAIL_ENABLED=false
+GOOGLE_GMAIL_CLIENT_ID=REPLACE_IN_RENDER_ONLY
+GOOGLE_GMAIL_CLIENT_SECRET=REPLACE_IN_RENDER_ONLY
+GOOGLE_GMAIL_REFRESH_TOKEN=REPLACE_IN_RENDER_ONLY
+GOOGLE_GMAIL_SENDER=clinic-reports@YOUR_SCHOOL_DOMAIN
+GOOGLE_GMAIL_ALLOWED_DOMAIN=YOUR_SCHOOL_DOMAIN
+GOOGLE_GMAIL_ALLOWED_RECIPIENTS=
+```
+
+`GOOGLE_GMAIL_ALLOWED_RECIPIENTS` is optional and comma-separated. Keep
+`EMAIL_PROVIDER_API_KEY` only until Gmail is deployed and live-verified; the
+current worker does not use it.
+
+Reporting Service additions:
+
+```env
+NOTIFICATION_SERVICE_URL=https://YOUR_NOTIFICATION_SERVICE.onrender.com
+GOOGLE_DRIVE_ENABLED=false
+GOOGLE_SERVICE_ACCOUNT_JSON_BASE64=REPLACE_IN_RENDER_ONLY
+GOOGLE_DRIVE_PRODUCTION_FOLDER_ID=REPLACE_IN_RENDER_ONLY
+GOOGLE_SHEETS_SPREADSHEET_ID=REPLACE_IN_RENDER_ONLY
+GOOGLE_ALLOWED_WORKSPACE_DOMAIN=YOUR_SCHOOL_DOMAIN
+```
+
+The Base64 service-account JSON remains a secret. It belongs only to Reporting
+Service and grants access only through explicit Shared Drive membership. Do not
+configure domain-wide delegation. Gmail OAuth values belong only to
+Notification Service. The API Gateway and frontend receive neither credential.
+
+Deploy with both Google flags set to `false`, then enable Drive, Sheets, and
+Gmail in staged order after the migration and operator acceptance tests pass.

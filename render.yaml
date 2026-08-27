@@ -118,6 +118,20 @@ services:
         sync: false
       - key: EMAIL_PROVIDER_API_KEY
         sync: false
+      - key: GOOGLE_GMAIL_ENABLED
+        value: "false"
+      - key: GOOGLE_GMAIL_CLIENT_ID
+        sync: false
+      - key: GOOGLE_GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_GMAIL_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_GMAIL_SENDER
+        sync: false
+      - key: GOOGLE_GMAIL_ALLOWED_DOMAIN
+        sync: false
+      - key: GOOGLE_GMAIL_ALLOWED_RECIPIENTS
+        sync: false
 
   - type: web
     name: zentraq-reporting
@@ -141,6 +155,18 @@ services:
       - key: INTERNAL_SERVICE_KEY
         sync: false
       - key: INTERNAL_CONTEXT_SECRET
+        sync: false
+      - key: NOTIFICATION_SERVICE_URL
+        sync: false
+      - key: GOOGLE_DRIVE_ENABLED
+        value: "false"
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON_BASE64
+        sync: false
+      - key: GOOGLE_DRIVE_PRODUCTION_FOLDER_ID
+        sync: false
+      - key: GOOGLE_SHEETS_SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_ALLOWED_WORKSPACE_DOMAIN
         sync: false
 
   - type: web

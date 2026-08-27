@@ -21,6 +21,10 @@ import {
 } from "@zentraq/shared";
 
 import { drainNotificationJobs } from "./worker.js";
+import {
+  createGmailSender,
+  type GmailSender,
+} from "./gmail.js";
 
 const notificationSchema = z.object({
   entityId: z.string().uuid().optional().nullable(),
@@ -60,6 +64,26 @@ const notificationJobSchema = z
 const notificationIdSchema = z.string().uuid();
 const readStateSchema = z.object({ isRead: z.boolean() });
 
+const reportEmailSchema = z.object({
+  deliveryJobId: z.string().uuid(),
+  generatedAt: z.iso.datetime(),
+  recipient: z.string().email(),
+  reportName: z.string().trim().min(1).max(160),
+  reportPeriod: z.string().trim().min(1).max(120),
+  restrictedDriveLink: z
+    .url()
+    .refine((value) => {
+      const hostname = new URL(value).hostname;
+      return hostname === "drive.google.com" || hostname === "docs.google.com";
+    })
+    .optional(),
+  supportContact: z.string().trim().min(1).max(160),
+  templateKey: z.enum([
+    "report.ready",
+    "report.delivery_failed",
+  ]),
+});
+
 interface NotificationJobStatusRow {
   created_at: string;
   error_code: string | null;
@@ -70,6 +94,7 @@ interface NotificationJobStatusRow {
 
 interface NotificationDependencies {
   contextSecret?: string;
+  gmailSender?: GmailSender | null;
   internalServiceKey?: string;
 }
 
@@ -90,6 +115,7 @@ export function createNotificationApp(
       process.env.INTERNAL_SERVICE_KEY,
       "INTERNAL_SERVICE_KEY",
     );
+  const gmailSender = dependencies.gmailSender ?? createGmailSender();
 
   app.post(
     "/internal/notifications",
@@ -116,6 +142,30 @@ export function createNotificationApp(
         response,
         await drainNotificationJobs(body?.batchSize),
       );
+    }),
+  );
+
+  app.post(
+    "/internal/report-email",
+    requireInternalServiceKey(internalServiceKey),
+    asyncRoute(async (request, response) => {
+      const parsed = reportEmailSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new AppError(
+          400,
+          "VALIDATION_ERROR",
+          "Invalid report email request.",
+        );
+      }
+      if (!gmailSender) {
+        throw new AppError(
+          503,
+          "GMAIL_DELIVERY_DISABLED",
+          "Gmail delivery is not enabled.",
+        );
+      }
+      const messageId = await gmailSender.sendReportEmail(parsed.data);
+      sendData(response, { messageId }, 202);
     }),
   );
   app.use("/api/v1", requireInternalContext(contextSecret));

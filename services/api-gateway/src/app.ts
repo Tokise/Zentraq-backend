@@ -73,6 +73,7 @@ const ROUTES: Array<{ prefixes: string[]; target: RouteTarget }> = [
     prefixes: [
       "/api/v1/reports",
       "/api/v1/report-jobs",
+      "/api/v1/report-delivery-jobs",
       "/api/v1/audit",
       "/api/v1/dashboard",
     ],
