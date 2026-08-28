@@ -697,12 +697,12 @@ CREATE TABLE public.appointment_recommendations (
 CREATE TABLE public.user_sessions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
-  session_token text NOT NULL UNIQUE,
   ip_address text,
   user_agent text,
   expires_at timestamp with time zone NOT NULL,
   revoked_at timestamp with time zone,
   created_at timestamp with time zone DEFAULT now(),
+  session_token_hash text NOT NULL CHECK (session_token_hash ~ '^[0-9a-f]{64}$'::text),
   CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
   CONSTRAINT user_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
