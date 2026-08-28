@@ -2,7 +2,8 @@ services:
   - type: web
     name: zentraq-api-gateway
     runtime: node
-    plan: free
+    plan: starter
+    region: singapore
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/api-gateway build
     startCommand: pnpm --filter @zentraq/api-gateway start
     healthCheckPath: /health
@@ -43,6 +44,7 @@ services:
     name: zentraq-appointments
     runtime: node
     plan: free
+    region: singapore
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/appointment-service build
     startCommand: pnpm --filter @zentraq/appointment-service start
     healthCheckPath: /health
@@ -71,6 +73,7 @@ services:
     name: zentraq-inventory
     runtime: node
     plan: free
+    region: singapore
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/inventory-service build
     startCommand: pnpm --filter @zentraq/inventory-service start
     healthCheckPath: /health
@@ -97,6 +100,7 @@ services:
     name: zentraq-notifications
     runtime: node
     plan: free
+    region: singapore
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/notification-service build
     startCommand: pnpm --filter @zentraq/notification-service start
     healthCheckPath: /health
@@ -136,7 +140,8 @@ services:
   - type: web
     name: zentraq-reporting
     runtime: node
-    plan: free
+    plan: starter
+    region: singapore
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/reporting-service build
     startCommand: pnpm --filter @zentraq/reporting-service start
     healthCheckPath: /health
@@ -156,6 +161,8 @@ services:
         sync: false
       - key: INTERNAL_CONTEXT_SECRET
         sync: false
+      - key: REPORT_DRAIN_INTERVAL_MS
+        value: "30000"
       - key: NOTIFICATION_SERVICE_URL
         sync: false
       - key: GOOGLE_DRIVE_ENABLED
@@ -173,6 +180,7 @@ services:
     name: zentraq-ai
     runtime: node
     plan: free
+    region: singapore
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @zentraq/shared build && pnpm --filter @zentraq/ai-service build
     startCommand: pnpm --filter @zentraq/ai-service start
     healthCheckPath: /health

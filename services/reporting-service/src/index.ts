@@ -19,6 +19,27 @@ setImmediate(() => {
   });
 });
 
+const drainIntervalMs = Math.max(
+  10_000,
+  Number(process.env.REPORT_DRAIN_INTERVAL_MS ?? 30_000),
+);
+
+// Periodically recovers durable work without relying only on external Cron.
+const reportDrainTimer = setInterval(() => {
+  void Promise.all([
+    drainReportJobs(2),
+    drainReportDeliveryJobs(2),
+  ]).catch(() => {
+    console.error(
+      JSON.stringify({
+        code: "REPORT_PERIODIC_DRAIN_FAILED",
+        event: "report_periodic_drain_failed",
+      }),
+    );
+  });
+}, drainIntervalMs);
+reportDrainTimer.unref();
+
 // Resumes durable external deliveries without affecting private report startup.
 setImmediate(() => {
   void drainReportDeliveryJobs(2).catch(() => {
