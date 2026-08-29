@@ -342,3 +342,24 @@ The remote migration ledger still records only `001`. Therefore
 running the five-row photo conversion remain pending explicit approval; source
 checks alone do not prove a physical tap, Realtime delivery, consultation
 claim, or report completion in the live UI.
+
+## 2026-08-29 manually applied dashboard SQL
+
+The August 28 performance migration was run manually in Supabase SQL Editor,
+without reconciling the remote migration ledger. This created
+`get_dashboard_snapshot_v1()` but left its earlier workload dependency absent.
+It also introduced a runtime reference to a `reason` column that the deployed
+`v_appointment_overview` does not expose. The result was a shared dashboard
+failure for Admin, Doctor, and Nurse despite assigned live records being
+present.
+
+The tracked repair is
+`20260829114212_repair_dashboard_snapshot.sql`. The target project was verified
+through the authenticated Supabase project inventory, and that file alone was
+applied on 2026-08-29 with `supabase db query --linked --project-ref`. No
+`db push`, `migration repair`, or remote-ledger write was performed. Subsequent
+aggregate-only RPC checks passed for active Admin, Doctor, and Nurse accounts,
+and anonymous execution remained denied. Security Advisor reported no finding
+for either repaired function, while 14 pre-existing security warnings remain
+for separate remediation. Authenticated UI acceptance and frontend deployment
+are still separate pending evidence.
