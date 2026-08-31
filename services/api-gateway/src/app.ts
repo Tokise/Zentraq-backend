@@ -86,6 +86,9 @@ const ROUTES: Array<{ prefixes: string[]; target: RouteTarget }> = [
 ];
 
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_BUCKET_SWEEP_INTERVAL_MS = 60_000;
+const MAX_RATE_BUCKETS = 50_000;
+let lastRateBucketSweepAt = 0;
 
 // Creates the public gateway without privileged database credentials.
 export function createGatewayApp(
@@ -201,6 +204,17 @@ function gatewayRateLimit(
 ): void {
   const now = Date.now();
   const key = request.ip ?? "unknown";
+  sweepExpiredRateBuckets(now);
+  if (!rateBuckets.has(key) && rateBuckets.size >= MAX_RATE_BUCKETS) {
+    next(
+      new AppError(
+        503,
+        "RATE_LIMIT_CAPACITY_REACHED",
+        "Request capacity is temporarily unavailable.",
+      ),
+    );
+    return;
+  }
   const current = rateBuckets.get(key);
   const bucket =
     !current || current.resetAt <= now
@@ -224,6 +238,16 @@ function gatewayRateLimit(
     return;
   }
   next();
+}
+
+// Removes expired client buckets so long-running gateway instances stay bounded.
+function sweepExpiredRateBuckets(now: number): void {
+  if (now - lastRateBucketSweepAt < RATE_BUCKET_SWEEP_INTERVAL_MS) return;
+
+  lastRateBucketSweepAt = now;
+  rateBuckets.forEach((bucket, key) => {
+    if (bucket.resetAt <= now) rateBuckets.delete(key);
+  });
 }
 
 // Extracts the Supabase access token without accepting identity from request data.

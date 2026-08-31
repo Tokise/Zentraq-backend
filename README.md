@@ -1,13 +1,16 @@
 # Zentraq Backend
 
 This independent repository contains Zentraq's Render services, shared Node.js
-infrastructure, Supabase Edge Functions, and database migrations. Its local
-path is `D:\Documents\Coding\zentraq\backend`; the frontend repository is the
-sibling `D:\Documents\Coding\zentraq\frontend`.
+infrastructure, Supabase Edge Functions, and database migrations. In the
+current paired workspace, this repository is `Zentraq-backend` and the sibling
+frontend repository is `Zentraq`.
 
-See the frontend
-[Local Workspace and Git Guide](https://github.com/Tokise/Zentraq/blob/rei/development/docs/LOCAL_WORKSPACE_AND_GIT_GUIDE.md)
-for run, verification, and folder-specific push commands.
+See the frontend's consolidated
+[system documentation](https://github.com/Tokise/Zentraq/blob/rei/development/docs/system/SYSTEM.md)
+for architecture, local workspace, deployment, and verification guidance. The
+paired documentation set also contains the
+[backlog](https://github.com/Tokise/Zentraq/blob/rei/development/docs/backlog/BACKLOG.md)
+and [sprint record](https://github.com/Tokise/Zentraq/blob/rei/development/docs/sprint/SPRINT.md).
 
 ## Hybrid runtime boundary
 
@@ -154,5 +157,5 @@ mailbox. Both integrations default to disabled, use separate credentials, and
 must be staged independently.
 
 Source implementation does not configure Google, Render, Supabase Vault, Cron,
-or Looker Studio. Follow the frontend repository's
-`docs/GOOGLE_WORKSPACE_INTEGRATION_GUIDE.md` before enabling either flag.
+or Looker Studio. Follow the Google Workspace section in the frontend
+repository's `docs/system/SYSTEM.md` before enabling either flag.
