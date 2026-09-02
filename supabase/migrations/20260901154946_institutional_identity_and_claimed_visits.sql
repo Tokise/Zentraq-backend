@@ -45,6 +45,76 @@ create index if not exists portal_login_identities_active_user_idx
   on public.portal_login_identities (user_id)
   where is_active;
 
+-- Reserves generated official numbers across concurrent registration sessions.
+create table if not exists public.institutional_id_reservations (
+  identity_kind text not null
+    check (identity_kind in ('student', 'employee')),
+  official_number text not null
+    check (official_number ~ '^[0-9]{9}$'),
+  rfid_uid text not null unique,
+  profile_role text not null
+    check (profile_role in ('student', 'faculty', 'staff')),
+  profile_id uuid,
+  reserved_at timestamptz not null default now(),
+  confirmed_at timestamptz,
+  primary key (identity_kind, official_number)
+);
+
+alter table public.institutional_id_reservations enable row level security;
+
+revoke all on table public.institutional_id_reservations
+  from public, anon, authenticated;
+grant select, insert, update, delete
+  on table public.institutional_id_reservations
+  to service_role;
+
+-- Makes valid existing numbers unavailable to the new generator.
+insert into public.institutional_id_reservations (
+  identity_kind,
+  official_number,
+  rfid_uid,
+  profile_role,
+  profile_id,
+  confirmed_at
+)
+select
+  profile.identity_kind,
+  profile.official_number,
+  profile.rfid_uid,
+  profile.profile_role,
+  profile.profile_id,
+  now()
+from (
+  select
+    'student'::text as identity_kind,
+    student.student_number as official_number,
+    student.rfid_uid,
+    'student'::text as profile_role,
+    student.id as profile_id
+  from public.students student
+  where student.student_number ~ '^[0-9]{9}$'
+  union all
+  select
+    'employee'::text,
+    faculty.employee_number,
+    faculty.rfid_uid,
+    'faculty'::text,
+    faculty.id
+  from public.faculty faculty
+  where faculty.employee_number ~ '^[0-9]{9}$'
+  union all
+  select
+    'employee'::text,
+    staff.employee_number,
+    staff.rfid_uid,
+    'staff'::text,
+    staff.id
+  from public.staff staff
+  where staff.employee_number ~ '^[0-9]{9}$'
+) profile
+where profile.rfid_uid is not null
+on conflict do nothing;
+
 -- Reports profiles that cannot be safely mapped to an institutional login ID.
 create or replace view private.portal_identity_backfill_issues
 with (security_invoker = true)
@@ -483,141 +553,12 @@ begin
 end;
 $$;
 
--- Releases unstarted work back to its appropriate queue.
-create or replace function public.release_claimed_consultation(
-  p_consultation_id uuid
-)
-returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_actor_id uuid := (select auth.uid());
-  v_actor_role text;
-  v_account_id uuid;
-  v_consultation public.consultations%rowtype;
-  v_queue public.clinic_queue_entries%rowtype;
-  v_visit public.clinic_visits%rowtype;
-  v_return_status text;
-begin
-  select role.name, account.id
-  into v_actor_role, v_account_id
-  from public.user_roles user_role
-  join public.roles role on role.id = user_role.role_id
-  join public.clinic_accounts account
-    on account.user_id = user_role.user_id
-   and account.role = role.name
-   and account.is_active
-  where user_role.user_id = v_actor_id
-    and role.name in ('admin', 'doctor', 'nurse')
-  limit 1;
-
-  if v_actor_id is null or v_account_id is null then
-    raise exception 'Active clinical account is required';
-  end if;
-
-  select * into v_consultation
-  from public.consultations
-  where id = p_consultation_id
-  for update;
-
-  select * into v_visit
-  from public.clinic_visits
-  where id = v_consultation.visit_id
-  for update;
-
-  select * into v_queue
-  from public.clinic_queue_entries
-  where visit_id = v_visit.id
-  for update;
-
-  if v_consultation.id is null
-    or v_queue.id is null
-    or v_consultation.status <> 'claimed'
-    or v_queue.status <> 'claimed'
-    or (
-      v_actor_role <> 'admin'
-      and v_consultation.claimed_by_user_id <> v_actor_id
-    ) then
-    raise exception 'Only the claimant or an Admin may release this patient';
-  end if;
-
-  v_return_status := case
-    when v_consultation.review_requested_at is not null
-      then 'awaiting_doctor_review'
-    else 'queued'
-  end;
-
-  update public.clinic_queue_entries
-  set
-    status = case
-      when v_return_status = 'awaiting_doctor_review'
-        then 'awaiting_doctor_review'
-      else 'waiting'
-    end,
-    claimed_by = null,
-    claimed_at = null,
-    updated_at = now()
-  where id = v_queue.id;
-
-  update public.consultations
-  set
-    status = v_return_status,
-    doctor_id = case
-      when doctor_id = v_consultation.claimed_by_clinic_account_id
-        then null
-      else doctor_id
-    end,
-    nurse_id = case
-      when nurse_id = v_consultation.claimed_by_clinic_account_id
-        then null
-      else nurse_id
-    end,
-    claimed_by_user_id = null,
-    claimed_by_clinic_account_id = null,
-    claimed_at = null,
-    updated_at = now()
-  where id = v_consultation.id;
-
-  update public.clinic_visits
-  set status = 'waiting', updated_at = now()
-  where id = v_visit.id;
-
-  insert into public.audit_logs (
-    user_id,
-    action,
-    entity_type,
-    entity_id,
-    metadata
-  )
-  values (
-    v_actor_id,
-    'consultation.released',
-    'consultation',
-    v_consultation.id,
-    jsonb_build_object(
-      'clinic_account_id', v_account_id,
-      'clinician_role', v_actor_role,
-      'previous_status', 'claimed',
-      'new_status', v_return_status
-    )
-  );
-
-  return v_queue.id;
-end;
-$$;
-
 revoke all on function public.claim_consultation(uuid)
   from public, anon, service_role;
 revoke all on function public.start_claimed_consultation(uuid)
-  from public, anon, service_role;
-revoke all on function public.release_claimed_consultation(uuid)
   from public, anon, service_role;
 
 grant execute on function public.claim_consultation(uuid)
   to authenticated;
 grant execute on function public.start_claimed_consultation(uuid)
-  to authenticated;
-grant execute on function public.release_claimed_consultation(uuid)
   to authenticated;
