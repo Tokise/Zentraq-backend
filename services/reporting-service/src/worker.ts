@@ -49,7 +49,7 @@ type Overview = {
   total_consultations: number
 }
 
-type ReportPayload = {
+export type ReportPayload = {
   complaints: ComplaintRow[]
   daily: DailyRow[]
   dispensing: DispensingRow[]
@@ -63,30 +63,33 @@ function addTable(
   sheet: ExcelJS.Worksheet,
   name: string,
   headers: string[],
-  rows: Array<Array<string | number>>,
+  rows: Array<Array<ExcelJS.CellValue>>,
+  ref = "A1",
 ): void {
   if (rows.length > 0) {
     sheet.addTable({
       columns: headers.map((header) => ({ name: header })),
       headerRow: true,
       name,
-      ref: "A1",
+      ref,
       rows,
       style: { showRowStripes: true, theme: "TableStyleMedium4" },
     })
     return
   }
 
-  sheet.addRow(headers)
-  const header = sheet.getRow(1)
+  const headerRow = Number(ref.match(/\d+$/)?.[0] ?? 1)
+  sheet.getRow(headerRow).values = headers
+  const header = sheet.getRow(headerRow)
   header.font = { bold: true, color: { argb: "FFFFFFFF" } }
   header.fill = {
     fgColor: { argb: "FF15803D" },
     pattern: "solid",
     type: "pattern",
   }
-  sheet.mergeCells(2, 1, 2, headers.length)
-  sheet.getCell(2, 1).value = "No aggregate data is available for this period."
+  sheet.mergeCells(headerRow + 1, 1, headerRow + 1, headers.length)
+  sheet.getCell(headerRow + 1, 1).value =
+    "No aggregate data is available for this period."
 }
 
 // Draws one dependency-light PNG trend for embedding in desktop Excel.
@@ -127,6 +130,52 @@ function createTrendPng(daily: DailyRow[]): Uint8Array {
     drawLine(image, x1, y1, x2, y2, [21, 128, 61], 4)
   })
 
+  return PNG.sync.write(image)
+}
+
+// Draws a bounded comparison PNG for embedding beside its source report data.
+function createBarPng(
+  values: number[],
+  color: [number, number, number],
+): Uint8Array {
+  const width = 760
+  const height = 420
+  const image = new PNG({ height, width })
+  for (let index = 0; index < image.data.length; index += 4) {
+    image.data[index] = 255
+    image.data[index + 1] = 255
+    image.data[index + 2] = 255
+    image.data[index + 3] = 255
+  }
+
+  const displayed = values.slice(0, 10)
+  const plot = { left: 55, top: 30, width: 650, height: 330 }
+  const maximum = Math.max(1, ...displayed.map((value) => Number(value) || 0))
+  for (let line = 0; line <= 4; line += 1) {
+    const y = Math.round(plot.top + (line / 4) * plot.height)
+    drawLine(image, plot.left, y, plot.left + plot.width, y, [215, 226, 220])
+  }
+  const slotWidth = plot.width / Math.max(displayed.length, 1)
+  displayed.forEach((value, index) => {
+    const barWidth = Math.max(12, Math.floor(slotWidth * 0.58))
+    const heightValue = Math.round((Number(value || 0) / maximum) * plot.height)
+    const startX = Math.round(
+      plot.left + index * slotWidth + (slotWidth - barWidth) / 2,
+    )
+    const startY = plot.top + plot.height - heightValue
+    for (let x = startX; x < startX + barWidth; x += 1) {
+      drawLine(image, x, startY, x, plot.top + plot.height, color)
+    }
+  })
+  drawLine(
+    image,
+    plot.left,
+    plot.top + plot.height,
+    plot.left + plot.width,
+    plot.top + plot.height,
+    [100, 116, 139],
+    2,
+  )
   return PNG.sync.write(image)
 }
 
@@ -189,13 +238,62 @@ function setPixel(
   image.data[index + 3] = 255
 }
 
-// Builds a bounded aggregate workbook with an embedded PNG trend.
-async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array> {
+// Builds a bounded aggregate workbook with section summaries and embedded charts.
+export async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array> {
   const workbook = new ExcelJS.Workbook()
   workbook.creator = "Zentraq Clinic Management System"
   workbook.created = new Date()
   workbook.modified = new Date()
   workbook.subject = "Aggregate clinic analytics"
+
+  const chronologicalDaily = payload.daily
+    .slice()
+    .sort((left, right) =>
+      left.consultation_date.localeCompare(right.consultation_date),
+    )
+  const totalVisits = chronologicalDaily.reduce(
+    (sum, item) => sum + Number(item.total_consultations || 0),
+    0,
+  )
+  const peakDay = chronologicalDaily.reduce<DailyRow | null>(
+    (current, item) =>
+      !current || item.total_consultations > current.total_consultations
+        ? item
+        : current,
+    null,
+  )
+  const topComplaint = payload.complaints[0] ?? null
+  const topMedicine = payload.dispensing[0] ?? null
+  const dailyImageId = payload.daily.length
+    ? workbook.addImage({
+        base64: `data:image/png;base64,${Buffer.from(
+          createTrendPng(payload.daily),
+        ).toString("base64")}`,
+        extension: "png",
+      })
+    : null
+  const complaintImageId = payload.complaints.length
+    ? workbook.addImage({
+        base64: `data:image/png;base64,${Buffer.from(
+          createBarPng(
+            payload.complaints.map((item) => item.frequency),
+            [37, 99, 235],
+          ),
+        ).toString("base64")}`,
+        extension: "png",
+      })
+    : null
+  const dispensingImageId = payload.dispensing.length
+    ? workbook.addImage({
+        base64: `data:image/png;base64,${Buffer.from(
+          createBarPng(
+            payload.dispensing.map((item) => item.total_quantity_dispensed),
+            [15, 118, 110],
+          ),
+        ).toString("base64")}`,
+        extension: "png",
+      })
+    : null
 
   const summary = workbook.addWorksheet("Report Summary", {
     views: [{ showGridLines: false }],
@@ -237,22 +335,74 @@ async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array> {
     }
   }
 
-  if (payload.daily.length > 0) {
-    summary.mergeCells("A11:H11")
-    summary.getCell("A11").value = "Daily consultation activity"
-    summary.getCell("A11").font = { bold: true, size: 12 }
-    const imageId = workbook.addImage({
-      base64: `data:image/png;base64,${Buffer.from(
-        createTrendPng(payload.daily),
-      ).toString("base64")}`,
-      extension: "png",
-    })
-    summary.addImage(imageId, "A12:H31")
+  summary.mergeCells("A11:H11")
+  summary.getCell("A11").value = "Monthly executive summary"
+  summary.getCell("A11").font = { bold: true, size: 13 }
+  const insights = [
+    `${totalVisits.toLocaleString()} consultations were recorded in the reporting period.`,
+    peakDay
+      ? `${peakDay.consultation_date} was the busiest recorded day with ${peakDay.total_consultations.toLocaleString()} consultations.`
+      : "No daily consultation activity was recorded.",
+    topComplaint
+      ? `${topComplaint.complaint} was the most frequent reportable visit reason (${topComplaint.frequency.toLocaleString()}).`
+      : "No visit reason met the aggregate reporting threshold.",
+    topMedicine
+      ? `${topMedicine.generic_name} had the highest dispensed quantity (${topMedicine.total_quantity_dispensed.toLocaleString()}).`
+      : "No medicine dispensing activity was recorded.",
+  ]
+  insights.forEach((insight, index) => {
+    const row = 12 + index
+    summary.mergeCells(`A${row}:H${row}`)
+    summary.getCell(`A${row}`).value = `• ${insight}`
+    summary.getCell(`A${row}`).alignment = { wrapText: true }
+  })
+
+  summary.mergeCells("A17:H17")
+  summary.getCell("A17").value = "Consultation activity by day"
+  summary.getCell("A17").font = { bold: true, size: 12 }
+  if (dailyImageId !== null) {
+    summary.addImage(dailyImageId, "A18:H35")
+  } else {
+    summary.mergeCells("A18:H20")
+    summary.getCell("A18").value = "No consultation chart data is available."
+  }
+
+  summary.mergeCells("A37:D37")
+  summary.getCell("A37").value = "Top visit reasons"
+  summary.getCell("A37").font = { bold: true, size: 12 }
+  if (complaintImageId !== null) {
+    summary.addImage(complaintImageId, "A38:D54")
+  } else {
+    summary.mergeCells("A38:D40")
+    summary.getCell("A38").value = "No reportable visit reasons are available."
+  }
+
+  summary.mergeCells("E37:H37")
+  summary.getCell("E37").value = "Medicine quantities dispensed"
+  summary.getCell("E37").font = { bold: true, size: 12 }
+  if (dispensingImageId !== null) {
+    summary.addImage(dispensingImageId, "E38:H54")
+  } else {
+    summary.mergeCells("E38:H40")
+    summary.getCell("E38").value = "No dispensing chart data is available."
   }
 
   const dailySheet = workbook.addWorksheet("Daily Activity", {
-    views: [{ state: "frozen", ySplit: 1, showGridLines: false }],
+    views: [{ state: "frozen", ySplit: 5, showGridLines: false }],
   })
+  dailySheet.mergeCells("A1:F1")
+  dailySheet.getCell("A1").value = "Consultation activity summary"
+  dailySheet.getCell("A1").font = { bold: true, size: 16 }
+  dailySheet.mergeCells("A2:F2")
+  dailySheet.getCell("A2").value =
+    `${totalVisits.toLocaleString()} consultations across ${payload.daily.length.toLocaleString()} active days; ` +
+    (peakDay
+      ? `peak ${peakDay.total_consultations.toLocaleString()} on ${peakDay.consultation_date}.`
+      : "no active day was recorded.")
+  dailySheet.getCell("A2").alignment = { wrapText: true }
+  dailySheet.mergeCells("A4:F4")
+  dailySheet.getCell("A4").value = "Complete daily data for the selected month"
+  dailySheet.getCell("A4").font = { bold: true }
   addTable(
     dailySheet,
     "DailyClinicActivity",
@@ -264,47 +414,101 @@ async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array> {
       "Appointments",
       "RFID Walk-ins",
     ],
-    payload.daily.map((item) => [
-      item.consultation_date,
+    chronologicalDaily.map((item) => [
+      new Date(`${item.consultation_date}T00:00:00Z`),
       item.total_consultations,
       item.student_consultations,
       item.faculty_consultations,
       item.appointment_visits,
       item.rfid_visits,
     ]),
+    "A5",
   )
-  dailySheet.columns.forEach((column) => { column.width = 18 })
+  dailySheet.columns.forEach((column) => {
+    column.width = 18
+  })
+  dailySheet.getColumn(1).numFmt = "yyyy-mm-dd"
+  if (dailyImageId !== null) dailySheet.addImage(dailyImageId, "H2:N18")
 
   const complaintSheet = workbook.addWorksheet("Visit Reasons", {
-    views: [{ state: "frozen", ySplit: 1, showGridLines: false }],
+    views: [{ state: "frozen", ySplit: 5, showGridLines: false }],
   })
+  complaintSheet.mergeCells("A1:B1")
+  complaintSheet.getCell("A1").value = "Visit reason summary"
+  complaintSheet.getCell("A1").font = { bold: true, size: 16 }
+  complaintSheet.mergeCells("A2:B2")
+  complaintSheet.getCell("A2").value = topComplaint
+    ? `${topComplaint.complaint} was highest with ${topComplaint.frequency.toLocaleString()} occurrences.`
+    : "No visit reason met the minimum aggregate threshold."
+  complaintSheet.getCell("A2").alignment = { wrapText: true }
+  complaintSheet.mergeCells("A4:B4")
+  complaintSheet.getCell("A4").value = "Reportable visit reasons"
+  complaintSheet.getCell("A4").font = { bold: true }
   addTable(
     complaintSheet,
     "VisitReasonFrequency",
     ["Visit Reason", "Frequency"],
     payload.complaints.map((item) => [item.complaint, item.frequency]),
+    "A5",
   )
   complaintSheet.getColumn(1).width = 42
   complaintSheet.getColumn(2).width = 18
+  if (complaintImageId !== null) {
+    complaintSheet.addImage(complaintImageId, "D2:J18")
+  }
 
   const dispensingSheet = workbook.addWorksheet("Medicine Dispensing", {
-    views: [{ state: "frozen", ySplit: 1, showGridLines: false }],
+    views: [{ state: "frozen", ySplit: 5, showGridLines: false }],
   })
+  const totalDispensedQuantity = payload.dispensing.reduce(
+    (sum, item) => sum + item.total_quantity_dispensed,
+    0,
+  )
+  dispensingSheet.mergeCells("A1:G1")
+  dispensingSheet.getCell("A1").value = "Medicine dispensing summary"
+  dispensingSheet.getCell("A1").font = { bold: true, size: 16 }
+  dispensingSheet.mergeCells("A2:G2")
+  dispensingSheet.getCell("A2").value =
+    `${totalDispensedQuantity.toLocaleString()} units were dispensed` +
+    (topMedicine
+      ? `; ${topMedicine.generic_name} had the highest quantity.`
+      : ".")
+  dispensingSheet.getCell("A2").alignment = { wrapText: true }
+  dispensingSheet.mergeCells("A4:G4")
+  dispensingSheet.getCell("A4").value =
+    "Complete medicine dispensing data for the selected month"
+  dispensingSheet.getCell("A4").font = { bold: true }
   addTable(
     dispensingSheet,
     "MedicineDispensingSummary",
-    ["Generic Name", "Brand Name", "Category", "Events", "Quantity", "First", "Last"],
+    [
+      "Generic Name",
+      "Brand Name",
+      "Category",
+      "Events",
+      "Quantity",
+      "First",
+      "Last",
+    ],
     payload.dispensing.map((item) => [
       item.generic_name,
       item.brand_name ?? "",
       item.category ?? "",
       item.total_dispensed,
       item.total_quantity_dispensed,
-      item.first_dispensed ?? "",
-      item.last_dispensed ?? "",
+      item.first_dispensed ? new Date(item.first_dispensed) : "",
+      item.last_dispensed ? new Date(item.last_dispensed) : "",
     ]),
+    "A5",
   )
-  dispensingSheet.columns.forEach((column) => { column.width = 22 })
+  dispensingSheet.columns.forEach((column) => {
+    column.width = 22
+  })
+  dispensingSheet.getColumn(6).numFmt = "yyyy-mm-dd hh:mm"
+  dispensingSheet.getColumn(7).numFmt = "yyyy-mm-dd hh:mm"
+  if (dispensingImageId !== null) {
+    dispensingSheet.addImage(dispensingImageId, "I2:O18")
+  }
 
   const output = await workbook.xlsx.writeBuffer()
   return new Uint8Array(output)
