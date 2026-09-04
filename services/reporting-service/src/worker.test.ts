@@ -30,17 +30,21 @@ describe("monthly report workbook", () => {
           appointment_visits: 3,
           consultation_date: "2026-09-01",
           faculty_consultations: 2,
+          staff_consultations: 1,
+          walk_in_visits: 1,
           rfid_visits: 4,
           student_consultations: 5,
-          total_consultations: 7,
+          total_consultations: 8,
         },
         {
           appointment_visits: 4,
           consultation_date: "2026-09-02",
           faculty_consultations: 3,
+          staff_consultations: 1,
+          walk_in_visits: 1,
           rfid_visits: 5,
           student_consultations: 6,
-          total_consultations: 9,
+          total_consultations: 10,
         },
       ],
       dispensing: [
@@ -58,12 +62,13 @@ describe("monthly report workbook", () => {
       overview: {
         active_incidents: 1,
         faculty_consultations: 5,
+        staff_consultations: 2,
         low_stock_medicines: 2,
         pending_clearances: 3,
         period_end: "2026-09-30",
         period_start: "2026-09-01",
         student_consultations: 11,
-        total_consultations: 16,
+        total_consultations: 18,
       },
       reportId: "22222222-2222-4222-8222-222222222222",
       requestedBy: "33333333-3333-4333-8333-333333333333",
@@ -88,6 +93,10 @@ describe("monthly report workbook", () => {
       .toHaveLength(1);
     expect(workbook.getWorksheet("Daily Activity")?.getCell("A1").value)
       .toBe("Consultation activity summary");
+    expect(workbook.getWorksheet("Daily Activity")?.getCell("E5").value)
+      .toBe("Staff");
+    expect(workbook.getWorksheet("Daily Activity")?.getCell("E6").value)
+      .toBe(1);
     expect(workbook.getWorksheet("Visit Reasons")?.getCell("A5").value)
       .toBe("Visit Reason");
     expect(workbook.getWorksheet("Medicine Dispensing")?.getCell("A5").value)

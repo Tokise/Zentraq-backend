@@ -21,6 +21,8 @@ type DailyRow = {
   consultation_date: string
   faculty_consultations: number
   rfid_visits: number
+  walk_in_visits: number
+  staff_consultations: number
   student_consultations: number
   total_consultations: number
 }
@@ -45,6 +47,7 @@ type Overview = {
   pending_clearances: number
   period_end: string
   period_start: string
+  staff_consultations: number
   student_consultations: number
   total_consultations: number
 }
@@ -108,7 +111,7 @@ function createTrendPng(daily: DailyRow[]): Uint8Array {
   const points = daily
     .slice()
     .sort((left, right) => left.consultation_date.localeCompare(right.consultation_date))
-    .slice(-30)
+
   const plot = { left: 60, top: 35, width: 1080, height: 380 }
   const maximum = Math.max(
     1,
@@ -390,7 +393,7 @@ export async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array>
   const dailySheet = workbook.addWorksheet("Daily Activity", {
     views: [{ state: "frozen", ySplit: 5, showGridLines: false }],
   })
-  dailySheet.mergeCells("A1:F1")
+  dailySheet.mergeCells("A1:H1")
   dailySheet.getCell("A1").value = "Consultation activity summary"
   dailySheet.getCell("A1").font = { bold: true, size: 16 }
   dailySheet.mergeCells("A2:F2")
@@ -411,16 +414,20 @@ export async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array>
       "Total",
       "Students",
       "Faculty",
+      "Staff",
       "Appointments",
       "RFID Walk-ins",
+      "Walk-ins",
     ],
     chronologicalDaily.map((item) => [
       new Date(`${item.consultation_date}T00:00:00Z`),
       item.total_consultations,
       item.student_consultations,
       item.faculty_consultations,
+      item.staff_consultations,
       item.appointment_visits,
       item.rfid_visits,
+      item.walk_in_visits,
     ]),
     "A5",
   )
@@ -428,7 +435,7 @@ export async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array>
     column.width = 18
   })
   dailySheet.getColumn(1).numFmt = "yyyy-mm-dd"
-  if (dailyImageId !== null) dailySheet.addImage(dailyImageId, "H2:N18")
+  if (dailyImageId !== null) dailySheet.addImage(dailyImageId, "J2:P18")
 
   const complaintSheet = workbook.addWorksheet("Visit Reasons", {
     views: [{ state: "frozen", ySplit: 5, showGridLines: false }],
