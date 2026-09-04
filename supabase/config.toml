@@ -422,6 +422,6 @@ verify_jwt = true
 entrypoint = "./functions/rfid-check-in/index.ts"
 [functions.clinical-service]
 enabled = true
-# User JWT validation plus gateway HMAC are required for clinical routes.
+# User JWT validation and server-only live portal session proof are required.
 verify_jwt = true
 entrypoint = "./functions/clinical-service/index.ts"

@@ -28,6 +28,13 @@ export async function drainNotificationJobs(
 ): Promise<WorkerSummary> {
   const batchSize = notificationBatchSize(requestedBatchSize);
   const admin = createAdminClient();
+  const notices = await admin.rpc("deliver_clinical_notices");
+  if (notices.error) {
+    console.error(JSON.stringify({
+      event: "clinical_notice_delivery_failed",
+      code: notices.error.code ?? "DATABASE_ERROR",
+    }));
+  }
   const claimed = await admin.rpc("claim_notification_jobs", {
     requested_batch_size: batchSize,
     requested_visibility_timeout: VISIBILITY_TIMEOUT_SECONDS,
