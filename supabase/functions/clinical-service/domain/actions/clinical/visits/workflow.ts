@@ -216,7 +216,7 @@ export async function finalizeConsultationWorkflowAction(
     actor.role === "nurse" &&
     (parsed.data.diagnosis ||
       parsed.data.treatment ||
-      parsed.data.prescriptions.length > 0 ||
+      (parsed.data.prescriptions.length > 0 && !parsed.data.protocol_id) ||
       parsed.data.follow_up)
   ) {
     return forbidden();
@@ -224,8 +224,11 @@ export async function finalizeConsultationWorkflowAction(
 
   const supabase = createClient(await cookies());
   const { data, error } = await supabase.rpc(
-    "finalize_consultation_workflow",
+    "finalize_consultation_workflow_v2",
     {
+      p_protocol_id: parsed.data.protocol_id ?? null,
+      p_eligibility: parsed.data.eligibility ?? null,
+      p_nursing_assessment: parsed.data.nursing_assessment ?? null,
       p_consultation_id: parsed.data.consultation_id,
       p_patient_complaint: parsed.data.patient_complaint,
       p_review_doctor_id: parsed.data.review_doctor_id ?? null,

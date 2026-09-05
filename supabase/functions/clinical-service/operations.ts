@@ -15,9 +15,25 @@ import * as domain9 from "./domain/actions/clinical/records/resources.ts";
 import * as domain10 from "./domain/actions/clinical/records/search.ts";
 import * as domain11 from "./domain/actions/clinical/records/staff-documents.ts";
 import * as domain12 from "./domain/actions/clinical/records/staff-records.ts";
+import * as flexible from "./domain/actions/clinical/visits/flexible.ts";
+import * as forms from "./domain/actions/clinical/visits/forms.ts";
 
 // Explicit operation allowlist; callers cannot choose tables or SQL.
 export const operations = {
+  clinicFormsConfigAction: forms.clinicFormsConfigAction,
+  issueClinicFormsAction: forms.issueClinicFormsAction,
+  getClinicFormAction: forms.getClinicFormAction,
+  uploadClinicScanAction: forms.uploadClinicScanAction,
+  reviewClinicScanAction: forms.reviewClinicScanAction,
+  searchManualVisitPatientsAction: flexible.searchManualVisitPatientsAction,
+  createManualVisitAction: flexible.createManualVisitAction,
+  getWorkflowSupportAction: flexible.getWorkflowSupportAction,
+  recordCoordinationAction: flexible.recordCoordinationAction,
+  manageClinicalProtocolAction: flexible.manageClinicalProtocolAction,
+  nurseDutyStatusAction: flexible.nurseDutyStatusAction,
+  getClinicCoordinationQueueAction: flexible.getClinicCoordinationQueueAction,
+  claimNurseAssistanceAction: flexible.claimNurseAssistanceAction,
+  requestConsultationClearanceAction: flexible.requestConsultationClearanceAction,
   getConsultationDraftAction,
   saveConsultationDraftAction,
   getClinicVisitsAction: domain0.getClinicVisitsAction,

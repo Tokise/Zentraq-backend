@@ -82,11 +82,12 @@ export interface QueueConsultation {
 type RelatedValue<T> = T | T[] | null;
 
 interface QueueVisitRelation {
-  patient_type: "student" | "faculty" | "staff";
+  patient_type: "student" | "faculty" | "staff" | "visitor";
   check_in_time: string;
   students: RelatedValue<{ first_name: string; last_name: string }>;
   faculty: RelatedValue<{ first_name: string; last_name: string }>;
   staff: RelatedValue<{ first_name: string; last_name: string }>;
+  visitors: RelatedValue<{ first_name: string; last_name: string }>;
 }
 
 interface QueueConsultationQueryRow {
@@ -162,7 +163,8 @@ export async function getConsultationQueueAction(statuses?: string[]) {
             check_in_time,
             students(first_name, last_name),
             faculty(first_name, last_name),
-            staff(first_name, last_name)
+            staff(first_name, last_name),
+            visitors(first_name, last_name)
           )
         `,
         )
@@ -182,7 +184,7 @@ export async function getConsultationQueueAction(statuses?: string[]) {
             ? firstRelation(visit.students)
             : visit?.patient_type === "faculty"
             ? firstRelation(visit.faculty)
-            : firstRelation(visit?.staff);
+            : firstRelation(visit?.staff) ?? firstRelation(visit?.visitors);
           const doctor = firstRelation(item.doctor);
           const claimant = firstRelation(item.claimant);
           return {
