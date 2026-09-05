@@ -12,7 +12,7 @@ async function staff(roles: readonly StaffRole[]) {
 
 export interface ClinicVisitRow {
   id: string;
-  patient_type: "student" | "faculty" | "staff";
+  patient_type: "student" | "faculty" | "staff" | "visitor";
   patient_name: string | null;
   visit_type: string;
   check_in_time: string;
@@ -23,7 +23,7 @@ export interface ClinicVisitRow {
 
 interface ClinicVisitQueryRow {
   id: string;
-  patient_type: "student" | "faculty" | "staff";
+  patient_type: "student" | "faculty" | "staff" | "visitor";
   visit_type: string;
   check_in_time: string;
   check_out_time: string | null;
@@ -40,6 +40,7 @@ interface ClinicVisitQueryRow {
     | Array<{ first_name: string; last_name: string; employee_number: string }>
     | { first_name: string; last_name: string; employee_number: string }
     | null;
+  visitors: PatientRelation | PatientRelation[] | null;
   consultations: Array<{ id: string }> | { id: string } | null;
 }
 
@@ -60,6 +61,7 @@ export async function getClinicVisitsAction(params?: {
       students(first_name, last_name, student_number),
       faculty(first_name, last_name, employee_number),
       staff(first_name, last_name, employee_number),
+        visitors(first_name, last_name),
       consultations(id)
     `,
     )
@@ -77,7 +79,7 @@ export async function getClinicVisitsAction(params?: {
   const visits: ClinicVisitRow[] = rows.map((row) => {
     const student = firstRelation(row.students);
     const faculty = firstRelation(row.faculty);
-    const staffProfile = firstRelation(row.staff);
+    const staffProfile = firstRelation(row.staff) ?? firstRelation(row.visitors);
     const consultations = Array.isArray(row.consultations)
       ? row.consultations
       : row.consultations
@@ -91,7 +93,7 @@ export async function getClinicVisitsAction(params?: {
         : faculty
         ? `${faculty.first_name} ${faculty.last_name} (${faculty.employee_number})`
         : staffProfile
-        ? `${staffProfile.first_name} ${staffProfile.last_name} (${staffProfile.employee_number})`
+        ? `${staffProfile.first_name} ${staffProfile.last_name}`
         : null,
       visit_type: row.visit_type,
       check_in_time: row.check_in_time,
@@ -106,13 +108,14 @@ export async function getClinicVisitsAction(params?: {
 
 export interface ConsultationDetailRow {
   id: string;
-  patient_type: "student" | "faculty" | "staff";
+  patient_type: "student" | "faculty" | "staff" | "visitor";
   patient_name: string | null;
   patient_complaint: string | null;
   consultation_notes: string | null;
   nurse_handoff_note: string | null;
   nurse_handoff_at: string | null;
   doctor_review_note: string | null;
+  nursing_assessment: string | null;
   vitals_disposition: "not_assessed" | "required" | "not_required" | "recorded";
   vitals_skip_reason: string | null;
   status: string;
@@ -163,10 +166,11 @@ interface PatientRelation {
 }
 
 interface DetailVisitRelation {
-  patient_type: "student" | "faculty" | "staff";
+  patient_type: "student" | "faculty" | "staff" | "visitor";
   students: RelatedValue<PatientRelation>;
   faculty: RelatedValue<PatientRelation>;
   staff: RelatedValue<PatientRelation>;
+  visitors: RelatedValue<PatientRelation>;
 }
 
 interface PrescriptionQueryRow {
@@ -187,6 +191,7 @@ interface ConsultationDetailQueryRow {
   nurse_handoff_note: string | null;
   nurse_handoff_at: string | null;
   doctor_review_note: string | null;
+  nursing_assessment: string | null;
   vitals_disposition: ConsultationDetailRow["vitals_disposition"] | null;
   vitals_skip_reason: string | null;
   status: string;
@@ -291,7 +296,8 @@ export async function getConsultationDetailAction(
         patient_type,
         students(first_name, last_name, student_number),
         faculty(first_name, last_name, employee_number),
-        staff(first_name, last_name, employee_number)
+        staff(first_name, last_name, employee_number),
+        visitors(first_name, last_name)
       ),
       doctor:clinic_accounts!consultations_doctor_id_fkey(display_name),
       nurse:clinic_accounts!consultations_nurse_id_fkey(display_name),
@@ -300,6 +306,7 @@ export async function getConsultationDetailAction(
       nurse_handoff_note,
       nurse_handoff_at,
       doctor_review_note,
+      nursing_assessment,
       vitals_disposition,
       vitals_skip_reason,
       status,
@@ -327,7 +334,7 @@ export async function getConsultationDetailAction(
   const visit = firstRelation(detail.clinic_visits);
   const student = firstRelation(visit?.students);
   const faculty = firstRelation(visit?.faculty);
-  const staffProfile = firstRelation(visit?.staff);
+  const staffProfile = firstRelation(visit?.staff) ?? firstRelation(visit?.visitors);
   const doctor = firstRelation(detail.doctor);
   const nurse = firstRelation(detail.nurse);
   const triageRaw = firstRelation(detail.triage_assessments);
@@ -340,13 +347,14 @@ export async function getConsultationDetailAction(
       : faculty
       ? `${faculty.first_name} ${faculty.last_name} (${faculty.employee_number})`
       : staffProfile
-      ? `${staffProfile.first_name} ${staffProfile.last_name} (${staffProfile.employee_number})`
+      ? `${staffProfile.first_name} ${staffProfile.last_name}`
       : null,
     patient_complaint: detail.patient_complaint,
     consultation_notes: detail.consultation_notes,
     nurse_handoff_note: detail.nurse_handoff_note,
     nurse_handoff_at: detail.nurse_handoff_at,
     doctor_review_note: detail.doctor_review_note,
+    nursing_assessment: detail.nursing_assessment,
     vitals_disposition: detail.vitals_disposition ?? "not_assessed",
     vitals_skip_reason: detail.vitals_skip_reason ?? null,
     status: detail.status,

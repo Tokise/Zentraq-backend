@@ -234,7 +234,15 @@ export const FollowUpSchema = z.object({
 export const FinalizeConsultationWorkflowSchema = z.object({
   consultation_id: UUIDSchema,
   review_doctor_id: UUIDSchema.nullable().optional(),
-  patient_complaint: z
+  protocol_id: z.string().uuid().optional(),
+    nursing_assessment: z.string().trim().max(5000).optional(),
+    eligibility: z.object({
+      criteria: z.array(z.boolean()).max(20),
+      no_exclusions: z.boolean(),
+      allergies_checked: z.boolean(),
+      age_years: z.number().int().min(0).max(130),
+    }).strict().optional(),
+    patient_complaint: z
     .string()
     .trim()
     .min(1, "A patient complaint is required")

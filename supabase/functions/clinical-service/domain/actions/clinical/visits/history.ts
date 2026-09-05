@@ -13,7 +13,7 @@ type ClinicRole = "admin" | "doctor" | "nurse";
 export interface ClinicalVisitHistoryRow {
   consultation_id: string;
   visit_id: string;
-  patient_type: "student" | "faculty" | "staff";
+  patient_type: "student" | "faculty" | "staff" | "visitor";
   patient_name: string;
   visit_type: string;
   patient_complaint: string;
@@ -41,13 +41,14 @@ interface NamedPatient {
 
 interface HistoryVisitRelation {
   id: string;
-  patient_type: "student" | "faculty" | "staff";
+  patient_type: "student" | "faculty" | "staff" | "visitor";
   visit_type: string;
   check_in_time: string;
   check_out_time: string | null;
   students: NamedPatient | NamedPatient[] | null;
   faculty: NamedPatient | NamedPatient[] | null;
   staff: NamedPatient | NamedPatient[] | null;
+  visitors: NamedPatient | NamedPatient[] | null;
 }
 
 interface HistoryQueryRow {
@@ -148,7 +149,8 @@ function fetchCachedVisitHistory(
             check_out_time,
             students(first_name, last_name),
             faculty(first_name, last_name),
-            staff(first_name, last_name)
+            staff(first_name, last_name),
+            visitors(first_name, last_name)
           )
         `,
           { count: "exact" },
@@ -175,7 +177,7 @@ function fetchCachedVisitHistory(
 
         const patient = firstRelation(visit.students) ??
           firstRelation(visit.faculty) ??
-          firstRelation(visit.staff);
+          firstRelation(visit.staff) ?? firstRelation(visit.visitors);
         const claimant = firstRelation(row.claimant);
         const completedBy = firstRelation(row.completed_by);
 

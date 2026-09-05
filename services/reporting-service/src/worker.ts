@@ -23,6 +23,7 @@ type DailyRow = {
   rfid_visits: number
   walk_in_visits: number
   staff_consultations: number
+  visitor_consultations?: number
   student_consultations: number
   total_consultations: number
 }
@@ -48,6 +49,7 @@ type Overview = {
   period_end: string
   period_start: string
   staff_consultations: number
+  visitor_consultations?: number
   student_consultations: number
   total_consultations: number
 }
@@ -415,6 +417,7 @@ export async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array>
       "Students",
       "Faculty",
       "Staff",
+      "Visitors",
       "Appointments",
       "RFID Walk-ins",
       "Walk-ins",
@@ -425,6 +428,7 @@ export async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array>
       item.student_consultations,
       item.faculty_consultations,
       item.staff_consultations,
+      item.visitor_consultations ?? 0,
       item.appointment_visits,
       item.rfid_visits,
       item.walk_in_visits,
@@ -435,7 +439,7 @@ export async function buildWorkbook(payload: ReportPayload): Promise<Uint8Array>
     column.width = 18
   })
   dailySheet.getColumn(1).numFmt = "yyyy-mm-dd"
-  if (dailyImageId !== null) dailySheet.addImage(dailyImageId, "J2:P18")
+  if (dailyImageId !== null) dailySheet.addImage(dailyImageId, "K2:Q18")
 
   const complaintSheet = workbook.addWorksheet("Visit Reasons", {
     views: [{ state: "frozen", ySplit: 5, showGridLines: false }],

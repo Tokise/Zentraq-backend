@@ -49,7 +49,8 @@ export interface ReportAnalyticsSnapshot {
     consultation_date: string;
     faculty_consultations: number;
     rfid_visits: number;
-    student_consultations: number;
+    visitor_consultations?: number
+  student_consultations: number;
     total_consultations: number;
   }>;
   dispensing: Array<{
@@ -180,6 +181,7 @@ export function createGoogleWorkspacePublisher(
                     "total_consultations",
                     "student_consultations",
                     "faculty_consultations",
+                    "visitor_consultations",
                     "appointment_visits",
                     "rfid_visits",
                   ],
@@ -189,6 +191,7 @@ export function createGoogleWorkspacePublisher(
                     row.total_consultations,
                     row.student_consultations,
                     row.faculty_consultations,
+                    row.visitor_consultations ?? 0,
                     row.appointment_visits,
                     row.rfid_visits,
                   ]),

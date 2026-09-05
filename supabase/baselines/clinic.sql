@@ -233,7 +233,9 @@ CREATE TABLE public.clinic_visits (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   staff_id uuid,
+  visitor_id uuid,
   CONSTRAINT clinic_visits_pkey PRIMARY KEY (id),
+  CONSTRAINT clinic_visits_visitor_id_fkey FOREIGN KEY (visitor_id) REFERENCES public.visitors(id),
   CONSTRAINT clinic_visits_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
   CONSTRAINT clinic_visits_faculty_id_fkey FOREIGN KEY (faculty_id) REFERENCES public.faculty(id),
   CONSTRAINT clinic_visits_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
@@ -247,7 +249,7 @@ CREATE TABLE public.consultations (
   nurse_id uuid,
   patient_complaint text,
   consultation_notes text,
-  status text DEFAULT 'in-progress'::text CHECK (status = ANY (ARRAY['queued'::text, 'in-progress'::text, 'awaiting_doctor_review'::text, 'completed'::text])),
+  status text DEFAULT 'in-progress'::text CHECK (status = ANY (ARRAY['queued'::text, 'claimed'::text, 'in-progress'::text, 'awaiting_doctor_review'::text, 'completed'::text])),
   created_at timestamp with time zone DEFAULT now(),
   completed_at timestamp with time zone,
   updated_at timestamp with time zone DEFAULT now(),
@@ -267,6 +269,7 @@ CREATE TABLE public.consultations (
   nurse_handoff_at timestamp with time zone,
   doctor_review_note text,
   doctor_reviewed_at timestamp with time zone,
+  nursing_assessment text,
   CONSTRAINT consultations_pkey PRIMARY KEY (id),
   CONSTRAINT consultations_review_doctor_id_fkey FOREIGN KEY (review_doctor_id) REFERENCES public.clinic_accounts(id),
   CONSTRAINT consultations_review_requested_by_fkey FOREIGN KEY (review_requested_by) REFERENCES public.users(id),
@@ -401,10 +404,14 @@ CREATE TABLE public.prescriptions (
   status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'dispensed'::text, 'cancelled'::text])),
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  protocol_version_id uuid,
+  protocol_approved_by uuid,
   CONSTRAINT prescriptions_pkey PRIMARY KEY (id),
   CONSTRAINT prescriptions_consultation_id_fkey FOREIGN KEY (consultation_id) REFERENCES public.consultations(id),
   CONSTRAINT prescriptions_medicine_id_fkey FOREIGN KEY (medicine_id) REFERENCES public.medicines(id),
-  CONSTRAINT prescriptions_prescribed_by_fkey FOREIGN KEY (prescribed_by) REFERENCES public.users(id)
+  CONSTRAINT prescriptions_prescribed_by_fkey FOREIGN KEY (prescribed_by) REFERENCES public.users(id),
+  CONSTRAINT prescriptions_protocol_version_id_fkey FOREIGN KEY (protocol_version_id) REFERENCES public.clinical_protocol_versions(id),
+  CONSTRAINT prescriptions_protocol_approved_by_fkey FOREIGN KEY (protocol_approved_by) REFERENCES public.clinic_accounts(id)
 );
 CREATE TABLE public.dispensing_logs (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -996,4 +1003,167 @@ CREATE TABLE public.clinician_duty_status (
   CONSTRAINT clinician_duty_status_pkey PRIMARY KEY (clinic_account_id),
   CONSTRAINT clinician_duty_status_clinic_account_id_fkey FOREIGN KEY (clinic_account_id) REFERENCES public.clinic_accounts(id),
   CONSTRAINT clinician_duty_status_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.portal_login_identities (
+  login_id text NOT NULL CHECK (login_id ~ '^[se][0-9]{9}$'::text),
+  user_id uuid NOT NULL UNIQUE,
+  profile_role text NOT NULL CHECK (profile_role = ANY (ARRAY['student'::text, 'faculty'::text, 'staff'::text])),
+  profile_id uuid NOT NULL,
+  login_role text NOT NULL CHECK (login_role = ANY (ARRAY['admin'::text, 'doctor'::text, 'nurse'::text, 'student'::text, 'faculty'::text, 'staff'::text])),
+  temporary_password boolean NOT NULL DEFAULT true,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT portal_login_identities_pkey PRIMARY KEY (login_id),
+  CONSTRAINT portal_login_identities_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.institutional_id_reservations (
+  identity_kind text NOT NULL CHECK (identity_kind = ANY (ARRAY['student'::text, 'employee'::text])),
+  official_number text NOT NULL CHECK (official_number ~ '^[0-9]{9}$'::text),
+  rfid_uid text NOT NULL UNIQUE,
+  profile_role text NOT NULL CHECK (profile_role = ANY (ARRAY['student'::text, 'faculty'::text, 'staff'::text])),
+  profile_id uuid,
+  reserved_at timestamp with time zone NOT NULL DEFAULT now(),
+  confirmed_at timestamp with time zone,
+  CONSTRAINT institutional_id_reservations_pkey PRIMARY KEY (identity_kind, official_number)
+);
+CREATE TABLE public.diagnosis_catalog (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  code text NOT NULL CHECK (char_length(btrim(code)) >= 1 AND char_length(btrim(code)) <= 20),
+  description text NOT NULL CHECK (char_length(btrim(description)) >= 1 AND char_length(btrim(description)) <= 500),
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT diagnosis_catalog_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.medicine_dosage_options (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  medicine_id uuid NOT NULL,
+  dosage text NOT NULL CHECK (char_length(btrim(dosage)) >= 1 AND char_length(btrim(dosage)) <= 100),
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT medicine_dosage_options_pkey PRIMARY KEY (id),
+  CONSTRAINT medicine_dosage_options_medicine_id_fkey FOREIGN KEY (medicine_id) REFERENCES public.medicines(id)
+);
+CREATE TABLE public.visitors (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  first_name text NOT NULL CHECK (length(TRIM(BOTH FROM first_name)) >= 1 AND length(TRIM(BOTH FROM first_name)) <= 150),
+  last_name text NOT NULL DEFAULT ''::text CHECK (length(last_name) <= 150),
+  category text NOT NULL CHECK (category = ANY (ARRAY['parent'::text, 'guardian'::text, 'visitor'::text])),
+  birth_date date,
+  age_years integer CHECK (age_years >= 0 AND age_years <= 130),
+  phone text CHECK (length(phone) <= 30),
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT visitors_pkey PRIMARY KEY (id),
+  CONSTRAINT visitors_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.clinical_protocol_versions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL CHECK (length(title) >= 3 AND length(title) <= 150),
+  version integer NOT NULL CHECK (version > 0),
+  rules jsonb NOT NULL,
+  approved_by uuid,
+  approved_at timestamp with time zone,
+  enabled boolean NOT NULL DEFAULT false,
+  expires_at timestamp with time zone NOT NULL,
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT clinical_protocol_versions_pkey PRIMARY KEY (id),
+  CONSTRAINT clinical_protocol_versions_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.clinic_accounts(id),
+  CONSTRAINT clinical_protocol_versions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.consultation_coordination_events (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  consultation_id uuid NOT NULL,
+  milestone text NOT NULL CHECK (milestone = ANY (ARRAY['patient_contact_pending'::text, 'patient_contact_completed'::text, 'doctor_review_requested'::text, 'patient_doctor_discussion_completed'::text, 'outcome_recorded'::text, 'nurse_assigned'::text, 'nurse_acknowledged'::text])),
+  note text NOT NULL DEFAULT ''::text CHECK (length(note) <= 1000),
+  actor_id uuid NOT NULL,
+  request_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT consultation_coordination_events_pkey PRIMARY KEY (id),
+  CONSTRAINT consultation_coordination_events_consultation_id_fkey FOREIGN KEY (consultation_id) REFERENCES public.consultations(id),
+  CONSTRAINT consultation_coordination_events_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.consultation_assessment_profiles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL CHECK (length(title) >= 3 AND length(title) <= 150),
+  vital_keys ARRAY NOT NULL DEFAULT '{}'::text[] CHECK (vital_keys <@ ARRAY['temperature'::text, 'blood_pressure'::text, 'heart_rate'::text, 'respiratory_rate'::text, 'oxygen_saturation'::text]),
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT consultation_assessment_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT consultation_assessment_profiles_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.consultation_assessment_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  consultation_id uuid NOT NULL,
+  values jsonb NOT NULL,
+  recorded_by uuid,
+  recorded_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT consultation_assessment_history_pkey PRIMARY KEY (id),
+  CONSTRAINT consultation_assessment_history_consultation_id_fkey FOREIGN KEY (consultation_id) REFERENCES public.consultations(id),
+  CONSTRAINT consultation_assessment_history_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.clinic_form_settings (
+  singleton boolean NOT NULL DEFAULT true CHECK (singleton),
+  enabled boolean NOT NULL DEFAULT false,
+  CONSTRAINT clinic_form_settings_pkey PRIMARY KEY (singleton)
+);
+CREATE TABLE public.clinic_form_templates (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  version integer NOT NULL DEFAULT 1,
+  fields jsonb NOT NULL,
+  published_by uuid,
+  published_at timestamp with time zone,
+  CONSTRAINT clinic_form_templates_pkey PRIMARY KEY (id),
+  CONSTRAINT clinic_form_templates_published_by_fkey FOREIGN KEY (published_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.clinic_forms (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  template_id uuid NOT NULL,
+  consultation_id uuid,
+  issued_by uuid NOT NULL,
+  issued_at timestamp with time zone NOT NULL DEFAULT now(),
+  paper_size text NOT NULL CHECK (paper_size = ANY (ARRAY['A4'::text, 'Letter'::text])),
+  prefill jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT clinic_forms_pkey PRIMARY KEY (id),
+  CONSTRAINT clinic_forms_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.clinic_form_templates(id),
+  CONSTRAINT clinic_forms_consultation_id_fkey FOREIGN KEY (consultation_id) REFERENCES public.consultations(id),
+  CONSTRAINT clinic_forms_issued_by_fkey FOREIGN KEY (issued_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.clinic_form_scans (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  form_id uuid NOT NULL,
+  storage_path text NOT NULL UNIQUE,
+  content_hash text NOT NULL CHECK (length(content_hash) = 64),
+  mime_type text NOT NULL CHECK (mime_type = ANY (ARRAY['application/pdf'::text, 'image/jpeg'::text, 'image/png'::text])),
+  uploaded_by uuid NOT NULL,
+  uploaded_at timestamp with time zone NOT NULL DEFAULT now(),
+  state text NOT NULL DEFAULT 'queued'::text CHECK (state = ANY (ARRAY['queued'::text, 'processing'::text, 'review'::text, 'failed'::text, 'imported'::text])),
+  attempt integer NOT NULL DEFAULT 0,
+  lease_id uuid,
+  lease_until timestamp with time zone,
+  extracted jsonb,
+  failure_code text,
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  reviewed_values jsonb,
+  consultation_version timestamp with time zone,
+  CONSTRAINT clinic_form_scans_pkey PRIMARY KEY (id),
+  CONSTRAINT clinic_form_scans_form_id_fkey FOREIGN KEY (form_id) REFERENCES public.clinic_forms(id),
+  CONSTRAINT clinic_form_scans_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.users(id),
+  CONSTRAINT clinic_form_scans_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.consultation_form_imports (
+  scan_id uuid NOT NULL,
+  consultation_id uuid NOT NULL,
+  reviewed_values jsonb NOT NULL,
+  reviewed_by uuid NOT NULL,
+  reviewed_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT consultation_form_imports_pkey PRIMARY KEY (scan_id),
+  CONSTRAINT consultation_form_imports_scan_id_fkey FOREIGN KEY (scan_id) REFERENCES public.clinic_form_scans(id),
+  CONSTRAINT consultation_form_imports_consultation_id_fkey FOREIGN KEY (consultation_id) REFERENCES public.consultations(id),
+  CONSTRAINT consultation_form_imports_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id)
 );
