@@ -2,10 +2,7 @@ import { spawn } from "node:child_process";
 import process from "node:process";
 
 const currentServices = [
-  "@zentraq/api-gateway",
-  "@zentraq/appointment-service",
-  "@zentraq/inventory-service",
-  "@zentraq/notification-service",
+  "@zentraq/clinical-worker",
   "@zentraq/reporting-service",
   "@zentraq/ai-service",
 ];
