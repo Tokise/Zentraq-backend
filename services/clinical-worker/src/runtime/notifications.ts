@@ -9,54 +9,38 @@ interface ClinicalNotification {
   entityId?: string | null;
 }
 
-// Persists notification work through notification-service Edge Function with DB fallback.
+/**
+ * Dispatches a notification via the Supabase Edge Function `notification-service`.
+ *
+ * The edge function handles insert, dedup, and Realtime broadcast.
+ * This is the ONLY notification path — no Cloudflare queue fallback.
+ */
 export async function createNotificationAction(input: ClinicalNotification) {
   const context = currentContext();
 
-  // Try invoking Supabase Edge Function 'notification-service'
-  try {
-    const { data: edgeData, error: edgeError } =
-      await context.admin.functions.invoke("notification-service", {
-        body: {
-          receiverId: input.receiverId,
-          title: input.title,
-          message: input.message,
-          type: input.type,
-          entityType: input.entityType ?? null,
-          entityId: input.entityId ?? null,
-        },
-      });
+  const { data, error } = await context.admin.functions.invoke(
+    "notification-service",
+    {
+      body: {
+        receiverId: input.receiverId,
+        senderId: context.actor.id,
+        title: input.title,
+        message: input.message,
+        type: input.type,
+        entityType: input.entityType ?? null,
+        entityId: input.entityId ?? null,
+      },
+    },
+  );
 
-    const edgeNoticeId =
-      (edgeData as { data?: { id?: string }; id?: string })?.data?.id ??
-      (edgeData as { data?: { id?: string }; id?: string })?.id;
-
-    if (!edgeError && edgeNoticeId) {
-      return { success: true, id: edgeNoticeId };
-    }
-  } catch {
-    // Non-blocking fallback to database queue & direct delivery
+  if (error) {
+    console.error("[createNotificationAction] Edge function error:", error);
+    throw new Error("NOTIFICATION_DISPATCH_FAILED");
   }
 
-  const { data, error } = await context.admin.rpc("enqueue_clinical_notice", {
-    p_actor: context.actor.id,
-    p_receiver: input.receiverId,
-    p_title: input.title,
-    p_message: input.message,
-    p_type: input.type,
-    p_entity_type: input.entityType ?? null,
-    p_entity_id: input.entityId ?? null,
-    p_key:
-      `${input.entityType}:${input.entityId}:${input.receiverId}:${input.title}`,
-  });
-  if (error) throw new Error("NOTIFICATION_ENQUEUE_FAILED");
+  const noticeId =
+    (data as { data?: { id?: string }; id?: string })?.data?.id ??
+    (data as { data?: { id?: string }; id?: string })?.id;
 
-  // Deliver clinical notices immediately to public.notifications and broadcast
-  try {
-    await context.admin.rpc("deliver_clinical_notices");
-  } catch {
-    // Delivery will be picked up by drain
-  }
-
-  return { success: true, id: data };
+  return { success: true, id: noticeId ?? null };
 }
