@@ -11,9 +11,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_BODY_BYTES = 11 * 1024 * 1024;
 
 export interface ClinicalWorkerEnv {
-  SUPABASE_URL: string;
-  SUPABASE_ANON_KEY: string;
-  SUPABASE_SERVICE_ROLE_KEY: string;
+  SUPABASE_URL?: string;
+  SUPABASE_ANON_KEY?: string;
+  SUPABASE_PUBLISHABLE_KEY?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  SUPABASE_SERVICE_ROLE?: string;
   UPSTASH_REDIS_REST_URL?: string;
   UPSTASH_REDIS_REST_TOKEN?: string;
   ZENTRAQ_SERVERLESS_RFID_ENABLED?: string;
@@ -101,9 +103,39 @@ export async function handleClinicalRequest(
         requestId,
       );
     }
-    const url = env.SUPABASE_URL;
+    const url = env.SUPABASE_URL || process.env.SUPABASE_URL || "https://rhjnhwlkfegqbimgumxn.supabase.co";
+    const anonKey =
+      env.SUPABASE_ANON_KEY ||
+      env.SUPABASE_PUBLISHABLE_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      "sb_publishable_UgpUVtLMv_whGpVrL7naVg_Qq2lqTCX";
+    const serviceRoleKey =
+      env.SUPABASE_SERVICE_ROLE_KEY ||
+      env.SUPABASE_SERVICE_ROLE ||
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_SERVICE_ROLE;
+
+    if (!url || !anonKey || !serviceRoleKey) {
+      console.error("[clinical-worker] Database configuration missing:", {
+        hasUrl: Boolean(url),
+        hasAnon: Boolean(anonKey),
+        hasServiceRole: Boolean(serviceRoleKey),
+      });
+      status = 500;
+      errorCode = "CONFIGURATION_ERROR";
+      return errorResponse(
+        {
+          code: "CONFIGURATION_ERROR",
+          message: "Database credentials are not configured on the Cloudflare Worker.",
+        },
+        status,
+        requestId,
+      );
+    }
+
     phase = "authentication";
-    const client = createClient(url, env.SUPABASE_ANON_KEY, {
+    const client = createClient(url, anonKey, {
       global: { headers: { Authorization: authorization } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
@@ -121,7 +153,7 @@ export async function handleClinicalRequest(
     }
     const admin = createClient(
       url,
-      env.SUPABASE_SERVICE_ROLE_KEY,
+      serviceRoleKey,
       {
         auth: { persistSession: false, autoRefreshToken: false },
       },

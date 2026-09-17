@@ -7,16 +7,10 @@
   "observability": {
     "enabled": true
   },
-
-  // Bindings are defined per environment; secrets are set via `wrangler secret put`.
-  // Local development uses `.dev.vars` for secrets.
+  "routes": [
+    { "pattern": "clinical.tokise.pw", "custom_domain": true }
+  ],
   "vars": {
     "ENVIRONMENT": "production"
   }
-
-  // Custom domain routing — configured after first deploy:
-  // routes = [{ pattern = "clinical-api.tokise.pw/*", custom_domain = true }]
-  //
-  // For initial testing, the Worker will be available at:
-  // https://zentraq-clinical.<your-account>.workers.dev
 }
