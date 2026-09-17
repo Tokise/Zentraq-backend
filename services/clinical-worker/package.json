@@ -1,22 +1,24 @@
 {
-  "name": "@zentraq/ai-service",
+  "name": "@zentraq/clinical-worker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@zentraq/shared": "workspace:*",
+    "@supabase/supabase-js": "2.112.3",
+    "@upstash/redis": "1.38.3",
+    "pdf-lib": "1.17.1",
+    "qrcode": "1.5.4",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250224.0",
     "@types/node": "22.20.1",
-    "typescript": "6.0.3",
-    "wrangler": "^4.132.0"
+    "@types/qrcode": "^1.5.5",
+    "typescript": "6.0.3"
   }
 }
