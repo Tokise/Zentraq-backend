@@ -1,6 +1,5 @@
 import { getConsultationDraftAction } from "./drafts.js";
 import type { ConsultationDraft } from "../../../lib/clinical/draft-schema.js";
-import { createNotificationAction } from "../../../../runtime/notifications.js";
 import {
   ConsultationIdSchema,
   CreateClinicVisitSchema,
@@ -267,13 +266,6 @@ export async function finalizeConsultationWorkflowAction(
       redisDel(
         cachePolicy.catalogs.visitReasons,
         "visit_reason_catalog",
-      ),
-      dispatchConsultationNotification(
-        createAdminClient(),
-        parsed.data.consultation_id,
-        status,
-        actor.id,
-        parsed.data.review_doctor_id,
       ),
     ]);
   });
@@ -717,101 +709,4 @@ function deduplicateReasonNames(names: string[]): string[] {
     seen.add(normalized);
     return true;
   });
-}
-
-// Inserts a notification when a consultation is completed or assigned for doctor review.
-async function dispatchConsultationNotification(
-  admin: ReturnType<typeof createAdminClient>,
-  consultationId: string,
-  status: "completed" | "awaiting_doctor_review",
-  actorId: string,
-  reviewDoctorId?: string | null,
-): Promise<void> {
-  try {
-    if (status === "completed") {
-      const { data: consultation } = await admin
-        .from("consultations")
-        .select("id, visit_id")
-        .eq("id", consultationId)
-        .maybeSingle();
-
-      if (!consultation?.visit_id) return;
-
-      const { data: visit } = await admin
-        .from("clinic_visits")
-        .select("student_id, faculty_id, staff_id, patient_type")
-        .eq("id", consultation.visit_id)
-        .maybeSingle();
-
-      if (!visit) return;
-
-      let patientUserId: string | null = null;
-      if (visit.patient_type === "student" && visit.student_id) {
-        const { data: student } = await admin
-          .from("students")
-          .select("user_id")
-          .eq("id", visit.student_id)
-          .maybeSingle();
-        patientUserId = student?.user_id ?? null;
-      } else if (visit.patient_type === "faculty" && visit.faculty_id) {
-        const { data: faculty } = await admin
-          .from("faculty")
-          .select("user_id")
-          .eq("id", visit.faculty_id)
-          .maybeSingle();
-        patientUserId = faculty?.user_id ?? null;
-      } else if (visit.patient_type === "staff" && visit.staff_id) {
-        const { data: staff } = await admin
-          .from("staff")
-          .select("user_id")
-          .eq("id", visit.staff_id)
-          .maybeSingle();
-        patientUserId = staff?.user_id ?? null;
-      }
-
-      // Notify the patient if they have an active user account (the DB trigger notifies the clinician operator)
-      if (patientUserId && patientUserId !== actorId) {
-        await createNotificationAction({
-          receiverId: patientUserId,
-          title: "Consultation completed",
-          message:
-            "Your clinic consultation has been finalized. You can view your visit summary and prescriptions in your health records.",
-          type: "consultation",
-          entityType: "consultation",
-          entityId: consultationId,
-        });
-      }
-    } else if (status === "awaiting_doctor_review" && reviewDoctorId) {
-      const { data: doctorAccount } = await admin
-        .from("clinic_accounts")
-        .select("user_id")
-        .eq("id", reviewDoctorId)
-        .maybeSingle();
-
-      if (doctorAccount?.user_id) {
-        await createNotificationAction({
-          receiverId: doctorAccount.user_id,
-          title: "Consultation review assigned",
-          message:
-            "A new patient consultation has been referred to you for medical review.",
-          type: "consultation",
-          entityType: "consultation",
-          entityId: consultationId,
-        });
-      }
-
-      // Notify the nurse who submitted the handoff
-      await createNotificationAction({
-        receiverId: actorId,
-        title: "Consultation submitted for review",
-        message:
-          "The patient consultation handoff has been sent for doctor review.",
-        type: "consultation",
-        entityType: "consultation",
-        entityId: consultationId,
-      });
-    }
-  } catch {
-    // Non-blocking notification dispatch
-  }
 }
