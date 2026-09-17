@@ -75,8 +75,34 @@ export async function handleClinicalRequest(
   const startedAt = performance.now();
   const suppliedId = request.headers.get("x-request-id") ?? "";
   const requestId = UUID.test(suppliedId) ? suppliedId : crypto.randomUUID();
+  const urlObj = new URL(request.url);
+  const pathname = urlObj.pathname;
+  if (request.method === "GET" && (pathname === "/" || pathname === "/health")) {
+    return new Response(
+      JSON.stringify({
+        status: "healthy",
+        service: "zentraq-clinical",
+        operationsCount: Object.keys(operations).length,
+      }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  }
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "POST, OPTIONS",
+        "access-control-allow-headers":
+          "authorization, apikey, content-type, x-zentraq-session-proof, x-request-id, x-region",
+      },
+    });
+  }
   const name =
-    new URL(request.url).pathname.split("/").filter(Boolean).at(-1) ?? "";
+    pathname.split("/").filter(Boolean).at(-1) ?? "";
   const knownOperation = Object.hasOwn(operations, name);
   let status = 500;
   let errorCode: string | null = null;
@@ -87,7 +113,12 @@ export async function handleClinicalRequest(
       status = 404;
       errorCode = "NOT_FOUND";
       return errorResponse(
-        { code: "NOT_FOUND", message: "Clinical operation not found." },
+        {
+          code: "NOT_FOUND",
+          message: name
+            ? `Clinical operation '${name}' not found.`
+            : "Clinical operation not found.",
+        },
         status,
         requestId,
       );
