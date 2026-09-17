@@ -8,8 +8,18 @@
     "enabled": true
   },
   "workers_dev": true,
+  "preview_urls": true,
+  "placement": {
+    "mode": "smart"
+  },
   "routes": [
-    { "pattern": "clinical.tokise.pw", "custom_domain": true }
+    {
+      "pattern": "clinical.tokise.pw",
+      "custom_domain": true,
+      "zone_name": "tokise.pw",
+      "enabled": true,
+      "previews_enabled": false
+    }
   ],
   "vars": {
     "ENVIRONMENT": "production"

@@ -9,9 +9,35 @@ interface ClinicalNotification {
   entityId?: string | null;
 }
 
-// Persists notification work without waiting for the notification service.
+// Persists notification work through notification-service Edge Function with DB fallback.
 export async function createNotificationAction(input: ClinicalNotification) {
   const context = currentContext();
+
+  // Try invoking Supabase Edge Function 'notification-service'
+  try {
+    const { data: edgeData, error: edgeError } =
+      await context.admin.functions.invoke("notification-service", {
+        body: {
+          receiverId: input.receiverId,
+          title: input.title,
+          message: input.message,
+          type: input.type,
+          entityType: input.entityType ?? null,
+          entityId: input.entityId ?? null,
+        },
+      });
+
+    const edgeNoticeId =
+      (edgeData as { data?: { id?: string }; id?: string })?.data?.id ??
+      (edgeData as { data?: { id?: string }; id?: string })?.id;
+
+    if (!edgeError && edgeNoticeId) {
+      return { success: true, id: edgeNoticeId };
+    }
+  } catch {
+    // Non-blocking fallback to database queue & direct delivery
+  }
+
   const { data, error } = await context.admin.rpc("enqueue_clinical_notice", {
     p_actor: context.actor.id,
     p_receiver: input.receiverId,
@@ -24,5 +50,13 @@ export async function createNotificationAction(input: ClinicalNotification) {
       `${input.entityType}:${input.entityId}:${input.receiverId}:${input.title}`,
   });
   if (error) throw new Error("NOTIFICATION_ENQUEUE_FAILED");
+
+  // Deliver clinical notices immediately to public.notifications and broadcast
+  try {
+    await context.admin.rpc("deliver_clinical_notices");
+  } catch {
+    // Delivery will be picked up by drain
+  }
+
   return { success: true, id: data };
 }
