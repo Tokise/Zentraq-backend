@@ -420,6 +420,10 @@ enabled = true
 # User JWT validation and RLS remain active for synchronous check-in.
 verify_jwt = true
 entrypoint = "./functions/rfid-check-in/index.ts"
+[functions.notification-service]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/notification-service/index.ts"
 [functions.clinical-service]
 enabled = true
 # User JWT validation and server-only live portal session proof are required.
