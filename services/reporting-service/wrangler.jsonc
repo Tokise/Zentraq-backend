@@ -10,6 +10,15 @@
   "triggers": {
     "crons": ["* * * * *"]
   },
+  "routes": [
+    {
+      "pattern": "reporting.tokise.pw",
+      "custom_domain": true,
+      "zone_name": "tokise.pw",
+      "enabled": true,
+      "previews_enabled": false
+    }
+  ],
   "vars": {
     "ENVIRONMENT": "production"
   }
