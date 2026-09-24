@@ -20,7 +20,9 @@ export interface ReportingWorkerEnv {
   INTERNAL_CONTEXT_SECRET?: string;
   INTERNAL_SERVICE_KEY?: string;
   SUPABASE_ANON_KEY?: string;
+  SUPABASE_PUBLISHABLE_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  SUPABASE_SECRET_KEY?: string;
   SUPABASE_URL?: string;
   GOOGLE_WORKSPACE_CLIENT_EMAIL?: string;
   GOOGLE_WORKSPACE_PRIVATE_KEY?: string;
@@ -60,8 +62,16 @@ function jsonResponse(data: unknown, status = 200, origin: string | null = null,
 function syncEnv(env: ReportingWorkerEnv): void {
   if (typeof process === "undefined" || !process.env) return;
   if (env.SUPABASE_URL) process.env.SUPABASE_URL = env.SUPABASE_URL;
-  if (env.SUPABASE_ANON_KEY) process.env.SUPABASE_ANON_KEY = env.SUPABASE_ANON_KEY;
-  if (env.SUPABASE_SERVICE_ROLE_KEY) process.env.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
+  const secretKey = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY;
+  if (secretKey) {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = secretKey;
+    process.env.SUPABASE_SECRET_KEY = secretKey;
+  }
+  const anonKey = env.SUPABASE_ANON_KEY || env.SUPABASE_PUBLISHABLE_KEY;
+  if (anonKey) {
+    process.env.SUPABASE_ANON_KEY = anonKey;
+    process.env.SUPABASE_PUBLISHABLE_KEY = anonKey;
+  }
   if (env.INTERNAL_CONTEXT_SECRET) process.env.INTERNAL_CONTEXT_SECRET = env.INTERNAL_CONTEXT_SECRET;
   if (env.INTERNAL_SERVICE_KEY) process.env.INTERNAL_SERVICE_KEY = env.INTERNAL_SERVICE_KEY;
   if (env.GOOGLE_WORKSPACE_CLIENT_EMAIL) process.env.GOOGLE_WORKSPACE_CLIENT_EMAIL = env.GOOGLE_WORKSPACE_CLIENT_EMAIL;
@@ -267,7 +277,17 @@ export default {
         );
       }
 
-      return jsonResponse({ data: { downloadUrl: signed.data.signedUrl } }, 200, origin);
+      return jsonResponse(
+        {
+          data: {
+            downloadUrl: signed.data.signedUrl,
+            url: signed.data.signedUrl,
+            expiresIn: 300,
+          },
+        },
+        200,
+        origin,
+      );
     }
 
     return jsonResponse({ error: { code: "NOT_FOUND", message: "Not found" } }, 404, origin);

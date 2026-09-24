@@ -2,7 +2,16 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Reads one required environment value without logging its contents.
 export function requiredEnvironment(name: string): string {
-  const value = process.env[name];
+  let value = process.env[name];
+  if (!value) {
+    if (name === "SUPABASE_SECRET_KEY") {
+      value = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE;
+    } else if (name === "SUPABASE_PUBLISHABLE_KEY") {
+      value = process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    } else if (name === "SUPABASE_URL") {
+      value = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    }
+  }
   if (!value) throw new Error(`${name} is required.`);
   return value;
 }
